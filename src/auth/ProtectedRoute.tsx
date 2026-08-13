@@ -2,7 +2,7 @@ import { Navigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useAuth } from "@/auth/useAuth";
 import { FullPageSpinner } from "@/components/FullPageSpinner";
-import type { UserRole } from "@/types/database.types";
+import type { UserRole } from "@/types/roles";
 
 export function ProtectedRoute({
   allowedRoles,
@@ -15,7 +15,7 @@ export function ProtectedRoute({
 
   if (loading) return <FullPageSpinner />;
   if (!session || !profile) return <Navigate to="/login" replace />;
-  if (!allowedRoles.includes(profile.role)) return <Navigate to="/" replace />;
+  if (!allowedRoles.some((role) => role === profile.role)) return <Navigate to="/" replace />;
 
   return <>{children}</>;
 }
