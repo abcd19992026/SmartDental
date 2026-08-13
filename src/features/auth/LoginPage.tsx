@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
@@ -9,11 +10,32 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function LoginPage() {
-  const { notice, clearNotice } = useAuth();
+  const { session, profile, loading, notice, clearNotice } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Covers the case where signInWithPassword succeeded but AuthProvider then signed the user
+  // back out on its own (no profile row, deactivated account, timeout) -- without this,
+  // `submitting` would stay stuck true and the button would look permanently disabled even
+  // though a `notice` explaining why is right there above it. Hooks must run unconditionally,
+  // so this sits above the early-return below, not after it.
+  useEffect(() => {
+    if (!loading && !session) {
+      setSubmitting(false);
+    }
+  }, [loading, session]);
+
+  // AuthProvider resolves the session/profile asynchronously after signInWithPassword succeeds
+  // (via its onAuthStateChange listener), not as a direct result of this call -- the /login
+  // route itself is otherwise not gated by ProtectedRoute, so nothing else sends an
+  // already-authenticated user onward. Without this, a successful sign-in leaves the user
+  // stranded here with the submit button's spinner stuck on forever, since the form never
+  // unmounts to reset `submitting`.
+  if (!loading && session && profile) {
+    return <Navigate to="/" replace />;
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -28,8 +50,9 @@ export function LoginPage() {
       setSubmitting(false);
       return;
     }
-    // On success, AuthProvider's onAuthStateChange listener picks up the new session and
-    // RoleRedirect sends the user onward -- nothing else to do here.
+    // Sign-in succeeded; leave `submitting` true until AuthProvider resolves the session and
+    // the redirect above fires. Resetting it here would let the user re-click Sign in and fire
+    // a second request while the first is still being picked up.
   }
 
   return (
