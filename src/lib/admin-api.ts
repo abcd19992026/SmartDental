@@ -9,7 +9,7 @@ export type ApiResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string; fields?: Record<string, string> };
 
-async function toFunctionError(error: unknown): Promise<{ ok: false; error: string; fields?: Record<string, string> }> {
+export async function toFunctionError(error: unknown): Promise<{ ok: false; error: string; fields?: Record<string, string> }> {
   if (error instanceof FunctionsHttpError) {
     try {
       const body = await error.context.json();

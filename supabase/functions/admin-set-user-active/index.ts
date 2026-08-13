@@ -1,4 +1,4 @@
-import { authorizeSuperAdmin } from "../_shared/auth.ts";
+import { authorizeOwnerOrSuperAdmin } from "../_shared/auth.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { json } from "../_shared/response.ts";
 
@@ -10,7 +10,7 @@ Deno.serve(async (req) => {
     return json({ error: "Method not allowed" }, 405);
   }
 
-  const auth = await authorizeSuperAdmin(req);
+  const auth = await authorizeOwnerOrSuperAdmin(req);
   if (!auth.ok) {
     return json({ error: auth.error }, auth.status);
   }
@@ -48,6 +48,11 @@ Deno.serve(async (req) => {
   }
   if (targetProfile.role === "super_admin" || !targetProfile.clinic_id) {
     return json({ error: "Cannot change a platform administrator's status through this route" }, 403);
+  }
+  // Containment: an owner may only act on users in their own clinic. A super_admin is unrestricted
+  // (existing behaviour, unchanged).
+  if (auth.role === "owner" && targetProfile.clinic_id !== auth.clinicId) {
+    return json({ error: "Forbidden: you can only manage users in your own clinic" }, 403);
   }
 
   const { error: updateError } = await serviceClient
