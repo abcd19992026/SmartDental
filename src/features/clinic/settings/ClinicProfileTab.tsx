@@ -86,25 +86,19 @@ export function ClinicProfileTab() {
     setUploadingLogo(true);
     try {
       const ext = file.name.split(".").pop();
-      const filename = `${profile?.clinic_id}-${Date.now()}.${ext}`;
+      const timestamp = Date.now();
+      const path = `${profile?.clinic_id}/${timestamp}.${ext}`;
 
       const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from("clinic-assets")
-        .upload(`logos/${filename}`, file, { upsert: true });
+        .from("clinic-logos")
+        .upload(path, file, { upsert: true });
 
       if (uploadErr) {
-        // If storage bucket is missing, fallback to base64 preview for demo
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setForm((prev) => ({ ...prev, logo_url: reader.result as string }));
-          setUploadingLogo(false);
-          success("Logo preview loaded.");
-        };
-        reader.readAsDataURL(file);
+        toastError(uploadErr.message, "Upload Error");
         return;
       }
 
-      const { data: urlData } = supabase.storage.from("clinic-assets").getPublicUrl(uploadData.path);
+      const { data: urlData } = supabase.storage.from("clinic-logos").getPublicUrl(uploadData.path);
       setForm((prev) => ({ ...prev, logo_url: urlData.publicUrl }));
       success("Logo uploaded successfully.");
     } catch (err: any) {

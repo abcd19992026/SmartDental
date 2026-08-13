@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Edit2, AlertCircle, ShieldAlert } from "lucide-react";
+import { Plus, Edit2, AlertCircle, ShieldAlert, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
 import type { Database } from "@/types/database.types";
@@ -23,8 +23,11 @@ export function BranchesTab() {
   const { success, error: toastError } = useToast();
 
   const [branches, setBranches] = useState<BranchWithCount[]>([]);
+  const [includedBranches, setIncludedBranches] = useState<number>(1);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   // Dialog State
   const [branchModalOpen, setBranchModalOpen] = useState(false);
@@ -44,12 +47,19 @@ export function BranchesTab() {
     setLoading(true);
     setErrorMsg(null);
 
-    const bRes = await supabase.from("branches").select("*").eq("clinic_id", profile.clinic_id).order("created_at");
+    const [bRes, cRes] = await Promise.all([
+      supabase.from("branches").select("*").eq("clinic_id", profile.clinic_id).order("created_at"),
+      supabase.from("clinics").select("included_branches").eq("id", profile.clinic_id).single(),
+    ]);
 
     if (bRes.error) {
       setErrorMsg(bRes.error.message);
       setLoading(false);
       return;
+    }
+
+    if (cRes.data && cRes.data.included_branches != null) {
+      setIncludedBranches(cRes.data.included_branches);
     }
 
     // Calculate patient count per branch
@@ -67,24 +77,33 @@ export function BranchesTab() {
     setLoading(false);
   }
 
+  const activeBranchCount = branches.filter((b) => b.is_active).length;
+  const isLimitReached = activeBranchCount >= includedBranches;
+
   function openAddBranch() {
     setEditingBranch(null);
     setForm({ name: "", address: "", phone: "" });
+    setModalError(null);
     setBranchModalOpen(true);
   }
 
   function openEditBranch(b: BranchRow) {
     setEditingBranch(b);
     setForm({ name: b.name, address: b.address || "", phone: b.phone || "" });
+    setModalError(null);
     setBranchModalOpen(true);
   }
 
   async function handleSaveBranch(e: FormEvent) {
     e.preventDefault();
+    setModalError(null);
+
     if (!form.name.trim()) {
-      toastError("Branch name is required.", "Validation Error");
+      setModalError("Branch name is required.");
       return;
     }
+
+    setSubmitting(true);
 
     if (editingBranch) {
       const { error } = await supabase
@@ -97,26 +116,36 @@ export function BranchesTab() {
         .eq("id", editingBranch.id);
 
       if (error) {
-        toastError(error.message, "Update Failed");
+        setModalError(error.message);
+        setSubmitting(false);
         return;
       }
       success("Branch updated.");
     } else {
-      const { error } = await supabase.from("branches").insert({
-        clinic_id: profile?.clinic_id!,
-        name: form.name.trim(),
-        address: form.address.trim() || null,
-        phone: form.phone.trim() || null,
-        is_active: true,
+      if (isLimitReached) {
+        setModalError(
+          `Branch limit reached (${activeBranchCount} of ${includedBranches} used). Contact SmartDentist to add more branches.`
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      const { error } = await supabase.rpc("create_branch", {
+        p_clinic_id: profile?.clinic_id!,
+        p_name: form.name.trim(),
+        p_address: form.address.trim() || undefined,
+        p_phone: form.phone.trim() || undefined,
       });
 
       if (error) {
-        toastError(error.message, "Creation Failed");
+        setModalError(error.message);
+        setSubmitting(false);
         return;
       }
       success("New branch added.");
     }
 
+    setSubmitting(false);
     setBranchModalOpen(false);
     loadBranches();
   }
@@ -163,13 +192,23 @@ export function BranchesTab() {
         <div>
           <h2 className="text-base font-medium text-foreground">Clinic Branches</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Manage physical practice locations and assigned patient counts
+            Manage physical practice locations and assigned patient counts •{" "}
+            <span className="font-medium text-foreground">
+              {activeBranchCount} of {includedBranches} branches used
+            </span>
           </p>
         </div>
-        <Button onClick={openAddBranch}>
-          <Plus className="h-4 w-4 mr-1.5" />
-          + Add Branch
-        </Button>
+        <div className="flex flex-col items-start sm:items-end gap-1">
+          <Button onClick={openAddBranch} disabled={isLimitReached}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            + Add Branch
+          </Button>
+          {isLimitReached && (
+            <p className="text-[11px] text-muted-foreground">
+              Branch limit reached. Contact SmartDentist to add more branches.
+            </p>
+          )}
+        </div>
       </div>
 
       {errorMsg && (
@@ -190,7 +229,7 @@ export function BranchesTab() {
           ) : branches.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
               <p className="text-sm text-muted-foreground">No branches found for this clinic.</p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={openAddBranch}>
+              <Button variant="outline" size="sm" className="mt-4" onClick={openAddBranch} disabled={isLimitReached}>
                 <Plus className="h-4 w-4 mr-1.5" />
                 + Add Branch
               </Button>
@@ -261,6 +300,13 @@ export function BranchesTab() {
             <DialogDescription>Physical location details for patient visits</DialogDescription>
           </DialogHeader>
 
+          {modalError && (
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{modalError}</span>
+            </div>
+          )}
+
           <div className="flex flex-col gap-4 py-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="br-name">Branch Name *</Label>
@@ -293,10 +339,11 @@ export function BranchesTab() {
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setBranchModalOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setBranchModalOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit">
+            <Button type="submit" disabled={submitting || (!editingBranch && isLimitReached)}>
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {editingBranch ? "Save Changes" : "Add Branch"}
             </Button>
           </DialogFooter>
