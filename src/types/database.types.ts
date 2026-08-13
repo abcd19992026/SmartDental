@@ -255,6 +255,7 @@ export type Database = {
           daily_message_cap: number
           email: string | null
           id: string
+          included_branches: number
           included_receptionists: number
           is_active: boolean
           logo_url: string | null
@@ -280,6 +281,7 @@ export type Database = {
           daily_message_cap?: number
           email?: string | null
           id?: string
+          included_branches?: number
           included_receptionists?: number
           is_active?: boolean
           logo_url?: string | null
@@ -305,6 +307,7 @@ export type Database = {
           daily_message_cap?: number
           email?: string | null
           id?: string
+          included_branches?: number
           included_receptionists?: number
           is_active?: boolean
           logo_url?: string | null
@@ -836,6 +839,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_branch: {
+        Args: {
+          p_address?: string
+          p_clinic_id: string
+          p_name: string
+          p_phone?: string
+        }
+        Returns: string
+      }
       create_clinic_with_branches: {
         Args: { p_branches: Json; p_clinic: Json }
         Returns: Json

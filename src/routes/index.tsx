@@ -16,6 +16,7 @@ import { MessagesPage } from "@/features/super-admin/MessagesPage";
 
 import { TodayPage } from "@/features/clinic/TodayPage";
 import { PatientsPage } from "@/features/clinic/PatientsPage";
+import { SettingsPage } from "@/features/clinic/settings/SettingsPage";
 
 export function AppRoutes() {
   return (
@@ -36,6 +37,8 @@ export function AppRoutes() {
             >
               <Route index element={<TodayPage />} />
               <Route path="patients" element={<PatientsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              <Route path="settings/:tab" element={<SettingsPage />} />
             </Route>
 
             <Route
