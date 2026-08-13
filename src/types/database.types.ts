@@ -837,6 +837,18 @@ export type Database = {
         Args: { p_branches: Json; p_clinic: Json }
         Returns: Json
       }
+      create_visit_with_recall: {
+        Args: {
+          p_amount: number
+          p_notes: string
+          p_patient_id: string
+          p_recall_date_override?: string
+          p_tooth_numbers: string
+          p_treatment_type_id: string
+          p_visit_date: string
+        }
+        Returns: Json
+      }
       current_branch_id: { Args: never; Returns: string }
       current_clinic_id: { Args: never; Returns: string }
       current_user_role: { Args: never; Returns: string }
