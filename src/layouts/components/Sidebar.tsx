@@ -6,6 +6,7 @@ export interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
+  end?: boolean;
 }
 
 export function Sidebar({ panelLabel, navItems }: { panelLabel: string; navItems: NavItem[] }) {
@@ -18,10 +19,11 @@ export function Sidebar({ panelLabel, navItems }: { panelLabel: string; navItems
         </span>
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-2">
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
+            end={end}
             className={({ isActive }) =>
               cn(
                 "flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-secondary-foreground hover:bg-accent",

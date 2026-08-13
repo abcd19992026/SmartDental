@@ -6,6 +6,13 @@ import { RoleRedirect } from "@/features/auth/RoleRedirect";
 import { ClinicShell } from "@/layouts/ClinicShell";
 import { SuperAdminShell } from "@/layouts/SuperAdminShell";
 
+import { OverviewPage } from "@/features/super-admin/OverviewPage";
+import { ClinicsListPage } from "@/features/super-admin/ClinicsListPage";
+import { AddClinicWizardPage } from "@/features/super-admin/AddClinicWizardPage";
+import { ClinicDetailPage } from "@/features/super-admin/ClinicDetailPage";
+import { PaymentsPage } from "@/features/super-admin/PaymentsPage";
+import { MessagesPage } from "@/features/super-admin/MessagesPage";
+
 function ComingSoon({ title }: { title: string }) {
   return (
     <div className="rounded-lg border border-border bg-card p-6">
@@ -42,7 +49,12 @@ export function AppRoutes() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<ComingSoon title="Clinics" />} />
+            <Route index element={<OverviewPage />} />
+            <Route path="clinics" element={<ClinicsListPage />} />
+            <Route path="clinics/new" element={<AddClinicWizardPage />} />
+            <Route path="clinics/:id" element={<ClinicDetailPage />} />
+            <Route path="payments" element={<PaymentsPage />} />
+            <Route path="messages" element={<MessagesPage />} />
           </Route>
 
           <Route path="*" element={<RoleRedirect />} />
