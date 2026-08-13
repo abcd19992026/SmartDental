@@ -2,7 +2,16 @@ import { authorizeSuperAdmin } from "../_shared/auth.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { json } from "../_shared/response.ts";
 import { generateTempPassword } from "../_shared/password.ts";
+import { retryWithBackoff } from "../_shared/retry.ts";
 import { validateCreateClinicRequest, type CreateClinicRequest } from "./validate.ts";
+
+function errMessage(err: unknown): string | null {
+  if (!err) return null;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    return String((err as { message: unknown }).message);
+  }
+  return String(err);
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -128,13 +137,57 @@ Deno.serve(async (req) => {
       200,
     );
   } catch (err) {
+    // Compensation: retry each step up to 3x with exponential backoff before giving up on it.
+    // A single unretried failure here is exactly how a clinic or an auth user gets orphaned.
+    let authDeleteError: string | null = null;
     if (authUserId) {
-      const { error: deleteUserError } = await serviceClient.auth.admin.deleteUser(authUserId);
-      if (deleteUserError) console.error("Compensation: failed to delete auth user", authUserId, deleteUserError);
+      const authResult = await retryWithBackoff(() => serviceClient.auth.admin.deleteUser(authUserId!));
+      if (authResult.error) {
+        authDeleteError = errMessage(authResult.error);
+        console.error("Compensation: failed to delete auth user after retries", authUserId, authResult.error);
+      }
     }
-    const { error: cascadeError } = await serviceClient.rpc("delete_clinic_cascade", { p_clinic_id: clinicId });
-    if (cascadeError) console.error("Compensation: failed to delete clinic", clinicId, cascadeError);
 
-    return json({ error: err instanceof Error ? err.message : "Failed to create clinic" }, 500);
+    const cascadeResult = await retryWithBackoff(() =>
+      serviceClient.rpc("delete_clinic_cascade", { p_clinic_id: clinicId }),
+    );
+    const cascadeDeleteError = cascadeResult.error ? errMessage(cascadeResult.error) : null;
+    if (cascadeResult.error) {
+      console.error("Compensation: failed to delete clinic after retries", clinicId, cascadeResult.error);
+    }
+
+    // If either compensation step never succeeded, this must never just disappear into a
+    // generic 500 -- leave a durable, on-demand-findable trail (see also the
+    // find_orphaned_clinics() RPC, which independently detects this same state by scanning for
+    // it directly, in case even this log write fails).
+    if (authDeleteError || cascadeDeleteError) {
+      const { error: logError } = await serviceClient.from("activity_log").insert({
+        clinic_id: clinicId,
+        user_id: auth.userId,
+        action: "ORPHAN_CLEANUP_REQUIRED",
+        entity_type: "clinic",
+        entity_id: clinicId,
+        meta: {
+          auth_user_id: authUserId,
+          auth_delete_error: authDeleteError,
+          cascade_delete_error: cascadeDeleteError,
+          original_error: errMessage(err),
+        },
+      });
+      if (logError) {
+        console.error("Failed to write ORPHAN_CLEANUP_REQUIRED activity_log row", clinicId, logError);
+      }
+    }
+
+    return json(
+      {
+        error: errMessage(err) ?? "Failed to create clinic",
+        compensation: {
+          auth_user_deleted: authUserId === null || !authDeleteError,
+          clinic_deleted: !cascadeDeleteError,
+        },
+      },
+      500,
+    );
   }
 });

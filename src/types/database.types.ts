@@ -844,6 +844,16 @@ export type Database = {
         Args: { p_clinic_id: string }
         Returns: undefined
       }
+      find_orphaned_clinics: {
+        Args: never
+        Returns: {
+          detail: string
+          email: string
+          id: string
+          kind: string
+          name: string
+        }[]
+      }
       get_clinics_list: {
         Args: never
         Returns: {

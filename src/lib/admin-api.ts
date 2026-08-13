@@ -140,3 +140,24 @@ export async function getClinicsList(): Promise<ApiResult<ClinicListRow[]>> {
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: (data ?? []) as ClinicListRow[] };
 }
+
+// ---------------------------------------------------------------------------
+// find_orphaned_clinics (RPC, same is_super_admin() guard as above) -- the on-demand detection
+// net for a create-clinic onboarding whose compensation also failed after retries.
+// ---------------------------------------------------------------------------
+
+export type OrphanKind = "incomplete_onboarding" | "clinic_without_owner" | "auth_user_without_profile";
+
+export interface OrphanRow {
+  kind: OrphanKind;
+  id: string;
+  name: string | null;
+  email: string | null;
+  detail: string;
+}
+
+export async function findOrphanedClinics(): Promise<ApiResult<OrphanRow[]>> {
+  const { data, error } = await supabase.rpc("find_orphaned_clinics");
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: (data ?? []) as OrphanRow[] };
+}
