@@ -255,6 +255,7 @@ export type Database = {
           daily_message_cap: number
           email: string | null
           id: string
+          included_receptionists: number
           is_active: boolean
           logo_url: string | null
           monthly_message_quota: number
@@ -279,6 +280,7 @@ export type Database = {
           daily_message_cap?: number
           email?: string | null
           id?: string
+          included_receptionists?: number
           is_active?: boolean
           logo_url?: string | null
           monthly_message_quota?: number
@@ -303,6 +305,7 @@ export type Database = {
           daily_message_cap?: number
           email?: string | null
           id?: string
+          included_receptionists?: number
           is_active?: boolean
           logo_url?: string | null
           monthly_message_quota?: number

@@ -3,6 +3,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { json } from "../_shared/response.ts";
 import { generateTempPassword } from "../_shared/password.ts";
 import { retryWithBackoff } from "../_shared/retry.ts";
+import { checkReceptionistSeatLimit } from "../_shared/seat-limit.ts";
 import { validateCreateStaffUserRequest, type CreateStaffUserRequest } from "./validate.ts";
 
 function errMessage(err: unknown): string | null {
@@ -100,6 +101,14 @@ Deno.serve(async (req) => {
       );
     }
     branchId = branchRow.id;
+
+    // Enforced here, before step 2 (auth user creation) -- never create the auth user at all if
+    // the clinic is already at its receptionist seat limit. Owner accounts never count against
+    // this, which is why this check is inside the `role === "receptionist"` branch.
+    const seatCheck = await checkReceptionistSeatLimit(serviceClient, clinicId);
+    if (!seatCheck.ok) {
+      return json({ error: seatCheck.message }, 403);
+    }
   }
 
   let authUserId: string | null = null;

@@ -1,6 +1,7 @@
 import { authorizeOwnerOrSuperAdmin } from "../_shared/auth.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { json } from "../_shared/response.ts";
+import { checkReceptionistSeatLimit } from "../_shared/seat-limit.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -53,6 +54,16 @@ Deno.serve(async (req) => {
   // (existing behaviour, unchanged).
   if (auth.role === "owner" && targetProfile.clinic_id !== auth.clinicId) {
     return json({ error: "Forbidden: you can only manage users in your own clinic" }, 403);
+  }
+
+  // Reactivating a receptionist must respect the same seat limit as creating a new one --
+  // otherwise the limit could be bypassed by deactivate/reactivate cycling. Deactivating is
+  // always allowed (it can only free up a seat); only the true -> reactivate path is checked.
+  if (nextActive && targetProfile.role === "receptionist") {
+    const seatCheck = await checkReceptionistSeatLimit(serviceClient, targetProfile.clinic_id, targetUserId);
+    if (!seatCheck.ok) {
+      return json({ error: seatCheck.message }, 403);
+    }
   }
 
   const { error: updateError } = await serviceClient
