@@ -217,7 +217,7 @@ export function AddClinicWizardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 py-4">
-            <div className="rounded-lg border border-amber-600/30 bg-amber-50 p-4 text-xs text-amber-900 leading-relaxed">
+            <div className="rounded-lg border border-amber-600/30 bg-amber-50 dark:bg-amber-950/40 p-4 text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
               <strong>WARNING:</strong> Copy these credentials now. The owner's temporary password will NOT be shown again!
             </div>
 

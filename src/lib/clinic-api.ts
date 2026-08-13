@@ -28,7 +28,7 @@ export interface CreateVisitWithRecallOutput {
 export async function createVisitWithRecall(
   input: CreateVisitWithRecallInput,
 ): Promise<ApiResult<CreateVisitWithRecallOutput>> {
-  const { data, error } = await supabase.rpc("create_visit_with_recall", {
+  const { data, error } = await (supabase.rpc as any)("create_visit_with_recall", {
     p_patient_id: input.patient_id,
     p_treatment_type_id: input.treatment_type_id,
     p_visit_date: input.visit_date,

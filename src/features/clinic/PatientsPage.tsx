@@ -1,0 +1,795 @@
+import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
+import {
+  Plus,
+  Search,
+  Stethoscope,
+  Clock,
+  Edit2,
+  AlertTriangle,
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  User,
+} from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/auth/useAuth";
+import { formatDateIST } from "@/lib/dates";
+import type { Database } from "@/types/database.types";
+import { useToast } from "@/components/ui/toast";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { AddVisitModal } from "@/features/clinic/AddVisitModal";
+
+type PatientRow = Database["public"]["Tables"]["patients"]["Row"];
+type BranchRow = Database["public"]["Tables"]["branches"]["Row"];
+type VisitRow = Database["public"]["Tables"]["visits"]["Row"];
+type RecallRow = Database["public"]["Tables"]["recalls"]["Row"];
+type TreatmentTypeRow = Database["public"]["Tables"]["treatment_types"]["Row"];
+
+interface JoinedPatient extends PatientRow {
+  branch?: BranchRow | null;
+  visits?: (VisitRow & { treatment_type?: TreatmentTypeRow | null })[];
+  recalls?: RecallRow[];
+}
+
+export function PatientsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activePatientId = searchParams.get("id");
+
+  const { profile } = useAuth();
+  const { success, error: toastError } = useToast();
+
+  const [patients, setPatients] = useState<JoinedPatient[]>([]);
+  const [branches, setBranches] = useState<BranchRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Filters & Pagination
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedBranchId, setSelectedBranchId] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+
+  // Add / Edit Patient Panel
+  const [patientModalOpen, setPatientModalOpen] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<PatientRow | null>(null);
+  const [patientForm, setPatientForm] = useState({
+    name: "",
+    mobile: "",
+    alt_mobile: "",
+    age: "",
+    gender: "male",
+    address: "",
+    notes: "",
+    branch_id: "",
+  });
+
+  // Duplicate mobile handling
+  const [duplicateMatchId, setDuplicateMatchId] = useState<string | null>(null);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
+
+  // Add Visit Modal State
+  const [addVisitOpen, setAddVisitOpen] = useState(false);
+
+  useEffect(() => {
+    loadPatientsData();
+  }, []);
+
+  async function loadPatientsData() {
+    setLoading(true);
+    setError(null);
+
+    const [pRes, bRes] = await Promise.all([
+      supabase
+        .from("patients")
+        .select("*, branch:branches(*), visits(*, treatment_type:treatment_types(*)), recalls(*)")
+        .order("created_at", { ascending: false }),
+      supabase.from("branches").select("*").eq("is_active", true),
+    ]);
+
+    if (pRes.error) {
+      setError(pRes.error.message);
+      setLoading(false);
+      return;
+    }
+
+    setPatients((pRes.data as JoinedPatient[]) || []);
+    if (bRes.data) {
+      setBranches(bRes.data);
+      if (bRes.data.length > 0 && !patientForm.branch_id) {
+        setPatientForm((prev) => ({ ...prev, branch_id: profile?.branch_id || bRes.data[0].id }));
+      }
+    }
+
+    setLoading(false);
+  }
+
+  // Active Patient Detail Object
+  const selectedPatient = activePatientId ? patients.find((p) => p.id === activePatientId) : null;
+
+  // Filtered Patients List
+  const filteredPatients = patients.filter((p) => {
+    if (profile?.role === "owner" && selectedBranchId !== "all") {
+      if (p.branch_id !== selectedBranchId) return false;
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchName = p.name.toLowerCase().includes(q);
+      const matchMobile = p.mobile.includes(q);
+      if (!matchName && !matchMobile) return false;
+    }
+    return true;
+  });
+
+  const totalPages = Math.ceil(filteredPatients.length / pageSize) || 1;
+  const paginatedPatients = filteredPatients.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Open Add Patient Modal
+  function openAddPatient() {
+    setEditingPatient(null);
+    setDuplicateMatchId(null);
+    setDuplicateError(null);
+    setPatientForm({
+      name: "",
+      mobile: "",
+      alt_mobile: "",
+      age: "",
+      gender: "male",
+      address: "",
+      notes: "",
+      branch_id: profile?.branch_id || (branches[0]?.id ?? ""),
+    });
+    setPatientModalOpen(true);
+  }
+
+  // Open Edit Patient Modal
+  function openEditPatient(p: PatientRow) {
+    setEditingPatient(p);
+    setDuplicateMatchId(null);
+    setDuplicateError(null);
+    setPatientForm({
+      name: p.name,
+      mobile: p.mobile,
+      alt_mobile: p.alt_mobile || "",
+      age: p.age ? String(p.age) : "",
+      gender: p.gender || "male",
+      address: p.address || "",
+      notes: p.notes || "",
+      branch_id: p.branch_id,
+    });
+    setPatientModalOpen(true);
+  }
+
+  // Save Patient
+  async function handleSavePatient(e: FormEvent) {
+    e.preventDefault();
+    setDuplicateError(null);
+    setDuplicateMatchId(null);
+
+    if (!patientForm.name.trim()) {
+      toastError("Patient name is required.", "Validation Error");
+      return;
+    }
+    if (!/^\d{10}$/.test(patientForm.mobile.trim())) {
+      toastError("Mobile number must be exactly 10 digits.", "Validation Error");
+      return;
+    }
+    if (!patientForm.branch_id) {
+      toastError("Please select a branch.", "Validation Error");
+      return;
+    }
+
+    if (editingPatient) {
+      const { error: err } = await supabase
+        .from("patients")
+        .update({
+          name: patientForm.name.trim(),
+          mobile: patientForm.mobile.trim(),
+          alt_mobile: patientForm.alt_mobile.trim() || null,
+          age: patientForm.age ? parseInt(patientForm.age) : null,
+          gender: patientForm.gender as any,
+          address: patientForm.address.trim() || null,
+          notes: patientForm.notes.trim() || null,
+          branch_id: patientForm.branch_id,
+        })
+        .eq("id", editingPatient.id);
+
+      if (err) {
+        if (err.code === "23505") {
+          // Unique mobile violation
+          const existing = patients.find((p) => p.mobile === patientForm.mobile.trim());
+          setDuplicateError("A patient with this mobile number already exists.");
+          if (existing) setDuplicateMatchId(existing.id);
+        } else {
+          toastError(err.message, "Update Failed");
+        }
+        return;
+      }
+
+      success("Patient details updated.");
+      setPatientModalOpen(false);
+      loadPatientsData();
+    } else {
+      const { data: newP, error: err } = await supabase
+        .from("patients")
+        .insert({
+          clinic_id: profile?.clinic_id!,
+          branch_id: patientForm.branch_id,
+          name: patientForm.name.trim(),
+          mobile: patientForm.mobile.trim(),
+          alt_mobile: patientForm.alt_mobile.trim() || null,
+          age: patientForm.age ? parseInt(patientForm.age) : null,
+          gender: patientForm.gender as any,
+          address: patientForm.address.trim() || null,
+          notes: patientForm.notes.trim() || null,
+          is_active: true,
+        })
+        .select("id")
+        .single();
+
+      if (err) {
+        if (err.code === "23505") {
+          const existing = patients.find((p) => p.mobile === patientForm.mobile.trim());
+          setDuplicateError("This patient already exists — open record?");
+          if (existing) setDuplicateMatchId(existing.id);
+        } else {
+          toastError(err.message, "Save Failed");
+        }
+        return;
+      }
+
+      success("Patient created successfully.");
+      setPatientModalOpen(false);
+      loadPatientsData();
+      if (newP) setSearchParams({ id: newP.id });
+    }
+  }
+
+  // Toggle Do Not Disturb
+  async function handleToggleDND(p: PatientRow) {
+    const nextDND = !p.do_not_disturb;
+    const { error: err } = await supabase
+      .from("patients")
+      .update({ do_not_disturb: nextDND })
+      .eq("id", p.id);
+
+    if (err) {
+      toastError(err.message, "Update Failed");
+      return;
+    }
+
+    success(nextDND ? "Patient placed on Do Not Disturb." : "Do Not Disturb removed.");
+    loadPatientsData();
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-medium text-foreground">Patients</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Patient directory, medical history timelines, and active recall tracking
+          </p>
+        </div>
+        <Button onClick={openAddPatient}>
+          <Plus className="h-4 w-4 mr-1.5" />
+          + Add Patient
+        </Button>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {/* VIEW A: Patient Detail View */}
+      {selectedPatient ? (
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center justify-between border-b border-border pb-4">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSearchParams({})}
+                title="Back to Patient List"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-medium text-foreground">{selectedPatient.name}</h2>
+                  {selectedPatient.do_not_disturb && (
+                    <Badge variant="outline" className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40">
+                      Do Not Disturb
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Mobile: {selectedPatient.mobile} • Branch: {selectedPatient.branch?.name || "Main"}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => openEditPatient(selectedPatient)}>
+                <Edit2 className="h-3.5 w-3.5 mr-1.5" />
+                Edit Profile
+              </Button>
+              <Button size="sm" onClick={() => setAddVisitOpen(true)}>
+                <Plus className="h-4 w-4 mr-1.5" />
+                Record Visit
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            {/* Patient Profile Card */}
+            <Card className="md:col-span-1">
+              <CardHeader>
+                <CardTitle className="text-base font-medium flex items-center gap-2">
+                  <User className="h-4 w-4 text-primary" />
+                  Patient Info
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm">
+                <div>
+                  <span className="text-xs text-muted-foreground block">Age / Gender</span>
+                  <span className="font-medium capitalize text-foreground">
+                    {selectedPatient.age ? `${selectedPatient.age} yrs` : "—"} / {selectedPatient.gender || "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground block">Alt Mobile</span>
+                  <span className="text-foreground">{selectedPatient.alt_mobile || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground block">Address</span>
+                  <span className="text-foreground">{selectedPatient.address || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground block">Clinical Notes</span>
+                  <span className="text-foreground">{selectedPatient.notes || "—"}</span>
+                </div>
+
+                {/* DND Toggle Box */}
+                <div className="rounded-lg border border-border bg-muted/30 p-3 mt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-foreground">Do Not Disturb</span>
+                    <Button
+                      variant={selectedPatient.do_not_disturb ? "destructive" : "outline"}
+                      size="sm"
+                      onClick={() => handleToggleDND(selectedPatient)}
+                      className="h-7 text-xs"
+                    >
+                      {selectedPatient.do_not_disturb ? "Disable DND" : "Enable DND"}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-tight">
+                    Excludes this patient from all automated recall reminders.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Visit & Recall Timelines */}
+            <div className="md:col-span-2 flex flex-col gap-6">
+              {/* Visit History Timeline */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4 text-primary" />
+                    Visit History Timeline
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {!selectedPatient.visits || selectedPatient.visits.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">
+                      No visits recorded yet for this patient.
+                    </p>
+                  ) : (
+                    <div className="relative border-l-2 border-primary/20 ml-3 pl-4 space-y-6">
+                      {selectedPatient.visits
+                        .sort((a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime())
+                        .map((v) => (
+                          <div key={v.id} className="relative">
+                            <span className="absolute -left-[23px] top-1 h-3 w-3 rounded-full bg-primary ring-4 ring-background" />
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                              <span className="font-medium text-foreground text-sm">
+                                {v.treatment_type?.name || "Treatment Visit"}
+                              </span>
+                              <span className="text-xs text-muted-foreground font-mono">
+                                {formatDateIST(v.visit_date)}
+                              </span>
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                              {v.tooth_numbers && (
+                                <p>
+                                  <strong>Teeth:</strong> {v.tooth_numbers}
+                                </p>
+                              )}
+                              {v.amount && (
+                                <p>
+                                  <strong>Amount:</strong> ₹{v.amount}
+                                </p>
+                              )}
+                              {v.notes && <p><strong>Notes:</strong> {v.notes}</p>}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Recalls History */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-primary" />
+                    Recalls (Past & Upcoming)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {!selectedPatient.recalls || selectedPatient.recalls.length === 0 ? (
+                    <p className="text-sm text-muted-foreground p-6 text-center">No recalls scheduled.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="border-b border-border bg-muted/40 font-medium text-muted-foreground uppercase">
+                          <tr>
+                            <th className="py-2.5 px-4">Due Date</th>
+                            <th className="py-2.5 px-4">Status</th>
+                            <th className="py-2.5 px-4 text-center">Attempts</th>
+                            <th className="py-2.5 px-4">Last Attempt</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {selectedPatient.recalls
+                            .sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime())
+                            .map((r) => (
+                              <tr key={r.id}>
+                                <td className="py-2.5 px-4 font-medium text-foreground">{formatDateIST(r.due_date)}</td>
+                                <td className="py-2.5 px-4">
+                                  <Badge variant="outline" className="capitalize">
+                                    {r.status}
+                                  </Badge>
+                                </td>
+                                <td className="py-2.5 px-4 text-center">{r.attempt_count}</td>
+                                <td className="py-2.5 px-4 text-muted-foreground">
+                                  {r.last_attempt_at ? formatDateIST(r.last_attempt_at.split("T")[0]) : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* VIEW B: Patients Table View */
+        <div className="flex flex-col gap-4">
+          {/* Search & Filters */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search patient by name or mobile..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="pl-9 h-9 text-xs"
+              />
+            </div>
+
+            {profile?.role === "owner" && branches.length > 0 && (
+              <select
+                className="h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                value={selectedBranchId}
+                onChange={(e) => {
+                  setSelectedBranchId(e.target.value);
+                  setCurrentPage(1);
+                }}
+              >
+                <option value="all">All Branches</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    Branch: {b.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Table */}
+          <Card>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ) : filteredPatients.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                  <p className="text-sm text-muted-foreground">No patients found matching your search.</p>
+                  <Button variant="outline" size="sm" className="mt-4" onClick={openAddPatient}>
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    + Add Patient
+                  </Button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-border bg-muted/40 text-xs font-medium text-muted-foreground uppercase">
+                      <tr>
+                        <th className="py-3 px-4">Patient Name</th>
+                        <th className="py-3 px-4">Mobile</th>
+                        <th className="py-3 px-4">Branch</th>
+                        <th className="py-3 px-4">Last Visit</th>
+                        <th className="py-3 px-4">Next Recall</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {paginatedPatients.map((p) => {
+                        const lastVisit = p.visits && p.visits.length > 0
+                          ? [...p.visits].sort((a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime())[0]
+                          : null;
+
+                        const nextRecall = p.recalls && p.recalls.length > 0
+                          ? [...p.recalls].sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0]
+                          : null;
+
+                        return (
+                          <tr
+                            key={p.id}
+                            onClick={() => setSearchParams({ id: p.id })}
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                          >
+                            <td className="py-3.5 px-4 font-medium text-foreground">
+                              {p.name}
+                            </td>
+                            <td className="py-3.5 px-4 text-muted-foreground">{p.mobile}</td>
+                            <td className="py-3.5 px-4 text-muted-foreground">{p.branch?.name || "Main"}</td>
+                            <td className="py-3.5 px-4 text-muted-foreground">
+                              {lastVisit ? formatDateIST(lastVisit.visit_date) : "—"}
+                            </td>
+                            <td className="py-3.5 px-4 text-muted-foreground">
+                              {nextRecall ? formatDateIST(nextRecall.due_date) : "—"}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {p.do_not_disturb ? (
+                                <Badge variant="outline" className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40">
+                                  DND
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40">
+                                  Active
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEditPatient(p)}
+                                className="h-8 px-2 text-xs"
+                              >
+                                <Edit2 className="h-3.5 w-3.5 mr-1" />
+                                Edit
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Pagination controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground">
+                  <div>
+                    Page {currentPage} of {totalPages} ({filteredPatients.length} total patients)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="h-8"
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      Prev
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="h-8"
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Add / Edit Patient Dialog / Panel */}
+      <Dialog open={patientModalOpen} onOpenChange={setPatientModalOpen}>
+        <form onSubmit={handleSavePatient}>
+          <DialogHeader>
+            <DialogTitle>{editingPatient ? "Edit Patient Record" : "Add New Patient"}</DialogTitle>
+            <DialogDescription>Patient personal information and contact details</DialogDescription>
+          </DialogHeader>
+
+          {/* Friendly Duplicate Mobile Prompt */}
+          {duplicateError && (
+            <div className="mt-3 flex flex-col gap-2 rounded-lg border border-amber-600/30 bg-amber-50 dark:bg-amber-950/40 p-3 text-xs text-amber-900 dark:text-amber-200">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0" />
+                <span className="font-medium">{duplicateError}</span>
+              </div>
+              {duplicateMatchId && (
+                <div className="pt-1 flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      setPatientModalOpen(false);
+                      setSearchParams({ id: duplicateMatchId });
+                    }}
+                  >
+                    Open Existing Patient Record
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-col gap-4 py-4 max-h-[60vh] overflow-y-auto px-1">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="p-name">Full Name *</Label>
+              <Input
+                id="p-name"
+                required
+                placeholder="e.g. Ramesh Patel"
+                value={patientForm.name}
+                onChange={(e) => setPatientForm({ ...patientForm, name: e.target.value })}
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="p-mob">Mobile (10 digits) *</Label>
+                <Input
+                  id="p-mob"
+                  required
+                  maxLength={10}
+                  placeholder="e.g. 9876543210"
+                  value={patientForm.mobile}
+                  onChange={(e) => setPatientForm({ ...patientForm, mobile: e.target.value.replace(/\D/g, "") })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="p-alt">Alt Mobile</Label>
+                <Input
+                  id="p-alt"
+                  placeholder="Optional secondary mobile"
+                  value={patientForm.alt_mobile}
+                  onChange={(e) => setPatientForm({ ...patientForm, alt_mobile: e.target.value.replace(/\D/g, "") })}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="p-age">Age</Label>
+                <Input
+                  id="p-age"
+                  type="number"
+                  placeholder="e.g. 35"
+                  value={patientForm.age}
+                  onChange={(e) => setPatientForm({ ...patientForm, age: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="p-gender">Gender</Label>
+                <select
+                  id="p-gender"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  value={patientForm.gender}
+                  onChange={(e) => setPatientForm({ ...patientForm, gender: e.target.value })}
+                >
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            {profile?.role === "owner" && branches.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="p-branch">Branch *</Label>
+                <select
+                  id="p-branch"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  value={patientForm.branch_id}
+                  onChange={(e) => setPatientForm({ ...patientForm, branch_id: e.target.value })}
+                  required
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="p-addr">Address</Label>
+              <Input
+                id="p-addr"
+                placeholder="Residential address"
+                value={patientForm.address}
+                onChange={(e) => setPatientForm({ ...patientForm, address: e.target.value })}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="p-notes">Notes</Label>
+              <Input
+                id="p-notes"
+                placeholder="Medical conditions or preferences"
+                value={patientForm.notes}
+                onChange={(e) => setPatientForm({ ...patientForm, notes: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="border-t border-border pt-3">
+            <Button type="button" variant="outline" onClick={() => setPatientModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit">
+              {editingPatient ? "Save Changes" : "Create Patient"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
+
+      {/* Add Visit Modal for Selected Patient */}
+      {selectedPatient && (
+        <AddVisitModal
+          open={addVisitOpen}
+          onOpenChange={setAddVisitOpen}
+          initialPatientId={selectedPatient.id}
+          onSuccess={loadPatientsData}
+        />
+      )}
+    </div>
+  );
+}

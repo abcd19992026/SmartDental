@@ -169,7 +169,7 @@ export function OverviewPage() {
                         <p className="text-xs text-muted-foreground">{c.city || "No city"}</p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <Badge variant="outline" className="border-amber-600/30 text-amber-700 bg-amber-50">
+                        <Badge variant="outline" className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40">
                           {days === 0 ? "Expires today" : `${days} days remaining`}
                         </Badge>
                         <Link

@@ -187,7 +187,7 @@ export function ClinicsListPage() {
                       <td className="py-3.5 px-4 text-foreground">{c.owner_name || "—"}</td>
                       <td className="py-3.5 px-4">
                         {c.is_active ? (
-                          <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 bg-emerald-50">
+                          <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40">
                             Active
                           </Badge>
                         ) : (

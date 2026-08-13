@@ -428,8 +428,8 @@ export function ClinicDetailPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-medium text-foreground">{clinic.name}</h1>
               {clinic.is_active ? (
-                <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 bg-emerald-50">
-                  Active
+                <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40">
+                  Active Subscription
                 </Badge>
               ) : (
                 <Badge variant="outline" className="border-destructive/30 text-destructive bg-destructive/10">
@@ -597,7 +597,7 @@ export function ClinicDetailPage() {
                         <td className="py-3 px-4 text-muted-foreground">{b.phone || "—"}</td>
                         <td className="py-3 px-4">
                           {b.is_active ? (
-                            <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 bg-emerald-50">
+                            <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40">
                               Active
                             </Badge>
                           ) : (
@@ -816,7 +816,7 @@ export function ClinicDetailPage() {
                         <td className="py-3 px-4 text-muted-foreground">{u.phone || "—"}</td>
                         <td className="py-3 px-4">
                           {u.is_active ? (
-                            <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 bg-emerald-50">
+                            <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40">
                               Active
                             </Badge>
                           ) : (
@@ -1173,7 +1173,7 @@ export function ClinicDetailPage() {
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-4">
-          <div className="rounded-md border border-amber-600/30 bg-amber-50 p-3 text-xs text-amber-800">
+          <div className="rounded-md border border-amber-600/30 bg-amber-50 dark:bg-amber-950/40 p-3 text-xs text-amber-800 dark:text-amber-200">
             <strong>Warning:</strong> This temporary password will NOT be shown again. Copy it now and securely send it to the user.
           </div>
           <div className="flex items-center justify-between rounded-lg border border-border bg-muted p-3">
