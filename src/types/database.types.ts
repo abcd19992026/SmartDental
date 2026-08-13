@@ -833,9 +833,32 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_clinic_with_branches: {
+        Args: { p_branches: Json; p_clinic: Json }
+        Returns: Json
+      }
       current_branch_id: { Args: never; Returns: string }
       current_clinic_id: { Args: never; Returns: string }
       current_user_role: { Args: never; Returns: string }
+      delete_clinic_cascade: {
+        Args: { p_clinic_id: string }
+        Returns: undefined
+      }
+      get_clinics_list: {
+        Args: never
+        Returns: {
+          city: string
+          id: string
+          is_active: boolean
+          messages_sent_this_month: number
+          name: string
+          owner_name: string
+          patients_count: number
+          plan_expires_on: string
+          whatsapp_configured: boolean
+        }[]
+      }
+      get_platform_overview: { Args: never; Returns: Json }
       is_super_admin: { Args: never; Returns: boolean }
       seed_default_treatment_types: {
         Args: { p_clinic_id: string }
