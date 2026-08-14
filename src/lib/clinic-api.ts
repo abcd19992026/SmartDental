@@ -84,3 +84,31 @@ export async function createStaffUser(input: CreateStaffUserInput): Promise<ApiR
   if (!data) return { ok: false, error: "Empty response from server" };
   return { ok: true, data };
 }
+
+// ---------------------------------------------------------------------------
+// updateOwnAvatar -- a plain Supabase update, not an Edge Function: this is a same-tenant,
+// same-user write (auth.uid() = the row being updated) that RLS already permits on its own via
+// profiles_self_update_avatar, with protect_profile_role_fields() restricting it to avatar_url
+// only. No service-role/server-side logic is needed, so it lives here as a typed wrapper rather
+// than a raw call scattered in a component, same discipline as every other function in this file.
+// ---------------------------------------------------------------------------
+
+export interface UpdateOwnAvatarOutput {
+  avatar_url: string | null;
+}
+
+export async function updateOwnAvatar(avatarUrl: string | null): Promise<ApiResult<UpdateOwnAvatarOutput>> {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    return { ok: false, error: "Not signed in" };
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ avatar_url: avatarUrl })
+    .eq("id", userData.user.id)
+    .select("avatar_url")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: { avatar_url: data.avatar_url } };
+}

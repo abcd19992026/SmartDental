@@ -1,8 +1,7 @@
 import { useEffect, useState, type FormEvent, type ChangeEvent } from "react";
-import { Upload, Trash2, Shield, AlertCircle, Loader2, Image as ImageIcon } from "lucide-react";
+import { Upload, Trash2, AlertCircle, Loader2, Image as ImageIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
-import { daysUntilIST, formatDateIST } from "@/lib/dates";
 import type { Database } from "@/types/database.types";
 import { useToast } from "@/components/ui/toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -159,8 +158,6 @@ export function ClinicProfileTab() {
     );
   }
 
-  const daysLeft = clinic?.plan_expires_on ? daysUntilIST(clinic.plan_expires_on) : null;
-
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       {errorMsg && (
@@ -283,43 +280,6 @@ export function ClinicProfileTab() {
             Save Profile
           </Button>
         </CardFooter>
-      </Card>
-
-      {/* Subscription Status (Unmistakably Read-Only) */}
-      <Card className="border-muted bg-muted/20">
-        <CardHeader>
-          <CardTitle className="text-base font-medium flex items-center gap-2">
-            <Shield className="h-4 w-4 text-primary" />
-            Subscription & License (Read-Only)
-          </CardTitle>
-          <CardDescription>
-            Subscription dates and message quotas are managed by the platform operator.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-4 text-sm">
-          <div>
-            <span className="text-xs text-muted-foreground block">Current Plan</span>
-            <span className="font-medium capitalize text-foreground">{clinic?.plan_name || "Standard"}</span>
-          </div>
-          <div>
-            <span className="text-xs text-muted-foreground block">Plan Started On</span>
-            <span className="font-medium text-foreground">
-              {clinic?.plan_started_on ? formatDateIST(clinic.plan_started_on) : "—"}
-            </span>
-          </div>
-          <div>
-            <span className="text-xs text-muted-foreground block">Plan Expires On</span>
-            <span className="font-medium text-foreground">
-              {clinic?.plan_expires_on ? formatDateIST(clinic.plan_expires_on) : "—"}
-            </span>
-          </div>
-          <div>
-            <span className="text-xs text-muted-foreground block">Days Remaining</span>
-            <span className={`font-medium ${daysLeft !== null && daysLeft <= 30 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-              {daysLeft !== null ? `${daysLeft} days` : "—"}
-            </span>
-          </div>
-        </CardContent>
       </Card>
     </form>
   );
