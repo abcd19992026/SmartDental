@@ -1,7 +1,8 @@
-import { LogOut, User, Sun, Moon, Laptop } from "lucide-react";
+import { useState, useEffect } from "react";
+import { LogOut, User, Sun, Moon, Laptop, Camera } from "lucide-react";
 import { useAuth } from "@/auth/useAuth";
 import { useTheme } from "@/components/theme/ThemeProvider";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,10 +10,18 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { ChangeAvatarModal } from "@/layouts/components/ChangeAvatarModal";
 
 export function TopBar() {
   const { profile, session, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
+
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar_url || null);
+  const [changePhotoOpen, setChangePhotoOpen] = useState(false);
+
+  useEffect(() => {
+    setAvatarUrl(profile?.avatar_url || null);
+  }, [profile?.avatar_url]);
 
   const displayName = profile?.full_name || session?.user.email || "Account";
   const initial = displayName.charAt(0).toUpperCase();
@@ -49,6 +58,7 @@ export function TopBar() {
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-muted focus:outline-none focus:ring-1 focus:ring-ring">
           <Avatar className="h-7 w-7">
+            {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
             <AvatarFallback>{initial}</AvatarFallback>
           </Avatar>
           <div className="flex flex-col items-start leading-tight">
@@ -64,12 +74,24 @@ export function TopBar() {
             <span className="capitalize">{profile?.role}</span>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setChangePhotoOpen(true)}>
+            <Camera className="h-4 w-4 mr-2" />
+            Change Photo
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => signOut()}>
             <LogOut className="h-4 w-4 mr-2" />
             Logout
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <ChangeAvatarModal
+        open={changePhotoOpen}
+        onOpenChange={setChangePhotoOpen}
+        currentAvatarUrl={avatarUrl}
+        displayName={displayName}
+        onAvatarUpdated={(newUrl) => setAvatarUrl(newUrl)}
+      />
     </header>
   );
 }

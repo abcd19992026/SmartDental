@@ -2,8 +2,10 @@ import { useEffect, useState, type FormEvent, type ChangeEvent } from "react";
 import { Upload, Trash2, AlertCircle, Loader2, Image as ImageIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
+import { uploadOwnAvatar, removeOwnAvatar, uploadClinicLogo, removeClinicLogo } from "@/lib/clinic-api";
 import type { Database } from "@/types/database.types";
 import { useToast } from "@/components/ui/toast";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,13 +15,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 type ClinicRow = Database["public"]["Tables"]["clinics"]["Row"];
 
 export function ClinicProfileTab() {
-  const { profile } = useAuth();
+  const { profile, session } = useAuth();
   const { success, error: toastError } = useToast();
 
   const [clinic, setClinic] = useState<ClinicRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // User Profile Avatar State
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(profile?.avatar_url || null);
+  const [uploadingUserAvatar, setUploadingUserAvatar] = useState(false);
+  const [userAvatarError, setUserAvatarError] = useState<string | null>(null);
 
   // Form State
   const [form, setForm] = useState({
@@ -35,8 +42,23 @@ export function ClinicProfileTab() {
   const [uploadingLogo, setUploadingLogo] = useState(false);
 
   useEffect(() => {
-    loadClinicProfile();
+    setUserAvatarUrl(profile?.avatar_url || null);
+  }, [profile?.avatar_url]);
+
+  useEffect(() => {
+    function handleAvatarUpdate(e: Event) {
+      const customEvt = e as CustomEvent<string | null>;
+      setUserAvatarUrl(customEvt.detail);
+    }
+    window.addEventListener("profile-avatar-updated", handleAvatarUpdate);
+    return () => {
+      window.removeEventListener("profile-avatar-updated", handleAvatarUpdate);
+    };
   }, []);
+
+  useEffect(() => {
+    loadClinicProfile();
+  }, [profile?.clinic_id]);
 
   async function loadClinicProfile() {
     if (!profile?.clinic_id) return;
@@ -67,7 +89,78 @@ export function ClinicProfileTab() {
     setLoading(false);
   }
 
-  // Handle Logo Upload
+  // Handle User Personal Avatar Upload
+  async function handleUserAvatarChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUserAvatarError(null);
+
+    if (!["image/png", "image/jpeg", "image/jpg"].includes(file.type)) {
+      const msg = "Invalid file type. Only PNG and JPG images are accepted.";
+      setUserAvatarError(msg);
+      toastError(msg, "Upload Error");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      const msg = "File size exceeds 2MB limit. Please upload a smaller image.";
+      setUserAvatarError(msg);
+      toastError(msg, "Upload Error");
+      return;
+    }
+
+    setUploadingUserAvatar(true);
+    try {
+      const ext = file.name.split(".").pop() || "jpg";
+      const res = await uploadOwnAvatar(file, ext);
+
+      if (!res.ok) {
+        setUserAvatarError(res.error);
+        toastError(res.error, "Upload Error");
+        return;
+      }
+
+      const newUrl = res.data.avatar_url;
+      setUserAvatarUrl(newUrl);
+      window.dispatchEvent(new CustomEvent("profile-avatar-updated", { detail: newUrl }));
+      success("Profile photo updated successfully.");
+    } catch (err: any) {
+      const msg = err.message || "Failed to upload profile photo.";
+      setUserAvatarError(msg);
+      toastError(msg, "Upload Error");
+    } finally {
+      setUploadingUserAvatar(false);
+    }
+  }
+
+  // Handle User Personal Avatar Removal
+  async function handleRemoveUserAvatar() {
+    setUserAvatarError(null);
+    setUploadingUserAvatar(true);
+
+    try {
+      const res = await removeOwnAvatar();
+
+      if (!res.ok) {
+        setUserAvatarError(res.error);
+        toastError(res.error, "Remove Error");
+        return;
+      }
+
+      setUserAvatarUrl(null);
+      window.dispatchEvent(new CustomEvent("profile-avatar-updated", { detail: null }));
+      success("Profile photo removed.");
+    } catch (err: any) {
+      const msg = err.message || "Failed to remove profile photo.";
+      setUserAvatarError(msg);
+      toastError(msg, "Remove Error");
+    } finally {
+      setUploadingUserAvatar(false);
+    }
+  }
+
+  // Handle Clinic Business Logo Upload
   async function handleLogoChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -82,23 +175,19 @@ export function ClinicProfileTab() {
       return;
     }
 
+    if (!profile?.clinic_id) return;
+
     setUploadingLogo(true);
     try {
-      const ext = file.name.split(".").pop();
-      const timestamp = Date.now();
-      const path = `${profile?.clinic_id}/${timestamp}.${ext}`;
+      const ext = file.name.split(".").pop() || "jpg";
+      const res = await uploadClinicLogo(profile.clinic_id, file, ext);
 
-      const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from("clinic-logos")
-        .upload(path, file, { upsert: true });
-
-      if (uploadErr) {
-        toastError(uploadErr.message, "Upload Error");
+      if (!res.ok) {
+        toastError(res.error, "Upload Error");
         return;
       }
 
-      const { data: urlData } = supabase.storage.from("clinic-logos").getPublicUrl(uploadData.path);
-      setForm((prev) => ({ ...prev, logo_url: urlData.publicUrl }));
+      setForm((prev) => ({ ...prev, logo_url: res.data.logo_url }));
       success("Logo uploaded successfully.");
     } catch (err: any) {
       toastError(err.message || "Failed to upload logo.");
@@ -107,9 +196,25 @@ export function ClinicProfileTab() {
     }
   }
 
-  function handleRemoveLogo() {
-    setForm((prev) => ({ ...prev, logo_url: "" }));
-    success("Logo removed.");
+  async function handleRemoveLogo() {
+    if (!profile?.clinic_id) return;
+
+    setUploadingLogo(true);
+    try {
+      const res = await removeClinicLogo(profile.clinic_id);
+
+      if (!res.ok) {
+        toastError(res.error, "Remove Error");
+        return;
+      }
+
+      setForm((prev) => ({ ...prev, logo_url: "" }));
+      success("Logo removed.");
+    } catch (err: any) {
+      toastError(err.message || "Failed to remove logo.");
+    } finally {
+      setUploadingLogo(false);
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -158,6 +263,8 @@ export function ClinicProfileTab() {
     );
   }
 
+  const userInitial = (profile?.full_name || "U").charAt(0).toUpperCase();
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       {errorMsg && (
@@ -167,32 +274,105 @@ export function ClinicProfileTab() {
         </div>
       )}
 
-      {/* Editable Profile Information */}
+      {/* Section 1: Your Profile Photo */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-medium">Clinic Details</CardTitle>
-          <CardDescription>Update your dental practice contact details and branding</CardDescription>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-base font-medium">Your Profile Photo</CardTitle>
+            {profile?.role && (
+              <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary capitalize border border-primary/20">
+                {profile.role}
+              </span>
+            )}
+          </div>
+          <CardDescription>
+            This is your personal photo, shown next to your name in the app.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Logo Upload Section */}
+        <CardContent>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-lg border border-border p-4 bg-muted/20">
-            <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-border bg-background overflow-hidden shrink-0">
+            <Avatar className="h-24 w-24 shrink-0 border border-border">
+              {userAvatarUrl ? (
+                <AvatarImage src={userAvatarUrl} alt={profile?.full_name || "Profile"} />
+              ) : null}
+              <AvatarFallback className="text-3xl font-semibold">{userInitial}</AvatarFallback>
+            </Avatar>
+
+            <div className="flex-1 space-y-1">
+              <span className="text-sm font-semibold text-foreground block">
+                {profile?.full_name || session?.user?.email || "Personal account photo"}
+              </span>
+              <p className="text-xs text-muted-foreground">PNG or JPG, maximum file size 2MB</p>
+              {userAvatarError && (
+                <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  {userAvatarError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Label
+                htmlFor="user-avatar-upload-tab"
+                className="cursor-pointer inline-flex items-center gap-1.5 h-9 rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-muted transition-colors"
+              >
+                {uploadingUserAvatar ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                {userAvatarUrl ? "Change Photo" : "Upload Photo"}
+              </Label>
+              <input
+                id="user-avatar-upload-tab"
+                type="file"
+                accept="image/png, image/jpeg, image/jpg"
+                onChange={handleUserAvatarChange}
+                className="hidden"
+                disabled={uploadingUserAvatar}
+              />
+              {userAvatarUrl && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRemoveUserAvatar}
+                  disabled={uploadingUserAvatar}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+                  Remove Photo
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Section 2: Clinic Logo */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-medium">Clinic Logo</CardTitle>
+          <CardDescription>
+            Your clinic's business logo, used on branded materials.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-lg border border-border p-4 bg-muted/20">
+            {/* Rounded-square container for business clinic logo */}
+            <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-border bg-background overflow-hidden shrink-0">
               {form.logo_url ? (
-                <img src={form.logo_url} alt="Clinic Logo" className="h-full w-full object-contain p-1" />
+                <img src={form.logo_url} alt="Clinic Logo" className="h-full w-full object-contain p-2" />
               ) : (
-                <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                <ImageIcon className="h-8 w-8 text-muted-foreground" />
               )}
             </div>
 
             <div className="flex-1 space-y-1">
-              <span className="text-sm font-medium text-foreground">Clinic Logo</span>
+              <span className="text-sm font-medium text-foreground block">Business Branding</span>
               <p className="text-xs text-muted-foreground">PNG or JPG, maximum file size 2MB</p>
             </div>
 
             <div className="flex items-center gap-2">
               <Label
                 htmlFor="logo-upload"
-                className="cursor-pointer inline-flex items-center gap-1.5 h-9 rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-muted"
+                className="cursor-pointer inline-flex items-center gap-1.5 h-9 rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-muted transition-colors"
               >
                 {uploadingLogo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                 {form.logo_url ? "Change Logo" : "Upload Logo"}
@@ -206,14 +386,23 @@ export function ClinicProfileTab() {
                 disabled={uploadingLogo}
               />
               {form.logo_url && (
-                <Button type="button" variant="outline" size="sm" onClick={handleRemoveLogo} className="text-destructive">
+                <Button type="button" variant="outline" size="sm" onClick={handleRemoveLogo} className="text-destructive hover:text-destructive">
                   <Trash2 className="h-3.5 w-3.5 mr-1" />
-                  Remove
+                  Remove Logo
                 </Button>
               )}
             </div>
           </div>
+        </CardContent>
+      </Card>
 
+      {/* Section 3: Clinic Information Details Form */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-medium">Clinic Information</CardTitle>
+          <CardDescription>Update your dental practice contact details and location</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="cp-name">Clinic Name *</Label>

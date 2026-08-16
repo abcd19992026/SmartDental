@@ -1,0 +1,303 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { addDays, istDateOf } from "../_shared/ist-time.ts";
+
+const GRAPH_API_VERSION = "v21.0";
+/** Small gap between consecutive Graph API calls so a clinic with many due recalls doesn't fire
+ * a burst that trips Meta's rate limiting -- a burst-induced 4xx would look identical to a real
+ * send failure in message_log, which would be confusing to debug later. */
+const SEND_DELAY_MS = 300;
+
+interface Clinic {
+  id: string;
+  name: string;
+  phone: string | null;
+  waba_phone_number_id: string | null;
+  daily_message_cap: number;
+  monthly_message_quota: number;
+}
+
+interface WhatsappTemplate {
+  meta_template_name: string;
+  language_code: string;
+  variable_mapping: Record<string, string> | null;
+}
+
+interface RecallRow {
+  id: string;
+  patient_id: string;
+  attempt_count: number;
+  last_attempt_at: string | null;
+  patients: { name: string; mobile: string };
+  visits: { visit_date: string; treatment_types: { name: string } | null } | null;
+}
+
+export interface ClinicRunResult {
+  clinic_id: string;
+  clinic_name: string;
+  sent: number;
+  failed: number;
+  skipped_reason?: string;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Builds the Graph API template message body. `variable_mapping` maps positional template
+ * placeholders ("1", "2", ...) to field names (patient_name, treatment_name, ...); the demo
+ * hello_world template has no variables at all, so an empty/null mapping omits `components`
+ * entirely rather than sending an empty array (Meta rejects a body component list for a template
+ * that defines no variables). */
+function buildTemplateMessage(
+  mobile10Digit: string,
+  template: WhatsappTemplate,
+  fields: Record<string, string>,
+): Record<string, unknown> {
+  const templateBody: Record<string, unknown> = {
+    name: template.meta_template_name,
+    language: { code: template.language_code },
+  };
+
+  const mapping = template.variable_mapping;
+  if (mapping && Object.keys(mapping).length > 0) {
+    const parameters = Object.entries(mapping)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([, fieldKey]) => ({ type: "text", text: fields[fieldKey] ?? "" }));
+    templateBody.components = [{ type: "body", parameters }];
+  }
+
+  return {
+    messaging_product: "whatsapp",
+    // Mobile numbers are stored as bare 10 digits; the country code is prefixed only here, at
+    // the point of calling the API -- never stored with the prefix.
+    to: `91${mobile10Digit}`,
+    type: "template",
+    template: templateBody,
+  };
+}
+
+async function callGraphApi(
+  wabaPhoneNumberId: string,
+  accessToken: string,
+  message: Record<string, unknown>,
+): Promise<{ ok: true; waMessageId: string } | { ok: false; errorCode: string | null; errorMessage: string }> {
+  const response = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${wabaPhoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(message),
+    },
+  );
+
+  const result = await response.json().catch(() => null);
+
+  if (response.ok && result?.messages?.[0]?.id) {
+    return { ok: true, waMessageId: result.messages[0].id };
+  }
+
+  return {
+    ok: false,
+    errorCode: result?.error?.code != null ? String(result.error.code) : null,
+    errorMessage: result?.error?.message ?? `Graph API returned HTTP ${response.status}`,
+  };
+}
+
+/** Atomically upserts +1 onto clinic_usage.messages_sent via the increment_clinic_messages_sent
+ * SQL function (see migrations) -- a read-then-write from here would race across concurrent
+ * invocations of this function. */
+async function incrementMessagesSent(
+  serviceClient: SupabaseClient,
+  clinicId: string,
+  monthStart: string,
+): Promise<void> {
+  const { error } = await serviceClient.rpc("increment_clinic_messages_sent", {
+    p_clinic_id: clinicId,
+    p_month: monthStart,
+  });
+  if (error) {
+    console.error(`Failed to increment clinic_usage for clinic ${clinicId}`, error);
+  }
+}
+
+/** Processes every due recall for one clinic: loads the approved default template, enforces the
+ * monthly quota and daily cap, sends each recall's message, and logs every outcome. Clinic-level
+ * eligibility (whatsapp_enabled, is_active, plan_expires_on, send_time hour, send window) is
+ * already filtered by the caller -- this only handles what happens once a clinic is selected. */
+export async function processClinic(
+  serviceClient: SupabaseClient,
+  clinic: Clinic,
+  dateStr: string,
+  accessToken: string,
+): Promise<ClinicRunResult> {
+  const base: ClinicRunResult = { clinic_id: clinic.id, clinic_name: clinic.name, sent: 0, failed: 0 };
+
+  if (!clinic.waba_phone_number_id) {
+    console.log(`Skipping clinic ${clinic.id} (${clinic.name}): no waba_phone_number_id configured`);
+    return { ...base, skipped_reason: "no_phone_number_id" };
+  }
+
+  const { data: template, error: templateError } = await serviceClient
+    .from("whatsapp_templates")
+    .select("meta_template_name, language_code, variable_mapping")
+    .eq("clinic_id", clinic.id)
+    .eq("is_default", true)
+    .eq("approval_status", "approved")
+    .maybeSingle();
+
+  if (templateError || !template) {
+    console.log(`Skipping clinic ${clinic.id} (${clinic.name}): no approved default template`);
+    return { ...base, skipped_reason: "no_default_template" };
+  }
+
+  const monthStart = `${dateStr.slice(0, 7)}-01`;
+  const { data: usage } = await serviceClient
+    .from("clinic_usage")
+    .select("messages_sent")
+    .eq("clinic_id", clinic.id)
+    .eq("month", monthStart)
+    .maybeSingle();
+
+  let messagesSentThisMonth = usage?.messages_sent ?? 0;
+  if (messagesSentThisMonth >= clinic.monthly_message_quota) {
+    console.log(
+      `Skipping clinic ${clinic.id} (${clinic.name}): monthly quota reached ` +
+        `(${messagesSentThisMonth}/${clinic.monthly_message_quota})`,
+    );
+    return { ...base, skipped_reason: "monthly_quota_reached" };
+  }
+
+  // Two independent reasons a recall is due today:
+  //  1. status = 'pending' and due_date has arrived (first attempt, or retry after a failure --
+  //     the idempotency guard below is what actually prevents a same-day double-send, not this
+  //     filter, since a failed attempt leaves due_date unchanged and in the past).
+  //  2. status = 'sent' and next_retry_date has arrived (the day+3 / day+10 follow-up ladder for
+  //     a recall that was already messaged once but hasn't been marked contacted/booked/etc).
+  const { data: recalls, error: recallsError } = await serviceClient
+    .from("recalls")
+    .select(
+      `id, patient_id, attempt_count, last_attempt_at,
+       patients!inner(name, mobile, is_active, do_not_disturb),
+       visits(visit_date, treatment_types(name))`,
+    )
+    .eq("clinic_id", clinic.id)
+    .eq("patients.is_active", true)
+    .eq("patients.do_not_disturb", false)
+    .or(`and(status.eq.pending,due_date.lte.${dateStr}),and(status.eq.sent,next_retry_date.lte.${dateStr})`)
+    .order("due_date", { ascending: true });
+
+  if (recallsError) {
+    console.error(`Failed to load due recalls for clinic ${clinic.id}`, recallsError);
+    return { ...base, skipped_reason: "recall_query_failed" };
+  }
+
+  for (const recall of (recalls ?? []) as unknown as RecallRow[]) {
+    // daily_message_cap counts every attempt (sent + failed), unlike monthly_message_quota
+    // (which the spec ties explicitly to clinic_usage.messages_sent, a success-only counter).
+    // The cap's purpose is bounding how many Graph API calls one clinic makes in a single run --
+    // a burst of failures against a broken integration is exactly the runaway-cost/rate-limit
+    // scenario it exists to stop, so failures must count against it too.
+    if (base.sent + base.failed >= clinic.daily_message_cap) {
+      console.log(`Clinic ${clinic.id} (${clinic.name}): reached daily_message_cap (${clinic.daily_message_cap})`);
+      break;
+    }
+    if (messagesSentThisMonth >= clinic.monthly_message_quota) {
+      console.log(`Clinic ${clinic.id} (${clinic.name}): monthly quota reached mid-run, stopping`);
+      break;
+    }
+
+    // Idempotency guard: never send the same recall twice on the same IST calendar date, no
+    // matter how many times the cron fires or this function is retried.
+    const lastAttemptDateStr = recall.last_attempt_at ? istDateOf(new Date(recall.last_attempt_at)) : null;
+    if (lastAttemptDateStr === dateStr) {
+      continue;
+    }
+
+    const fields: Record<string, string> = {
+      patient_name: recall.patients.name,
+      treatment_name: recall.visits?.treatment_types?.name ?? "",
+      visit_date: recall.visits?.visit_date ?? "",
+      clinic_phone: clinic.phone ?? "",
+      clinic_name: clinic.name,
+    };
+    const message = buildTemplateMessage(recall.patients.mobile, template, fields);
+
+    // Inserted before the API call, in 'queued' status, so a crash mid-call still leaves a trace.
+    const { data: logRow, error: logInsertError } = await serviceClient
+      .from("message_log")
+      .insert({
+        clinic_id: clinic.id,
+        recall_id: recall.id,
+        patient_id: recall.patient_id,
+        mobile: recall.patients.mobile,
+        template_name: template.meta_template_name,
+        status: "queued",
+      })
+      .select("id")
+      .single();
+
+    if (logInsertError || !logRow) {
+      console.error(`Failed to insert message_log row for recall ${recall.id}, skipping send`, logInsertError);
+      continue;
+    }
+
+    const result = await callGraphApi(clinic.waba_phone_number_id, accessToken, message);
+    const newAttemptCount = recall.attempt_count + 1;
+    const nowIso = new Date().toISOString();
+
+    if (result.ok) {
+      await serviceClient
+        .from("message_log")
+        .update({ status: "sent", wa_message_id: result.waMessageId, sent_at: nowIso })
+        .eq("id", logRow.id);
+
+      // Follow-up ladder (day 0 / +3 / +10), driven entirely by next_retry_date rather than a
+      // separate scheduler: after the 1st successful send, come back in 3 days; after the 2nd,
+      // come back in 7 more days (3 + 7 = 10 from day 0, assuming each reminder fires on
+      // schedule); after the 3rd, next_retry_date is cleared so the recall stops being selected
+      // and sits in 'sent' for manual follow-up.
+      const nextRetryDate =
+        newAttemptCount === 1 ? addDays(dateStr, 3) : newAttemptCount === 2 ? addDays(dateStr, 7) : null;
+
+      await serviceClient
+        .from("recalls")
+        .update({
+          status: "sent",
+          attempt_count: newAttemptCount,
+          last_attempt_at: nowIso,
+          next_retry_date: nextRetryDate,
+        })
+        .eq("id", recall.id);
+
+      await incrementMessagesSent(serviceClient, clinic.id, monthStart);
+      messagesSentThisMonth++;
+      base.sent++;
+    } else {
+      await serviceClient
+        .from("message_log")
+        .update({ status: "failed", error_code: result.errorCode, error_message: result.errorMessage })
+        .eq("id", logRow.id);
+
+      const updates: Record<string, unknown> = {
+        attempt_count: newAttemptCount,
+        last_attempt_at: nowIso,
+      };
+      if (newAttemptCount >= 3) {
+        updates.status = "failed";
+        updates.next_retry_date = null;
+      } else {
+        updates.status = "pending";
+        updates.next_retry_date = addDays(dateStr, 1);
+      }
+      await serviceClient.from("recalls").update(updates).eq("id", recall.id);
+      base.failed++;
+    }
+
+    await sleep(SEND_DELAY_MS);
+  }
+
+  return base;
+}

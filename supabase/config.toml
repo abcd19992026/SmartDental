@@ -371,6 +371,17 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+# send-recall-messages is invoked by pg_cron (via pg_net), and whatsapp-webhook is invoked by
+# Meta -- neither call carries a Supabase user JWT, so the platform's default JWT gate must be
+# off for both. Each function enforces its own auth instead (X-Cron-Secret / X-Hub-Signature-256
+# checked in code) -- verify_jwt = false does not mean "unauthenticated", it means "authenticated
+# a different way." The other four functions are unaffected and keep the default (JWT required).
+[functions.send-recall-messages]
+verify_jwt = false
+
+[functions.whatsapp-webhook]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

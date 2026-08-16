@@ -112,3 +112,156 @@ export async function updateOwnAvatar(avatarUrl: string | null): Promise<ApiResu
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: { avatar_url: data.avatar_url } };
 }
+
+// ---------------------------------------------------------------------------
+// uploadOwnAvatar / removeOwnAvatar -- the full storage lifecycle on top of updateOwnAvatar's
+// plain DB write. Without explicit cleanup, every upload leaves the previous file(s) behind
+// forever (the path includes a timestamp, so each one is unique) -- this is what actually
+// deletes the old object(s), not just the DB reference to them.
+//
+// A user deleting/replacing objects in their own {auth.uid()}/ folder is already permitted by
+// the existing user-avatars storage RLS (user_avatars_own_update / _own_delete, from the avatar
+// feature migration) -- confirmed live below, not assumed; no policy changes were needed here.
+// ---------------------------------------------------------------------------
+
+async function listOwnAvatarPaths(userId: string): Promise<ApiResult<string[]>> {
+  const { data, error } = await supabase.storage.from("user-avatars").list(userId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: (data ?? []).map((f) => `${userId}/${f.name}`) };
+}
+
+export interface UploadOwnAvatarOutput {
+  avatar_url: string;
+}
+
+export async function uploadOwnAvatar(file: Blob, fileExt: string): Promise<ApiResult<UploadOwnAvatarOutput>> {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    return { ok: false, error: "Not signed in" };
+  }
+  const userId = userData.user.id;
+
+  // Upload the new file, then point avatar_url at it, BEFORE touching the old file(s). If
+  // cleanup below fails, the user still ends up with a working avatar -- a stray old file is a
+  // harmless leftover, never a broken photo.
+  const newPath = `${userId}/${Date.now()}.${fileExt}`;
+  const { error: uploadError } = await supabase.storage
+    .from("user-avatars")
+    .upload(newPath, file, { contentType: file.type || undefined });
+  if (uploadError) return { ok: false, error: uploadError.message };
+
+  const { data: urlData } = supabase.storage.from("user-avatars").getPublicUrl(newPath);
+  const updateResult = await updateOwnAvatar(urlData.publicUrl);
+  if (!updateResult.ok) return updateResult;
+
+  const listResult = await listOwnAvatarPaths(userId);
+  if (!listResult.ok) {
+    console.warn("uploadOwnAvatar: failed to list existing avatar files for cleanup", listResult.error);
+  } else {
+    const stalePaths = listResult.data.filter((path) => path !== newPath);
+    if (stalePaths.length > 0) {
+      const { error: removeError } = await supabase.storage.from("user-avatars").remove(stalePaths);
+      if (removeError) {
+        console.warn("uploadOwnAvatar: failed to clean up old avatar file(s)", removeError.message);
+      }
+    }
+  }
+
+  return { ok: true, data: { avatar_url: urlData.publicUrl } };
+}
+
+export async function removeOwnAvatar(): Promise<ApiResult<{ avatar_url: null }>> {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    return { ok: false, error: "Not signed in" };
+  }
+  const userId = userData.user.id;
+
+  const listResult = await listOwnAvatarPaths(userId);
+  if (!listResult.ok) return { ok: false, error: listResult.error };
+
+  if (listResult.data.length > 0) {
+    const { error: removeError } = await supabase.storage.from("user-avatars").remove(listResult.data);
+    if (removeError) {
+      // Storage delete failed -- do NOT null out avatar_url, or the DB and the actual file state
+      // would disagree (DB says "no avatar" while the file is still sitting in storage).
+      return { ok: false, error: removeError.message };
+    }
+  }
+
+  return (await updateOwnAvatar(null)) as unknown as ApiResult<{ avatar_url: null }>;
+}
+
+// ---------------------------------------------------------------------------
+// uploadClinicLogo / removeClinicLogo -- same storage-cleanup pattern as
+// uploadOwnAvatar/removeOwnAvatar, keyed by clinic_id instead of the caller's own user id (bucket:
+// clinic-logos, RLS: owner-only, scoped to their own clinic's folder -- see the
+// clinic_logos_owner_* policies). This mirrors a leak that existed in the clinic logo flow: every
+// upload left the previous file behind in storage, and "Remove Logo" only cleared
+// clinics.logo_url without ever touching the file itself.
+// ---------------------------------------------------------------------------
+
+async function listClinicLogoPaths(clinicId: string): Promise<ApiResult<string[]>> {
+  const { data, error } = await supabase.storage.from("clinic-logos").list(clinicId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: (data ?? []).map((f) => `${clinicId}/${f.name}`) };
+}
+
+export interface UploadClinicLogoOutput {
+  logo_url: string;
+}
+
+export async function uploadClinicLogo(
+  clinicId: string,
+  file: Blob,
+  fileExt: string,
+): Promise<ApiResult<UploadClinicLogoOutput>> {
+  // Upload the new file, then point logo_url at it, BEFORE touching the old file(s) -- same
+  // ordering as uploadOwnAvatar, so a cleanup failure leaves a harmless orphaned file rather than
+  // a broken logo.
+  const newPath = `${clinicId}/${Date.now()}.${fileExt}`;
+  const { error: uploadError } = await supabase.storage
+    .from("clinic-logos")
+    .upload(newPath, file, { contentType: file.type || undefined });
+  if (uploadError) return { ok: false, error: uploadError.message };
+
+  const { data: urlData } = supabase.storage.from("clinic-logos").getPublicUrl(newPath);
+  const { error: updateError } = await supabase
+    .from("clinics")
+    .update({ logo_url: urlData.publicUrl })
+    .eq("id", clinicId);
+  if (updateError) return { ok: false, error: updateError.message };
+
+  const listResult = await listClinicLogoPaths(clinicId);
+  if (!listResult.ok) {
+    console.warn("uploadClinicLogo: failed to list existing logo files for cleanup", listResult.error);
+  } else {
+    const stalePaths = listResult.data.filter((path) => path !== newPath);
+    if (stalePaths.length > 0) {
+      const { error: removeError } = await supabase.storage.from("clinic-logos").remove(stalePaths);
+      if (removeError) {
+        console.warn("uploadClinicLogo: failed to clean up old logo file(s)", removeError.message);
+      }
+    }
+  }
+
+  return { ok: true, data: { logo_url: urlData.publicUrl } };
+}
+
+export async function removeClinicLogo(clinicId: string): Promise<ApiResult<{ logo_url: null }>> {
+  const listResult = await listClinicLogoPaths(clinicId);
+  if (!listResult.ok) return { ok: false, error: listResult.error };
+
+  if (listResult.data.length > 0) {
+    const { error: removeError } = await supabase.storage.from("clinic-logos").remove(listResult.data);
+    if (removeError) {
+      // Storage delete failed -- do NOT null out logo_url, same reasoning as removeOwnAvatar: the
+      // DB and the actual file state must not disagree.
+      return { ok: false, error: removeError.message };
+    }
+  }
+
+  const { error: updateError } = await supabase.from("clinics").update({ logo_url: null }).eq("id", clinicId);
+  if (updateError) return { ok: false, error: updateError.message };
+  return { ok: true, data: { logo_url: null } };
+}
