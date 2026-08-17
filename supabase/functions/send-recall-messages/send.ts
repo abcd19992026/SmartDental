@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { addDays, istDateOf } from "../_shared/ist-time.ts";
+import { buildTemplateMessage, callGraphApi } from "../_shared/whatsapp-graph-api.ts";
+import { incrementMessagesSent } from "../_shared/clinic-usage.ts";
 
-const GRAPH_API_VERSION = "v21.0";
 /** Small gap between consecutive Graph API calls so a clinic with many due recalls doesn't fire
  * a burst that trips Meta's rate limiting -- a burst-induced 4xx would look identical to a real
  * send failure in message_log, which would be confusing to debug later. */
@@ -14,12 +15,6 @@ interface Clinic {
   waba_phone_number_id: string | null;
   daily_message_cap: number;
   monthly_message_quota: number;
-}
-
-interface WhatsappTemplate {
-  meta_template_name: string;
-  language_code: string;
-  variable_mapping: Record<string, string> | null;
 }
 
 interface RecallRow {
@@ -41,86 +36,6 @@ export interface ClinicRunResult {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Builds the Graph API template message body. `variable_mapping` maps positional template
- * placeholders ("1", "2", ...) to field names (patient_name, treatment_name, ...); the demo
- * hello_world template has no variables at all, so an empty/null mapping omits `components`
- * entirely rather than sending an empty array (Meta rejects a body component list for a template
- * that defines no variables). */
-function buildTemplateMessage(
-  mobile10Digit: string,
-  template: WhatsappTemplate,
-  fields: Record<string, string>,
-): Record<string, unknown> {
-  const templateBody: Record<string, unknown> = {
-    name: template.meta_template_name,
-    language: { code: template.language_code },
-  };
-
-  const mapping = template.variable_mapping;
-  if (mapping && Object.keys(mapping).length > 0) {
-    const parameters = Object.entries(mapping)
-      .sort(([a], [b]) => Number(a) - Number(b))
-      .map(([, fieldKey]) => ({ type: "text", text: fields[fieldKey] ?? "" }));
-    templateBody.components = [{ type: "body", parameters }];
-  }
-
-  return {
-    messaging_product: "whatsapp",
-    // Mobile numbers are stored as bare 10 digits; the country code is prefixed only here, at
-    // the point of calling the API -- never stored with the prefix.
-    to: `91${mobile10Digit}`,
-    type: "template",
-    template: templateBody,
-  };
-}
-
-async function callGraphApi(
-  wabaPhoneNumberId: string,
-  accessToken: string,
-  message: Record<string, unknown>,
-): Promise<{ ok: true; waMessageId: string } | { ok: false; errorCode: string | null; errorMessage: string }> {
-  const response = await fetch(
-    `https://graph.facebook.com/${GRAPH_API_VERSION}/${wabaPhoneNumberId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(message),
-    },
-  );
-
-  const result = await response.json().catch(() => null);
-
-  if (response.ok && result?.messages?.[0]?.id) {
-    return { ok: true, waMessageId: result.messages[0].id };
-  }
-
-  return {
-    ok: false,
-    errorCode: result?.error?.code != null ? String(result.error.code) : null,
-    errorMessage: result?.error?.message ?? `Graph API returned HTTP ${response.status}`,
-  };
-}
-
-/** Atomically upserts +1 onto clinic_usage.messages_sent via the increment_clinic_messages_sent
- * SQL function (see migrations) -- a read-then-write from here would race across concurrent
- * invocations of this function. */
-async function incrementMessagesSent(
-  serviceClient: SupabaseClient,
-  clinicId: string,
-  monthStart: string,
-): Promise<void> {
-  const { error } = await serviceClient.rpc("increment_clinic_messages_sent", {
-    p_clinic_id: clinicId,
-    p_month: monthStart,
-  });
-  if (error) {
-    console.error(`Failed to increment clinic_usage for clinic ${clinicId}`, error);
-  }
 }
 
 /** Processes every due recall for one clinic: loads the approved default template, enforces the

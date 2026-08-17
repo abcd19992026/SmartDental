@@ -335,6 +335,7 @@ export type Database = {
           error_code: string | null
           error_message: string | null
           id: string
+          is_test: boolean
           mobile: string | null
           patient_id: string | null
           recall_id: string | null
@@ -350,6 +351,7 @@ export type Database = {
           error_code?: string | null
           error_message?: string | null
           id?: string
+          is_test?: boolean
           mobile?: string | null
           patient_id?: string | null
           recall_id?: string | null
@@ -365,6 +367,7 @@ export type Database = {
           error_code?: string | null
           error_message?: string | null
           id?: string
+          is_test?: boolean
           mobile?: string | null
           patient_id?: string | null
           recall_id?: string | null
@@ -899,6 +902,10 @@ export type Database = {
         }[]
       }
       get_platform_overview: { Args: never; Returns: Json }
+      increment_clinic_messages_sent: {
+        Args: { p_clinic_id: string; p_count?: number; p_month: string }
+        Returns: undefined
+      }
       is_super_admin: { Args: never; Returns: boolean }
       seed_default_treatment_types: {
         Args: { p_clinic_id: string }

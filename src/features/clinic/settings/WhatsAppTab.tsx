@@ -5,6 +5,7 @@ import { useAuth } from "@/auth/useAuth";
 import { todayIST } from "@/lib/dates";
 import type { Database } from "@/types/database.types";
 import { useToast } from "@/components/ui/toast";
+import { sendTestMessage } from "@/lib/clinic-api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
+
+const MOBILE_RE = /^\d{10}$/;
 
 type ClinicRow = Database["public"]["Tables"]["clinics"]["Row"];
 type TemplateRow = Database["public"]["Tables"]["whatsapp_templates"]["Row"];
@@ -30,6 +33,7 @@ export function WhatsAppTab() {
   // Form State
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
   const [testPhoneNumber, setTestPhoneNumber] = useState("");
+  const [sendingTest, setSendingTest] = useState(false);
 
   useEffect(() => {
     loadWhatsappSettings();
@@ -62,6 +66,7 @@ export function WhatsAppTab() {
         .from("message_log")
         .select("id", { count: "exact" })
         .eq("clinic_id", profile.clinic_id)
+        .eq("is_test", false)
         .gte("created_at", `${currentMonthStart}T00:00:00`),
     ]);
 
@@ -105,6 +110,25 @@ export function WhatsAppTab() {
     success("WhatsApp settings updated.");
     setSubmitting(false);
     loadWhatsappSettings();
+  }
+
+  async function handleSendTestMessage() {
+    if (!MOBILE_RE.test(testPhoneNumber)) return;
+
+    setSendingTest(true);
+    const result = await sendTestMessage(testPhoneNumber);
+    setSendingTest(false);
+
+    if (!result.ok) {
+      toastError(result.error, "Test Message Failed");
+      return;
+    }
+    if (!result.data.success) {
+      // A real Meta error, surfaced verbatim -- not a generic failure message.
+      toastError(result.data.error_message || "Unknown error from Meta", `Send Failed (${result.data.error_code ?? "no code"})`);
+      return;
+    }
+    success(`Test message sent to ${testPhoneNumber}.`);
   }
 
   if (loading) {
@@ -298,16 +322,30 @@ export function WhatsAppTab() {
                 value={testPhoneNumber}
                 onChange={(e) => setTestPhoneNumber(e.target.value)}
                 className="text-xs"
-                disabled
+                disabled={sendingTest}
               />
 
-              <Tooltip content="Test message endpoint is not yet available. Test sending will be enabled once the backend test-send endpoint is deployed.">
-                <span className="inline-block">
-                  <Button type="button" variant="outline" size="sm" disabled className="w-full sm:w-auto">
-                    Send Test Message
-                  </Button>
-                </span>
-              </Tooltip>
+              {isPhoneSet && isTemplateApproved ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  disabled={sendingTest || !MOBILE_RE.test(testPhoneNumber)}
+                  onClick={handleSendTestMessage}
+                >
+                  {sendingTest ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+                  Send Test Message
+                </Button>
+              ) : (
+                <Tooltip content="Requires both a WABA Phone Number ID and an approved default template to be configured first.">
+                  <span className="inline-block">
+                    <Button type="button" variant="outline" size="sm" disabled className="w-full sm:w-auto">
+                      Send Test Message
+                    </Button>
+                  </span>
+                </Tooltip>
+              )}
             </div>
           </div>
         </CardContent>

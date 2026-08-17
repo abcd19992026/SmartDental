@@ -86,6 +86,38 @@ export async function createStaffUser(input: CreateStaffUserInput): Promise<ApiR
 }
 
 // ---------------------------------------------------------------------------
+// send-test-message (Edge Function) -- an owner or super_admin sends one live WhatsApp message
+// using the clinic's approved default template and placeholder sample values, to confirm the
+// WABA connection actually works before enabling automated sending. See
+// supabase/functions/send-test-message/index.ts: clinic_id is ignored for an owner caller (their
+// own clinic is always used), rate-limited to 5/hour per clinic, and counts against the clinic's
+// real monthly_message_quota exactly like a recall send.
+//
+// The function returns HTTP 200 for both a real send success AND a Meta-rejected send (the
+// request itself completed either way) -- only auth/validation/rate-limit/infra problems come
+// back as a non-200 `error` through toFunctionError. Callers must check `data.success`, not just
+// `.ok`, to know whether the message actually went out.
+// ---------------------------------------------------------------------------
+
+export interface SendTestMessageOutput {
+  success: boolean;
+  wa_message_id?: string;
+  mobile?: string;
+  template_name?: string;
+  error_code?: string | null;
+  error_message?: string;
+}
+
+export async function sendTestMessage(mobile: string): Promise<ApiResult<SendTestMessageOutput>> {
+  const { data, error } = await supabase.functions.invoke<SendTestMessageOutput>("send-test-message", {
+    body: { mobile },
+  });
+  if (error) return toFunctionError(error);
+  if (!data) return { ok: false, error: "Empty response from server" };
+  return { ok: true, data };
+}
+
+// ---------------------------------------------------------------------------
 // updateOwnAvatar -- a plain Supabase update, not an Edge Function: this is a same-tenant,
 // same-user write (auth.uid() = the row being updated) that RLS already permits on its own via
 // profiles_self_update_avatar, with protect_profile_role_fields() restricting it to avatar_url

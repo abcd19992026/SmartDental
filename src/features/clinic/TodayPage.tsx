@@ -77,6 +77,7 @@ export function TodayPage() {
       supabase
         .from("message_log")
         .select("id", { count: "exact" })
+        .eq("is_test", false)
         .gte("created_at", `${todayStr}T00:00:00`),
     ]);
 
