@@ -97,6 +97,13 @@ export function MessagesPage() {
           Delivered
         </Button>
         <Button
+          variant={statusFilter === "read" ? "secondary" : "ghost"}
+          size="sm"
+          onClick={() => setStatusFilter("read")}
+        >
+          Read
+        </Button>
+        <Button
           variant={statusFilter === "all" ? "secondary" : "ghost"}
           size="sm"
           onClick={() => setStatusFilter("all")}
@@ -136,31 +143,41 @@ export function MessagesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {messages.map((m) => (
-                    <tr key={m.id}>
-                      <td className="py-3.5 px-4 font-medium text-foreground">{m.clinic?.name || "—"}</td>
-                      <td className="py-3.5 px-4 text-muted-foreground">{m.mobile || "—"}</td>
-                      <td className="py-3.5 px-4 text-muted-foreground">{m.template_name || "—"}</td>
-                      <td className="py-3.5 px-4">
-                        <Badge
-                          variant="outline"
-                          className={
-                            m.status === "failed"
-                              ? "border-destructive/30 text-destructive bg-destructive/10"
-                              : "border-primary/30 text-primary bg-primary/5"
-                          }
-                        >
-                          {m.status}
-                        </Badge>
-                      </td>
-                      <td className="py-3.5 px-4 text-muted-foreground">
-                        {m.sent_at ? formatDateIST(m.sent_at.split("T")[0]) : "—"}
-                      </td>
-                      <td className="py-3.5 px-4 text-xs text-muted-foreground">
-                        {m.error_message ? `${m.error_code || ""}: ${m.error_message}` : "—"}
-                      </td>
-                    </tr>
-                  ))}
+                  {messages.map((m) => {
+                    let pillStyle = "border-muted text-muted-foreground bg-muted/20";
+                    if (m.status === "failed") {
+                      pillStyle = "border-destructive/30 text-destructive bg-destructive/10 dark:bg-destructive/20";
+                    } else if (m.status === "queued") {
+                      pillStyle = "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40";
+                    } else if (m.status === "sent") {
+                      pillStyle = "border-blue-600/30 text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40";
+                    } else if (m.status === "delivered") {
+                      pillStyle = "border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40";
+                    } else if (m.status === "read") {
+                      pillStyle = "border-sky-600/30 text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40";
+                    }
+
+                    const dateStr = m.sent_at || m.created_at;
+
+                    return (
+                      <tr key={m.id}>
+                        <td className="py-3.5 px-4 font-medium text-foreground">{m.clinic?.name || "—"}</td>
+                        <td className="py-3.5 px-4 text-muted-foreground">{m.mobile || "—"}</td>
+                        <td className="py-3.5 px-4 text-muted-foreground">{m.template_name || "—"}</td>
+                        <td className="py-3.5 px-4">
+                          <Badge variant="outline" className={`capitalize font-normal text-xs ${pillStyle}`}>
+                            {m.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3.5 px-4 text-muted-foreground">
+                          {dateStr ? formatDateIST(dateStr.split("T")[0]) : "—"}
+                        </td>
+                        <td className="py-3.5 px-4 text-xs text-muted-foreground max-w-xs truncate">
+                          {m.error_message ? `${m.error_code ? `[${m.error_code}] ` : ""}${m.error_message}` : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -43,6 +43,7 @@ export function TodayPage() {
   const [recalls, setRecalls] = useState<JoinedRecall[]>([]);
   const [branches, setBranches] = useState<BranchRow[]>([]);
   const [visitsThisMonth, setVisitsThisMonth] = useState<number>(0);
+  const [sentTodayCount, setSentTodayCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,13 +67,17 @@ export function TodayPage() {
     const todayStr = todayIST();
     const firstDayOfMonth = `${todayStr.substring(0, 7)}-01`;
 
-    const [rRes, bRes, vRes] = await Promise.all([
+    const [rRes, bRes, vRes, mRes] = await Promise.all([
       supabase
         .from("recalls")
         .select("*, patient:patients(*), visit:visits(*, treatment_type:treatment_types(*))")
         .order("due_date", { ascending: true }),
       supabase.from("branches").select("*").eq("is_active", true),
       supabase.from("visits").select("id", { count: "exact" }).gte("visit_date", firstDayOfMonth),
+      supabase
+        .from("message_log")
+        .select("id", { count: "exact" })
+        .gte("created_at", `${todayStr}T00:00:00`),
     ]);
 
     if (rRes.error) {
@@ -84,6 +89,7 @@ export function TodayPage() {
     setRecalls((rRes.data as JoinedRecall[]) || []);
     if (bRes.data) setBranches(bRes.data);
     if (vRes.count !== null) setVisitsThisMonth(vRes.count);
+    if (mRes.count !== null) setSentTodayCount(mRes.count);
 
     setLoading(false);
   }
@@ -99,10 +105,9 @@ export function TodayPage() {
     (r) => r.status === "pending" && r.due_date === todayStr
   ).length;
 
-  const sentTodayCount = recalls.filter((r) => {
-    if (!r.last_attempt_at) return false;
-    return r.last_attempt_at.startsWith(todayStr) || r.status === "sent";
-  }).length;
+  // Replies waiting: recalls with status = 'contacted'
+  const repliesWaitingRecalls = recalls.filter((r) => r.status === "contacted");
+  const repliesWaitingCount = repliesWaitingRecalls.length;
 
   // Monthly stats calculation
   const firstDayOfMonth = `${todayStr.substring(0, 7)}-01`;
@@ -139,9 +144,14 @@ export function TodayPage() {
     dt.setDate(dt.getDate() + 7);
     const newDueDate = dt.toISOString().split("T")[0];
 
+    const updates: Database["public"]["Tables"]["recalls"]["Update"] = { due_date: newDueDate };
+    if (r.status === "contacted") {
+      updates.status = "pending";
+    }
+
     const { error: err } = await supabase
       .from("recalls")
-      .update({ due_date: newDueDate })
+      .update(updates)
       .eq("id", r.id);
 
     if (err) {
@@ -217,6 +227,9 @@ export function TodayPage() {
     if (r.status === "booked") {
       return "bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/40";
     }
+    if (r.status === "contacted") {
+      return "bg-amber-50/70 dark:bg-amber-950/40 hover:bg-amber-100/70 dark:hover:bg-amber-900/50";
+    }
     const days = daysUntilIST(r.due_date);
     if (days < 0 && (r.status === "pending" || r.status === "failed")) {
       return "bg-red-50/50 dark:bg-red-950/30 hover:bg-red-100/50 dark:hover:bg-red-900/40";
@@ -284,10 +297,10 @@ export function TodayPage() {
         <Card size="sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-normal text-muted-foreground">Replies Waiting</CardTitle>
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            <MessageSquare className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-medium text-muted-foreground">0</div>
+            <div className="text-2xl font-medium text-amber-700 dark:text-amber-400">{loading ? <Skeleton className="h-8 w-10" /> : repliesWaitingCount}</div>
           </CardContent>
         </Card>
 
@@ -301,6 +314,98 @@ export function TodayPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Pinned Replies Waiting Section */}
+      {repliesWaitingRecalls.length > 0 && (
+        <Card className="border-amber-600/30 bg-amber-50/30 dark:bg-amber-950/20">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <CardTitle className="text-sm font-medium text-foreground">
+                  Replies Waiting Action ({repliesWaitingRecalls.length})
+                </CardTitle>
+              </div>
+              <Badge variant="outline" className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-100/50 dark:bg-amber-900/40 text-xs font-normal">
+                Action Required
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Patients who responded to WhatsApp recall messages and require follow-up scheduling
+            </p>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-y border-amber-600/20 bg-amber-100/40 dark:bg-amber-950/40 text-[11px] font-medium text-muted-foreground uppercase">
+                  <tr>
+                    <th className="py-2.5 px-4">Patient Name</th>
+                    <th className="py-2.5 px-4">Mobile</th>
+                    <th className="py-2.5 px-4">Treatment</th>
+                    <th className="py-2.5 px-4">Last Attempt</th>
+                    <th className="py-2.5 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-amber-600/10">
+                  {repliesWaitingRecalls.map((r) => (
+                    <tr key={r.id} className="hover:bg-amber-100/30 dark:hover:bg-amber-900/30 transition-colors">
+                      <td className="py-3 px-4 font-medium text-foreground">
+                        <Link to={`/app/patients?id=${r.patient_id}`} className="hover:underline">
+                          {r.patient?.name || "Unknown Patient"}
+                        </Link>
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground">
+                        {r.patient?.mobile ? (
+                          <a href={`tel:${r.patient.mobile}`} className="inline-flex items-center gap-1 hover:text-primary">
+                            <Phone className="h-3 w-3" />
+                            {r.patient.mobile}
+                          </a>
+                        ) : "—"}
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground">
+                        {r.visit?.treatment_type?.name || "General Checkup"}
+                      </td>
+                      <td className="py-3 px-4 text-xs text-muted-foreground">
+                        {r.last_attempt_at ? formatDateIST(r.last_attempt_at.split("T")[0]) : "—"}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => setVisitModalOpen(true)}
+                            className="h-7 px-2.5 text-xs"
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            Book Visit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSnooze7Days(r)}
+                            className="h-7 px-2 text-xs"
+                          >
+                            <Clock className="h-3 w-3 mr-1" />
+                            Snooze (+7d)
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleMarkDeclined(r)}
+                            className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Search & Filter Toolbar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border">

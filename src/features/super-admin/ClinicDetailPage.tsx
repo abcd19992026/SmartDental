@@ -49,6 +49,7 @@ export function ClinicDetailPage() {
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [usage, setUsage] = useState<UsageRow[]>([]);
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +108,7 @@ export function ClinicDetailPage() {
       supabase.from("profiles").select("*").eq("clinic_id", id),
       supabase.from("payments").select("*").eq("clinic_id", id).order("paid_on", { ascending: false }),
       supabase.from("clinic_usage").select("*").eq("clinic_id", id).order("month", { ascending: false }),
-      supabase.from("whatsapp_templates").select("*").eq("clinic_id", id),
+      supabase.from("whatsapp_templates").select("*").eq("clinic_id", id).eq("approval_status", "approved"),
     ]);
 
     if (cRes.error || !cRes.data) {
@@ -125,7 +126,14 @@ export function ClinicDetailPage() {
     if (pRes.data) setProfiles(pRes.data);
     if (payRes.data) setPayments(payRes.data);
     if (uRes.data) setUsage(uRes.data);
-    if (tRes.data) setTemplates(tRes.data);
+    if (tRes.data) {
+      setTemplates(tRes.data);
+      const defaultTpl = tRes.data.find((t) => t.is_default);
+      setSelectedTemplateId(defaultTpl ? defaultTpl.id : "");
+    } else {
+      setTemplates([]);
+      setSelectedTemplateId("");
+    }
 
     setLoading(false);
   }
@@ -382,6 +390,28 @@ export function ClinicDetailPage() {
     if (err) {
       toastError(err.message, "Save Failed");
       return;
+    }
+
+    if (selectedTemplateId) {
+      const { error: resetErr } = await supabase
+        .from("whatsapp_templates")
+        .update({ is_default: false })
+        .eq("clinic_id", id);
+
+      if (resetErr) {
+        toastError(resetErr.message, "Failed to update default template");
+        return;
+      }
+
+      const { error: setErr } = await supabase
+        .from("whatsapp_templates")
+        .update({ is_default: true })
+        .eq("id", selectedTemplateId);
+
+      if (setErr) {
+        toastError(setErr.message, "Failed to set default template");
+        return;
+      }
     }
 
     success("WhatsApp settings saved.");
@@ -897,22 +927,40 @@ export function ClinicDetailPage() {
 
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="wa-template">Default Template Selector</Label>
-                  <select
-                    id="wa-template"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    defaultValue=""
-                  >
-                    <option value="">Default System Template (recall_reminder_v1)</option>
-                    {templates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.meta_template_name} ({t.language_code})
+                  {templates.length === 0 ? (
+                    <select
+                      id="wa-template"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-not-allowed opacity-80"
+                      disabled
+                      value=""
+                    >
+                      <option value="" disabled>
+                        No approved templates available for this clinic
                       </option>
-                    ))}
-                  </select>
+                    </select>
+                  ) : (
+                    <select
+                      id="wa-template"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      value={selectedTemplateId}
+                      onChange={(e) => setSelectedTemplateId(e.target.value)}
+                    >
+                      {!selectedTemplateId && (
+                        <option value="" disabled>
+                          Select an approved template
+                        </option>
+                      )}
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.meta_template_name} ({t.language_code})
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div className="pt-2 flex items-center justify-between">
-                  <Tooltip content="WhatsApp message sending is available in Phase 5">
+                  <Tooltip content="Test message endpoint is not yet available. Test sending will be enabled once the backend test-send endpoint is deployed.">
                     <span>
                       <Button type="button" variant="outline" disabled>
                         Send Test Message
