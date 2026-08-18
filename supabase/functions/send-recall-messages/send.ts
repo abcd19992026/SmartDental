@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { addDays, istDateOf } from "../_shared/ist-time.ts";
+import { addDays, formatDateIST, istDateOf } from "../_shared/ist-time.ts";
 import { buildTemplateMessage, callGraphApi } from "../_shared/whatsapp-graph-api.ts";
 import { incrementMessagesSent } from "../_shared/clinic-usage.ts";
 
@@ -20,6 +20,7 @@ interface Clinic {
 interface RecallRow {
   id: string;
   patient_id: string;
+  due_date: string;
   attempt_count: number;
   last_attempt_at: string | null;
   patients: { name: string; mobile: string };
@@ -94,7 +95,7 @@ export async function processClinic(
   const { data: recalls, error: recallsError } = await serviceClient
     .from("recalls")
     .select(
-      `id, patient_id, attempt_count, last_attempt_at,
+      `id, patient_id, due_date, attempt_count, last_attempt_at,
        patients!inner(name, mobile, is_active, do_not_disturb),
        visits(visit_date, treatment_types(name))`,
     )
@@ -131,10 +132,13 @@ export async function processClinic(
       continue;
     }
 
+    // Dates are formatted for display ("13 Aug 2026"), never passed through as raw YYYY-MM-DD
+    // column values -- a patient reading the message should never see a database date format.
     const fields: Record<string, string> = {
       patient_name: recall.patients.name,
       treatment_name: recall.visits?.treatment_types?.name ?? "",
-      visit_date: recall.visits?.visit_date ?? "",
+      visit_date: recall.visits?.visit_date ? formatDateIST(recall.visits.visit_date) : "",
+      due_date: formatDateIST(recall.due_date),
       clinic_phone: clinic.phone ?? "",
       clinic_name: clinic.name,
     };

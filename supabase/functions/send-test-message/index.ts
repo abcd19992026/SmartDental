@@ -3,7 +3,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { json } from "../_shared/response.ts";
 import { buildTemplateMessage, callGraphApi } from "../_shared/whatsapp-graph-api.ts";
 import { incrementMessagesSent } from "../_shared/clinic-usage.ts";
-import { getIstNow } from "../_shared/ist-time.ts";
+import { getIstNow, formatDateIST } from "../_shared/ist-time.ts";
 import { validateSendTestMessageRequest, type SendTestMessageRequest } from "./validate.ts";
 
 /** Guardrail against looping this button to burn a clinic's real, Meta-billed monthly quota --
@@ -131,12 +131,20 @@ Deno.serve(async (req) => {
     return json({ error: "This clinic has reached its monthly message quota" }, 400);
   }
 
-  // There's no real recall behind a test send, so the template is rendered with generic
-  // placeholder values instead of real patient/visit data.
+  // There's no real recall behind a test send, so the template is rendered with placeholder
+  // values instead of real patient/visit data -- shaped to read like a genuine overdue recall
+  // (visit 6 months ago, due today) rather than same-day nonsense ("treatment happened today,
+  // and is also due today"), since this is what gets shown to a prospective client as a demo.
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const sixMonthsAgo = new Date(Date.UTC(y, m - 1, d));
+  sixMonthsAgo.setUTCMonth(sixMonthsAgo.getUTCMonth() - 6);
+  const visitDateStr = sixMonthsAgo.toISOString().slice(0, 10);
+
   const placeholderFields: Record<string, string> = {
-    patient_name: "Test Patient",
-    treatment_name: "Sample Treatment",
-    visit_date: dateStr,
+    patient_name: "Test Patient (Sample)",
+    treatment_name: "Scaling / Cleaning",
+    visit_date: formatDateIST(visitDateStr),
+    due_date: formatDateIST(dateStr),
     clinic_phone: clinic.phone ?? "",
     clinic_name: clinic.name,
   };

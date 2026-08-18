@@ -52,3 +52,17 @@ export function addDays(dateStr: string, days: number): string {
   dt.setUTCDate(dt.getUTCDate() + days);
   return dt.toISOString().slice(0, 10);
 }
+
+/** Formats a YYYY-MM-DD date as "13 Aug 2026" for display inside outbound WhatsApp template
+ * bodies -- mirrors src/lib/dates.ts's formatDateIST() exactly (same locale, same options) so a
+ * date reads identically whether it's rendered in the app UI or in a message a patient receives.
+ * Never pass a raw `date` column value straight into a template parameter -- a patient should
+ * never see "2026-08-13". */
+export function formatDateIST(dateStr: string): string {
+  return new Date(`${dateStr}T00:00:00+05:30`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: IST_TIME_ZONE,
+  });
+}
