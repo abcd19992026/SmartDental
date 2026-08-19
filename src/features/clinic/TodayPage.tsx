@@ -11,6 +11,8 @@ import {
   BarChart2,
   Calendar,
   MessageSquare,
+  Pause,
+  Play,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
@@ -23,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AddVisitModal } from "@/features/clinic/AddVisitModal";
+import { ActiveRecallsPopover } from "@/components/clinic/ActiveRecallsPopover";
 import { cn } from "@/lib/utils";
 
 type RecallRow = Database["public"]["Tables"]["recalls"]["Row"];
@@ -179,6 +182,22 @@ export function TodayPage() {
     loadTodayData();
   }
 
+  async function handleTogglePause(r: JoinedRecall) {
+    const newStatus = r.status === "paused" ? "pending" : "paused";
+    const { error: err } = await supabase
+      .from("recalls")
+      .update({ status: newStatus })
+      .eq("id", r.id);
+
+    if (err) {
+      toastError(err.message, "Action Failed");
+      return;
+    }
+
+    success(`Recall ${newStatus === "paused" ? "paused" : "resumed"}.`);
+    loadTodayData();
+  }
+
   // Filter Logic
   const filteredRecalls = recalls.filter((r) => {
     // Owner Branch Filter
@@ -216,15 +235,19 @@ export function TodayPage() {
     return true;
   });
 
-  // Count visible active recalls per patient_id to highlight multiple active recalls
-  const patientActiveRecallCounts = filteredRecalls.reduce<Record<string, number>>((acc, r) => {
-    if (r.patient_id) {
-      acc[r.patient_id] = (acc[r.patient_id] || 0) + 1;
+  // Group active recalls (non-completed, non-declined) per patient for popovers & counts
+  const patientActiveRecallsMap = recalls.reduce<Record<string, JoinedRecall[]>>((acc, r) => {
+    if (r.patient_id && r.status !== "completed" && r.status !== "declined") {
+      if (!acc[r.patient_id]) acc[r.patient_id] = [];
+      acc[r.patient_id].push(r);
     }
     return acc;
   }, {});
 
   function getRowBgClass(r: JoinedRecall) {
+    if (r.status === "paused") {
+      return "opacity-75 bg-slate-50/50 dark:bg-slate-900/30 hover:bg-slate-100/50 dark:hover:bg-slate-900/50";
+    }
     if (r.status === "booked") {
       return "bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/40";
     }
@@ -348,59 +371,67 @@ export function TodayPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-amber-600/10">
-                  {repliesWaitingRecalls.map((r) => (
-                    <tr key={r.id} className="hover:bg-amber-100/30 dark:hover:bg-amber-900/30 transition-colors">
-                      <td className="py-3 px-4 font-medium text-foreground">
-                        <Link to={`/app/patients?id=${r.patient_id}`} className="hover:underline">
-                          {r.patient?.name || "Unknown Patient"}
-                        </Link>
-                      </td>
-                      <td className="py-3 px-4 text-muted-foreground">
-                        {r.patient?.mobile ? (
-                          <a href={`tel:${r.patient.mobile}`} className="inline-flex items-center gap-1 hover:text-primary">
-                            <Phone className="h-3 w-3" />
-                            {r.patient.mobile}
-                          </a>
-                        ) : "—"}
-                      </td>
-                      <td className="py-3 px-4 text-muted-foreground">
-                        {r.visit?.treatment_type?.name || "General Checkup"}
-                      </td>
-                      <td className="py-3 px-4 text-xs text-muted-foreground">
-                        {r.last_attempt_at ? formatDateIST(r.last_attempt_at.split("T")[0]) : "—"}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => setVisitModalOpen(true)}
-                            className="h-7 px-2.5 text-xs"
-                          >
-                            <Plus className="h-3 w-3 mr-1" />
-                            Book Visit
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSnooze7Days(r)}
-                            className="h-7 px-2 text-xs"
-                          >
-                            <Clock className="h-3 w-3 mr-1" />
-                            Snooze (+7d)
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleMarkDeclined(r)}
-                            className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
-                          >
-                            <XCircle className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {repliesWaitingRecalls.map((r) => {
+                    const replyTextClean = r.notes ? r.notes.replace(/^Patient reply:\s*/i, "") : null;
+                    return (
+                      <tr key={r.id} className="hover:bg-amber-100/30 dark:hover:bg-amber-900/30 transition-colors">
+                        <td className="py-3 px-4 font-medium text-foreground">
+                          <Link to={`/app/patients?id=${r.patient_id}`} className="hover:underline font-medium block">
+                            {r.patient?.name || "Unknown Patient"}
+                          </Link>
+                          {replyTextClean && (
+                            <p className="text-xs font-normal text-amber-900/80 dark:text-amber-200/80 mt-0.5 line-clamp-1 max-w-xs" title={replyTextClean}>
+                              "{replyTextClean}"
+                            </p>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-muted-foreground">
+                          {r.patient?.mobile ? (
+                            <a href={`tel:${r.patient.mobile}`} className="inline-flex items-center gap-1 hover:text-primary">
+                              <Phone className="h-3 w-3" />
+                              {r.patient.mobile}
+                            </a>
+                          ) : "—"}
+                        </td>
+                        <td className="py-3 px-4 text-muted-foreground">
+                          {r.visit?.treatment_type?.name || "General Checkup"}
+                        </td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">
+                          {r.last_attempt_at ? formatDateIST(r.last_attempt_at.split("T")[0]) : "—"}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => setVisitModalOpen(true)}
+                              className="h-7 px-2.5 text-xs"
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Book Visit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleSnooze7Days(r)}
+                              className="h-7 px-2 text-xs"
+                            >
+                              <Clock className="h-3 w-3 mr-1" />
+                              Snooze (+7d)
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleMarkDeclined(r)}
+                              className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -459,6 +490,7 @@ export function TodayPage() {
             <option value="pending_due">Active Recalls (Excl. Completed/Declined)</option>
             <option value="pending">Pending</option>
             <option value="sent">Sent</option>
+            <option value="paused">Paused</option>
             <option value="booked">Booked</option>
             <option value="completed">Completed</option>
             <option value="declined">Declined</option>
@@ -501,7 +533,10 @@ export function TodayPage() {
                 <tbody className="divide-y divide-border">
                   {filteredRecalls.map((r) => {
                     const days = daysUntilIST(r.due_date);
-                    const activeCount = r.patient_id ? patientActiveRecallCounts[r.patient_id] || 0 : 0;
+                    const activeRecallsForPatient = r.patient_id ? patientActiveRecallsMap[r.patient_id] || [] : [];
+                    const activeCount = activeRecallsForPatient.length;
+                    const isPaused = r.status === "paused";
+
                     return (
                       <tr key={r.id} className={cn("transition-colors", getRowBgClass(r))}>
                         <td className="py-3 px-4 font-medium text-foreground">
@@ -513,12 +548,18 @@ export function TodayPage() {
                               {r.patient?.name || "Unknown Patient"}
                             </Link>
                             {activeCount > 1 && (
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] py-0 px-1.5 font-normal border-muted-foreground/30 text-muted-foreground bg-muted/30"
+                              <ActiveRecallsPopover
+                                patientName={r.patient?.name || "Patient"}
+                                recalls={activeRecallsForPatient}
+                                onTogglePause={handleTogglePause}
                               >
-                                {activeCount} active recalls
-                              </Badge>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] py-0 px-1.5 font-normal border-muted-foreground/30 text-muted-foreground bg-muted/30 hover:bg-muted/60 transition-colors"
+                                >
+                                  {activeCount} active recalls
+                                </Badge>
+                              </ActiveRecallsPopover>
                             )}
                           </div>
                         </td>
@@ -555,12 +596,14 @@ export function TodayPage() {
                           <Badge
                             variant="outline"
                             className={cn(
-                              "capitalize",
+                              "capitalize font-normal text-xs",
                               r.status === "pending" && days < 0 && "border-destructive/30 text-destructive bg-destructive/10",
                               r.status === "pending" && days === 0 && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
                               r.status === "sent" && "border-primary/30 text-primary bg-primary/5 dark:bg-primary/10",
                               r.status === "booked" && "border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40",
-                              r.status === "declined" && "border-muted text-muted-foreground"
+                              r.status === "contacted" && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
+                              r.status === "declined" && "border-muted text-muted-foreground bg-muted/20",
+                              r.status === "paused" && "border-slate-500/30 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/40"
                             )}
                           >
                             {r.status}
@@ -571,35 +614,60 @@ export function TodayPage() {
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title="Mark as Sent"
-                              onClick={() => handleMarkAsSent(r)}
-                              className="h-8 px-2 text-xs"
-                            >
-                              <Send className="h-3.5 w-3.5 mr-1" />
-                              Sent
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title="Snooze 7 Days"
-                              onClick={() => handleSnooze7Days(r)}
-                              className="h-8 px-2 text-xs"
-                            >
-                              <Clock className="h-3.5 w-3.5 mr-1" />
-                              +7d
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title="Not Interested"
-                              onClick={() => handleMarkDeclined(r)}
-                              className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive"
-                            >
-                              <XCircle className="h-3.5 w-3.5" />
-                            </Button>
+                            {isPaused ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Resume Recall"
+                                onClick={() => handleTogglePause(r)}
+                                className="h-8 px-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                              >
+                                <Play className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                                Resume
+                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Mark as Sent"
+                                  onClick={() => handleMarkAsSent(r)}
+                                  className="h-8 px-2 text-xs"
+                                >
+                                  <Send className="h-3.5 w-3.5 mr-1" />
+                                  Sent
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Snooze 7 Days"
+                                  onClick={() => handleSnooze7Days(r)}
+                                  className="h-8 px-2 text-xs"
+                                >
+                                  <Clock className="h-3.5 w-3.5 mr-1" />
+                                  +7d
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Pause Recall"
+                                  onClick={() => handleTogglePause(r)}
+                                  className="h-8 px-2 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                                >
+                                  <Pause className="h-3.5 w-3.5 mr-1 text-amber-600" />
+                                  Pause
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Not Interested"
+                                  onClick={() => handleMarkDeclined(r)}
+                                  className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive"
+                                >
+                                  <XCircle className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>

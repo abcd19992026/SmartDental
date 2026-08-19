@@ -11,6 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
+  Pause,
+  Play,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
@@ -25,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AddVisitModal } from "@/features/clinic/AddVisitModal";
+import { cn } from "@/lib/utils";
 
 type PatientRow = Database["public"]["Tables"]["patients"]["Row"];
 type BranchRow = Database["public"]["Tables"]["branches"]["Row"];
@@ -268,6 +271,22 @@ export function PatientsPage() {
     loadPatientsData();
   }
 
+  async function handleTogglePause(r: RecallRow) {
+    const newStatus = r.status === "paused" ? "pending" : "paused";
+    const { error: err } = await supabase
+      .from("recalls")
+      .update({ status: newStatus })
+      .eq("id", r.id);
+
+    if (err) {
+      toastError(err.message, "Action Failed");
+      return;
+    }
+
+    success(`Recall ${newStatus === "paused" ? "paused" : "resumed"}.`);
+    loadPatientsData();
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
@@ -449,25 +468,72 @@ export function PatientsPage() {
                             <th className="py-2.5 px-4">Status</th>
                             <th className="py-2.5 px-4 text-center">Attempts</th>
                             <th className="py-2.5 px-4">Last Attempt</th>
+                            <th className="py-2.5 px-4 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
                           {selectedPatient.recalls
                             .sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime())
-                            .map((r) => (
-                              <tr key={r.id}>
-                                <td className="py-2.5 px-4 font-medium text-foreground">{formatDateIST(r.due_date)}</td>
-                                <td className="py-2.5 px-4">
-                                  <Badge variant="outline" className="capitalize">
-                                    {r.status}
-                                  </Badge>
-                                </td>
-                                <td className="py-2.5 px-4 text-center">{r.attempt_count}</td>
-                                <td className="py-2.5 px-4 text-muted-foreground">
-                                  {r.last_attempt_at ? formatDateIST(r.last_attempt_at.split("T")[0]) : "—"}
-                                </td>
-                              </tr>
-                            ))}
+                            .map((r) => {
+                              const isPaused = r.status === "paused";
+                              const isActionable = r.status !== "completed" && r.status !== "declined";
+
+                              return (
+                                <tr key={r.id}>
+                                  <td className="py-2.5 px-4 font-medium text-foreground">{formatDateIST(r.due_date)}</td>
+                                  <td className="py-2.5 px-4">
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "capitalize font-normal text-[11px]",
+                                        r.status === "pending" && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
+                                        r.status === "sent" && "border-primary/30 text-primary bg-primary/5 dark:bg-primary/10",
+                                        r.status === "booked" && "border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40",
+                                        r.status === "contacted" && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
+                                        r.status === "declined" && "border-muted text-muted-foreground bg-muted/20",
+                                        r.status === "paused" && "border-slate-500/30 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/40"
+                                      )}
+                                    >
+                                      {r.status}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-2.5 px-4 text-center">{r.attempt_count}</td>
+                                  <td className="py-2.5 px-4 text-muted-foreground">
+                                    {r.last_attempt_at ? formatDateIST(r.last_attempt_at.split("T")[0]) : "—"}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right">
+                                    {isActionable ? (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        title={isPaused ? "Resume Recall" : "Pause Recall"}
+                                        onClick={() => handleTogglePause(r)}
+                                        className={cn(
+                                          "h-7 px-2 text-xs",
+                                          isPaused
+                                            ? "text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                                            : "text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                                        )}
+                                      >
+                                        {isPaused ? (
+                                          <>
+                                            <Play className="h-3 w-3 mr-1 text-emerald-600" />
+                                            Resume
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Pause className="h-3 w-3 mr-1 text-amber-600" />
+                                            Pause
+                                          </>
+                                        )}
+                                      </Button>
+                                    ) : (
+                                      <span className="text-muted-foreground/50 text-[11px]">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                         </tbody>
                       </table>
                     </div>

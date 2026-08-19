@@ -56,8 +56,14 @@ Deno.serve(async (req) => {
   const signatureHeader = req.headers.get("X-Hub-Signature-256");
   const appSecret = Deno.env.get("META_APP_SECRET");
 
+  console.log(
+    `Webhook: POST received, bodyBytes=${bodyBuffer.byteLength}, ` +
+      `signatureHeaderPresent=${!!signatureHeader}, appSecretConfigured=${!!appSecret}`,
+  );
+
   const validSignature =
     !!appSecret && !!signatureHeader && (await verifyMetaSignature(bodyBuffer, signatureHeader, appSecret));
+  console.log(`Webhook: signature valid=${validSignature}`);
   if (!validSignature) {
     return json({ error: "Invalid signature" }, 401);
   }
@@ -65,11 +71,13 @@ Deno.serve(async (req) => {
   let payload: unknown;
   try {
     payload = JSON.parse(new TextDecoder().decode(bodyBuffer));
-  } catch {
+  } catch (err) {
     // Signature was valid but the body wasn't JSON -- nothing to process. Still 200: a non-200
     // here makes Meta retry aggressively, which won't fix a malformed body.
+    console.log(`Webhook: body was not valid JSON despite valid signature: ${err}`);
     return json({ received: true }, 200);
   }
+  console.log(`Webhook: payload parsed, entryCount=${(payload as { entry?: unknown[] })?.entry?.length ?? 0}`);
 
   const serviceClient = createClient(
     Deno.env.get("SUPABASE_URL")!,

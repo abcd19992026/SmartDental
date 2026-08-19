@@ -29,18 +29,25 @@ async function resolveClinicIdForPhoneNumber(
   serviceClient: SupabaseClient,
   phoneNumberId: string,
 ): Promise<string | null> {
-  const { data: clinic } = await serviceClient
+  const { data: clinic, error } = await serviceClient
     .from("clinics")
     .select("id")
     .eq("waba_phone_number_id", phoneNumberId)
     .maybeSingle();
+  if (error) {
+    console.log(`Webhook: clinic lookup for phone_number_id ${phoneNumberId} errored: ${error.message}`);
+  }
   return clinic?.id ?? null;
 }
 
 async function handleStatusUpdate(serviceClient: SupabaseClient, clinicId: string, status: MetaStatus): Promise<void> {
   const waMessageId = status.id;
   const newStatus = status.status;
-  if (!waMessageId || !newStatus || !(newStatus in STATUS_RANK)) return;
+  console.log(`Webhook: status event -- wa_message_id=${waMessageId}, status=${newStatus}, clinic=${clinicId}`);
+  if (!waMessageId || !newStatus || !(newStatus in STATUS_RANK)) {
+    console.log(`Webhook: status event skipped -- missing id/status or unrecognized status "${newStatus}"`);
+    return;
+  }
 
   // Scoped to this clinic even though wa_message_id should already be globally unique -- this is
   // the same "resolve the clinic first, never touch data outside it" rule the inbound-message
@@ -72,64 +79,102 @@ async function handleStatusUpdate(serviceClient: SupabaseClient, clinicId: strin
     updates.error_message = status.errors[0].title ?? status.errors[0].message ?? null;
   }
 
-  await serviceClient.from("message_log").update(updates).eq("id", row.id);
+  const { error: updateError } = await serviceClient.from("message_log").update(updates).eq("id", row.id);
+  console.log(
+    `Webhook: message_log ${row.id} status "${row.status}" -> "${newStatus}" ${
+      updateError ? `FAILED: ${updateError.message}` : "OK"
+    }`,
+  );
 }
 
 async function handleInboundMessage(serviceClient: SupabaseClient, clinicId: string, message: MetaMessage): Promise<void> {
   const fromMobile = message.from;
-  if (!fromMobile) return;
+  console.log(`Webhook: inbound message event -- from=${fromMobile}, clinic=${clinicId}, hasText=${!!message.text?.body}`);
+  if (!fromMobile) {
+    console.log("Webhook: inbound message skipped -- no 'from' field");
+    return;
+  }
 
   // Patients are stored as bare 10-digit mobiles; Meta sends the number with the 91 country
   // code prefix.
   const mobile10 = fromMobile.startsWith("91") && fromMobile.length === 12 ? fromMobile.slice(2) : fromMobile;
+  console.log(`Webhook: normalized mobile ${fromMobile} -> ${mobile10}`);
 
   // Clinic-scoped lookup only -- a mobile number that exists in another clinic must never match
   // here. If no patient matches within THIS clinic, the event is logged and dropped, not
   // searched across tenants.
-  const { data: patient } = await serviceClient
+  const { data: patient, error: patientError } = await serviceClient
     .from("patients")
     .select("id")
     .eq("clinic_id", clinicId)
     .eq("mobile", mobile10)
     .maybeSingle();
 
+  if (patientError) {
+    console.log(`Webhook: patient lookup errored: ${patientError.message}`);
+  }
   if (!patient) {
-    console.log(`Webhook: inbound message from ${fromMobile} matches no patient in clinic ${clinicId}, ignoring`);
+    console.log(`Webhook: inbound message from ${fromMobile} (normalized ${mobile10}) matches no patient in clinic ${clinicId}, ignoring`);
     return;
   }
+  console.log(`Webhook: matched patient ${patient.id}`);
 
   const replyText = message.text?.body ?? null;
 
-  const { data: recall } = await serviceClient
+  // Not status-filtered: a patient can reply again after the recall has already moved past
+  // pending/sent (contacted, booked, declined, ...), and that reply must still be captured, not
+  // silently dropped. due_date desc + limit 1 picks the patient's current/most recent recall
+  // cycle regardless of its status.
+  const { data: recall, error: recallError } = await serviceClient
     .from("recalls")
-    .select("id")
+    .select("id, status")
     .eq("patient_id", patient.id)
     .eq("clinic_id", clinicId)
-    .in("status", ["pending", "sent"])
     .order("due_date", { ascending: false })
     .limit(1)
     .maybeSingle();
 
+  if (recallError) {
+    console.log(`Webhook: recall lookup errored: ${recallError.message}`);
+  }
   if (!recall) {
-    console.log(`Webhook: inbound message from patient ${patient.id} in clinic ${clinicId} has no open recall`);
+    console.log(`Webhook: inbound message from patient ${patient.id} in clinic ${clinicId} matches no recall at all`);
     return;
   }
 
-  await serviceClient
-    .from("recalls")
-    .update({
-      status: "contacted",
-      notes: replyText ? `Patient reply: ${replyText}` : "Patient replied (no text content)",
-    })
-    .eq("id", recall.id);
+  // Notes always reflect the latest reply so staff never lose visibility into what the patient
+  // said. Status only advances pending/sent -> contacted (first contact); an already-actioned
+  // status (contacted, booked, declined, completed, paused, failed) is left alone -- a later
+  // reply must never silently reopen a decision staff already made.
+  const updates: Record<string, unknown> = {
+    notes: replyText ? `Patient reply: ${replyText}` : "Patient replied (no text content)",
+  };
+  if (recall.status === "pending" || recall.status === "sent") {
+    updates.status = "contacted";
+  }
+  console.log(
+    `Webhook: matched recall ${recall.id} (current status "${recall.status}"), ` +
+      `${updates.status ? "advancing to contacted, " : "leaving status unchanged, "}updating notes`,
+  );
+
+  const { error: updateError } = await serviceClient.from("recalls").update(updates).eq("id", recall.id);
+  console.log(`Webhook: recall ${recall.id} update ${updateError ? `FAILED: ${updateError.message}` : "OK"}`);
 }
 
 export async function processWebhookPayload(serviceClient: SupabaseClient, payload: MetaWebhookPayload): Promise<void> {
+  console.log(`Webhook: processing payload with ${payload.entry?.length ?? 0} entries`);
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const value = change.value;
       const phoneNumberId = value?.metadata?.phone_number_id;
-      if (!phoneNumberId) continue;
+      console.log(
+        `Webhook: change -- phone_number_id=${phoneNumberId}, ` +
+          `statusesCount=${value?.statuses?.length ?? 0}, messagesCount=${value?.messages?.length ?? 0}`,
+      );
+      if (!phoneNumberId) {
+        console.log("Webhook: change skipped -- no phone_number_id in metadata");
+        continue;
+      }
 
       // Multi-tenant demultiplexing: every event is resolved to a clinic BEFORE anything else
       // touches the database. No match -> log and ignore; never guess, never fall back.
@@ -138,6 +183,7 @@ export async function processWebhookPayload(serviceClient: SupabaseClient, paylo
         console.log(`Webhook: no clinic matches phone_number_id ${phoneNumberId}, ignoring event`);
         continue;
       }
+      console.log(`Webhook: phone_number_id ${phoneNumberId} resolved to clinic ${clinicId}`);
 
       for (const status of value?.statuses ?? []) {
         await handleStatusUpdate(serviceClient, clinicId, status);
