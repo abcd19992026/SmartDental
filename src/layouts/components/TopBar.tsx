@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { LogOut, User, Sun, Moon, Laptop, Camera } from "lucide-react";
+import { LogOut, User, Sun, Moon, Laptop, Camera, Menu } from "lucide-react";
 import { useAuth } from "@/auth/useAuth";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChangeAvatarModal } from "@/layouts/components/ChangeAvatarModal";
 
-export function TopBar() {
+export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   const { profile, session, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
 
@@ -27,7 +27,23 @@ export function TopBar() {
   const initial = displayName.charAt(0).toUpperCase();
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-end gap-3 border-b border-border px-4 bg-background">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-4 bg-background/95 backdrop-blur">
+      {/* Left side: Mobile Hamburger Toggle & Brand */}
+      <div className="flex items-center gap-2">
+        {onOpenMobileNav && (
+          <button
+            type="button"
+            onClick={onOpenMobileNav}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-ring md:hidden"
+            aria-label="Open navigation menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
+      </div>
+
+      {/* Right side: Theme Switcher & User Menu */}
+      <div className="flex items-center gap-3">
       {/* Theme Switcher */}
       <DropdownMenu>
         <DropdownMenuTrigger
@@ -92,6 +108,7 @@ export function TopBar() {
         displayName={displayName}
         onAvatarUpdated={(newUrl) => setAvatarUrl(newUrl)}
       />
+      </div>
     </header>
   );
 }

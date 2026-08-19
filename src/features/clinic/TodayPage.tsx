@@ -339,6 +339,35 @@ export function TodayPage() {
         </Card>
       </div>
 
+      {/* Monthly Summary Strip */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-lg border border-border bg-muted/20 p-3.5 text-sm">
+        <div className="flex items-center gap-2">
+          <BarChart2 className="h-4 w-4 text-primary" />
+          <span className="font-medium text-foreground text-xs sm:text-sm">Monthly Summary</span>
+          <Badge variant="outline" className="text-[10px] font-normal border-primary/30 text-primary bg-primary/5">
+            This Month
+          </Badge>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-8 text-center sm:text-left w-full sm:w-auto">
+          <div>
+            <span className="text-[11px] text-muted-foreground block">Recalls Due</span>
+            <span className="font-medium text-foreground text-sm">{dueThisMonthCount}</span>
+          </div>
+          <div>
+            <span className="text-[11px] text-muted-foreground block">Sent</span>
+            <span className="font-medium text-foreground text-sm">{sentThisMonthCount}</span>
+          </div>
+          <div>
+            <span className="text-[11px] text-muted-foreground block">Booked</span>
+            <span className="font-medium text-foreground text-sm">{bookedThisMonthCount}</span>
+          </div>
+          <div>
+            <span className="text-[11px] text-muted-foreground block">Visits Completed</span>
+            <span className="font-medium text-foreground text-sm">{visitsThisMonth}</span>
+          </div>
+        </div>
+      </div>
+
       {/* Pinned Replies Waiting Section */}
       {repliesWaitingRecalls.length > 0 && (
         <Card className="border-amber-600/30 bg-amber-50/30 dark:bg-amber-950/20">
@@ -679,32 +708,6 @@ export function TodayPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Bottom Compact Reporting Strip */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-lg border border-border bg-card p-4 text-sm">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <BarChart2 className="h-4 w-4 text-primary" />
-          <span className="font-medium text-foreground">Monthly Summary:</span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-8 text-center sm:text-left">
-          <div>
-            <span className="text-xs text-muted-foreground block">Recalls Due</span>
-            <span className="font-medium text-foreground">{dueThisMonthCount}</span>
-          </div>
-          <div>
-            <span className="text-xs text-muted-foreground block">Sent</span>
-            <span className="font-medium text-foreground">{sentThisMonthCount}</span>
-          </div>
-          <div>
-            <span className="text-xs text-muted-foreground block">Booked</span>
-            <span className="font-medium text-foreground">{bookedThisMonthCount}</span>
-          </div>
-          <div>
-            <span className="text-xs text-muted-foreground block">Visits Completed</span>
-            <span className="font-medium text-foreground">{visitsThisMonth}</span>
-          </div>
-        </div>
-      </div>
 
       {/* Add Visit Modal */}
       <AddVisitModal

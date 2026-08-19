@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { LayoutDashboard, Building2, CreditCard, MessageSquare } from "lucide-react";
 import { Sidebar, type NavItem } from "@/layouts/components/Sidebar";
@@ -12,13 +13,20 @@ const navItems: NavItem[] = [
 ];
 
 export function SuperAdminShell() {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
   return (
     <ToastProvider>
-      <div className="flex min-h-screen">
-        <Sidebar panelLabel="Super Admin" navItems={navItems} />
-        <div className="flex flex-1 flex-col overflow-x-hidden">
-          <TopBar />
-          <main className="flex-1 bg-background p-6">
+      <div className="flex h-screen overflow-hidden bg-background">
+        <Sidebar
+          panelLabel="Super Admin"
+          navItems={navItems}
+          mobileOpen={mobileNavOpen}
+          onMobileOpenChange={setMobileNavOpen}
+        />
+        <div className="flex flex-1 flex-col h-screen overflow-hidden">
+          <TopBar onOpenMobileNav={() => setMobileNavOpen(true)} />
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6">
             <Outlet />
           </main>
         </div>
