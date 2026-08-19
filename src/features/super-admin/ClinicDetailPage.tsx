@@ -242,6 +242,37 @@ export function ClinicDetailPage() {
   async function handleSavePlan(e: FormEvent) {
     e.preventDefault();
     if (!id) return;
+
+    const includedBranches = planForm.included_branches;
+    const includedReceptionists = planForm.included_receptionists;
+
+    if (!Number.isInteger(includedBranches) || (includedBranches as number) < 1) {
+      toastError("Included Branches must be a whole number of 1 or more.", "Save Plan Failed");
+      return;
+    }
+    if (!Number.isInteger(includedReceptionists) || (includedReceptionists as number) < 1) {
+      toastError("Included Receptionists must be a whole number of 1 or more.", "Save Plan Failed");
+      return;
+    }
+    // Never let the limit drop below what the clinic is already actively using -- that would
+    // leave active branches/receptionists over their own cap with no way for the owner to
+    // resolve it themselves (they can't deactivate their way back under a limit they can't see
+    // the reason for). Deactivating first is the only supported path to lowering these.
+    if ((includedBranches as number) < activeBranchCount) {
+      toastError(
+        `Cannot set Included Branches below ${activeBranchCount} -- this clinic already has ${activeBranchCount} active branch${activeBranchCount === 1 ? "" : "es"}. Deactivate branches first.`,
+        "Save Plan Failed",
+      );
+      return;
+    }
+    if ((includedReceptionists as number) < activeReceptionistCount) {
+      toastError(
+        `Cannot set Included Receptionists below ${activeReceptionistCount} -- this clinic already has ${activeReceptionistCount} active receptionist${activeReceptionistCount === 1 ? "" : "s"}. Deactivate a receptionist first.`,
+        "Save Plan Failed",
+      );
+      return;
+    }
+
     const { error: err } = await supabase
       .from("clinics")
       .update({
@@ -250,6 +281,8 @@ export function ClinicDetailPage() {
         plan_expires_on: planForm.plan_expires_on,
         daily_message_cap: planForm.daily_message_cap,
         monthly_message_quota: planForm.monthly_message_quota,
+        included_branches: includedBranches,
+        included_receptionists: includedReceptionists,
       })
       .eq("id", id);
 
@@ -445,6 +478,12 @@ export function ClinicDetailPage() {
       </div>
     );
   }
+
+  // Used to guard the Plan tab's included_branches/included_receptionists inputs against being
+  // saved below what the clinic is already actively using -- branches/profiles are already
+  // loaded for the Branches and Users tabs, so no extra fetch is needed here.
+  const activeBranchCount = branches.filter((b) => b.is_active).length;
+  const activeReceptionistCount = profiles.filter((p) => p.role === "receptionist" && p.is_active).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -724,6 +763,39 @@ export function ClinicDetailPage() {
                         setPlanForm({ ...planForm, monthly_message_quota: parseInt(e.target.value) || 0 })
                       }
                     />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="p-branches">Included Branches</Label>
+                    <Input
+                      id="p-branches"
+                      type="number"
+                      min={1}
+                      value={planForm.included_branches ?? 1}
+                      onChange={(e) =>
+                        setPlanForm({ ...planForm, included_branches: parseInt(e.target.value) || 0 })
+                      }
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {activeBranchCount} active branch{activeBranchCount === 1 ? "" : "es"} right now
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="p-receptionists">Included Receptionists</Label>
+                    <Input
+                      id="p-receptionists"
+                      type="number"
+                      min={1}
+                      value={planForm.included_receptionists ?? 1}
+                      onChange={(e) =>
+                        setPlanForm({ ...planForm, included_receptionists: parseInt(e.target.value) || 0 })
+                      }
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {activeReceptionistCount} active receptionist{activeReceptionistCount === 1 ? "" : "s"} right now
+                    </span>
                   </div>
                 </div>
 
