@@ -1,5 +1,5 @@
 import { authorizeOwnerOrSuperAdmin } from "../_shared/auth.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsHeadersForRequest } from "../_shared/cors.ts";
 import { json } from "../_shared/response.ts";
 import { generateTempPassword } from "../_shared/password.ts";
 import { retryWithBackoff } from "../_shared/retry.ts";
@@ -15,24 +15,29 @@ function errMessage(err: unknown): string | null {
 }
 
 Deno.serve(async (req) => {
+  // Per-request origin echo (allow-listed to the production frontend + local Vite dev server),
+  // not the shared static corsHeaders -- this is a browser-invoked, owner-triggered action that
+  // genuinely needs to work from localhost during development.
+  const cors = corsHeadersForRequest(req);
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: cors });
   }
   if (req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
+    return json({ error: "Method not allowed" }, 405, cors);
   }
 
   // Steps 1-3: verified JWT, active profile, role IN ('owner', 'super_admin').
   const auth = await authorizeOwnerOrSuperAdmin(req);
   if (!auth.ok) {
-    return json({ error: auth.error }, auth.status);
+    return json({ error: auth.error }, auth.status, cors);
   }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return json({ error: "Invalid JSON body" }, 400);
+    return json({ error: "Invalid JSON body" }, 400, cors);
   }
 
   // Step 5 (role ceiling), checked before general field validation so it surfaces as the
@@ -40,12 +45,12 @@ Deno.serve(async (req) => {
   // a super_admin cannot create another super_admin through this route either.
   const rawRole = body && typeof body === "object" ? (body as Record<string, unknown>).role : undefined;
   if (rawRole === "super_admin") {
-    return json({ error: "Cannot create a platform administrator through this route" }, 403);
+    return json({ error: "Cannot create a platform administrator through this route" }, 403, cors);
   }
 
   const validationErrors = validateCreateStaffUserRequest(body);
   if (validationErrors) {
-    return json({ error: "Validation failed", fields: validationErrors }, 400);
+    return json({ error: "Validation failed", fields: validationErrors }, 400, cors);
   }
   const input = body as CreateStaffUserRequest;
   const { serviceClient } = auth;
@@ -63,6 +68,7 @@ Deno.serve(async (req) => {
       return json(
         { error: "Validation failed", fields: { clinic_id: "clinic_id is required" } },
         400,
+        cors,
       );
     }
     const { data: clinicRow, error: clinicError } = await serviceClient
@@ -74,6 +80,7 @@ Deno.serve(async (req) => {
       return json(
         { error: "Validation failed", fields: { clinic_id: "clinic_id does not refer to an existing clinic" } },
         400,
+        cors,
       );
     }
     clinicId = clinicRow.id;
@@ -92,12 +99,14 @@ Deno.serve(async (req) => {
       return json(
         { error: "Validation failed", fields: { branch_id: "branch_id does not refer to an existing branch" } },
         400,
+        cors,
       );
     }
     if (branchRow.clinic_id !== clinicId) {
       return json(
         { error: "Validation failed", fields: { branch_id: "branch_id does not belong to the resolved clinic" } },
         400,
+        cors,
       );
     }
     branchId = branchRow.id;
@@ -107,7 +116,7 @@ Deno.serve(async (req) => {
     // this, which is why this check is inside the `role === "receptionist"` branch.
     const seatCheck = await checkReceptionistSeatLimit(serviceClient, clinicId);
     if (!seatCheck.ok) {
-      return json({ error: seatCheck.message }, 403);
+      return json({ error: seatCheck.message }, 403, cors);
     }
   }
 
@@ -157,6 +166,7 @@ Deno.serve(async (req) => {
         temporary_password: tempPassword,
       },
       200,
+      cors,
     );
   } catch (err) {
     // Same retry-with-backoff + ORPHAN_CLEANUP_REQUIRED compensation pattern as create-clinic --
@@ -195,6 +205,7 @@ Deno.serve(async (req) => {
         compensation: { auth_user_deleted: authUserId === null || !authDeleteError },
       },
       500,
+      cors,
     );
   }
 });

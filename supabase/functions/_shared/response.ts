@@ -1,8 +1,11 @@
 import { corsHeaders } from "./cors.ts";
 
-export function json(body: unknown, status: number): Response {
+// corsHeaders default covers every existing caller unchanged; extraHeaders lets a function that
+// needs per-request CORS (see corsHeadersForRequest in cors.ts) override Access-Control-Allow-
+// Origin without every other function's calls having to pass anything.
+export function json(body: unknown, status: number, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, ...extraHeaders, "Content-Type": "application/json" },
   });
 }

@@ -118,6 +118,35 @@ export async function sendTestMessage(mobile: string): Promise<ApiResult<SendTes
 }
 
 // ---------------------------------------------------------------------------
+// send-recall-now (Edge Function) -- an owner or super_admin sends one specific recall's
+// WhatsApp message immediately, bypassing the due_date check the daily cron applies, for live
+// demos without waiting for the scheduled run. See supabase/functions/send-recall-now/index.ts:
+// containment (an owner can only target a recall in their own clinic), the clinic's
+// whatsapp_enabled/is_active/plan/quota gates, and the patient's is_active/do_not_disturb flags
+// are all still enforced -- this is a timing bypass only, not a safety bypass.
+//
+// Same HTTP-200-for-both-outcomes convention as send-test-message: check `data.success`, not
+// just `.ok`, to know whether the message actually went out.
+// ---------------------------------------------------------------------------
+
+export interface SendRecallNowOutput {
+  success: boolean;
+  wa_message_id?: string;
+  error_code?: string | null;
+  error_message?: string;
+  recall_id: string;
+}
+
+export async function sendRecallNow(recallId: string): Promise<ApiResult<SendRecallNowOutput>> {
+  const { data, error } = await supabase.functions.invoke<SendRecallNowOutput>("send-recall-now", {
+    body: { recall_id: recallId },
+  });
+  if (error) return toFunctionError(error);
+  if (!data) return { ok: false, error: "Empty response from server" };
+  return { ok: true, data };
+}
+
+// ---------------------------------------------------------------------------
 // updateOwnAvatar -- a plain Supabase update, not an Edge Function: this is a same-tenant,
 // same-user write (auth.uid() = the row being updated) that RLS already permits on its own via
 // profiles_self_update_avatar, with protect_profile_role_fields() restricting it to avatar_url

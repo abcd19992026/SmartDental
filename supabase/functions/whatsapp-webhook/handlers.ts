@@ -146,8 +146,16 @@ async function handleInboundMessage(serviceClient: SupabaseClient, clinicId: str
   // said. Status only advances pending/sent -> contacted (first contact); an already-actioned
   // status (contacted, booked, declined, completed, paused, failed) is left alone -- a later
   // reply must never silently reopen a decision staff already made.
+  //
+  // reply_received_at is what actually drives the Today page's "Replies Waiting" visibility --
+  // deliberately independent of status. It's stamped on every reply, unconditionally, so a
+  // recall that's already declined/booked/etc. still surfaces a new reply instead of the message
+  // silently vanishing into notes with no visible signal. Dismissing a card (reply_dismissed_at,
+  // set client-side) only ever hides THIS reply; a later reply bumps reply_received_at again and
+  // reply_dismissed_at < reply_received_at makes the card reappear.
   const updates: Record<string, unknown> = {
     notes: replyText ? `Patient reply: ${replyText}` : "Patient replied (no text content)",
+    reply_received_at: new Date().toISOString(),
   };
   if (recall.status === "pending" || recall.status === "sent") {
     updates.status = "contacted";

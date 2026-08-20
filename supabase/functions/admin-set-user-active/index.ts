@@ -1,26 +1,31 @@
 import { authorizeOwnerOrSuperAdmin } from "../_shared/auth.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsHeadersForRequest } from "../_shared/cors.ts";
 import { json } from "../_shared/response.ts";
 import { checkReceptionistSeatLimit } from "../_shared/seat-limit.ts";
 
 Deno.serve(async (req) => {
+  // Per-request origin echo (allow-listed to the production frontend + local Vite dev server),
+  // not the shared static corsHeaders -- this is a browser-invoked, owner-triggered action that
+  // genuinely needs to work from localhost during development.
+  const cors = corsHeadersForRequest(req);
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: cors });
   }
   if (req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
+    return json({ error: "Method not allowed" }, 405, cors);
   }
 
   const auth = await authorizeOwnerOrSuperAdmin(req);
   if (!auth.ok) {
-    return json({ error: auth.error }, auth.status);
+    return json({ error: auth.error }, auth.status, cors);
   }
 
   let body: { user_id?: unknown; is_active?: unknown };
   try {
     body = await req.json();
   } catch {
-    return json({ error: "Invalid JSON body" }, 400);
+    return json({ error: "Invalid JSON body" }, 400, cors);
   }
 
   const fieldErrors: Record<string, string> = {};
@@ -31,7 +36,7 @@ Deno.serve(async (req) => {
     fieldErrors["is_active"] = "is_active must be a boolean";
   }
   if (Object.keys(fieldErrors).length > 0) {
-    return json({ error: "Validation failed", fields: fieldErrors }, 400);
+    return json({ error: "Validation failed", fields: fieldErrors }, 400, cors);
   }
   const targetUserId = body.user_id as string;
   const nextActive = body.is_active as boolean;
@@ -45,15 +50,15 @@ Deno.serve(async (req) => {
     .single();
 
   if (targetError || !targetProfile) {
-    return json({ error: "User not found" }, 404);
+    return json({ error: "User not found" }, 404, cors);
   }
   if (targetProfile.role === "super_admin" || !targetProfile.clinic_id) {
-    return json({ error: "Cannot change a platform administrator's status through this route" }, 403);
+    return json({ error: "Cannot change a platform administrator's status through this route" }, 403, cors);
   }
   // Containment: an owner may only act on users in their own clinic. A super_admin is unrestricted
   // (existing behaviour, unchanged).
   if (auth.role === "owner" && targetProfile.clinic_id !== auth.clinicId) {
-    return json({ error: "Forbidden: you can only manage users in your own clinic" }, 403);
+    return json({ error: "Forbidden: you can only manage users in your own clinic" }, 403, cors);
   }
 
   // Reactivating a receptionist must respect the same seat limit as creating a new one --
@@ -62,7 +67,7 @@ Deno.serve(async (req) => {
   if (nextActive && targetProfile.role === "receptionist") {
     const seatCheck = await checkReceptionistSeatLimit(serviceClient, targetProfile.clinic_id, targetUserId);
     if (!seatCheck.ok) {
-      return json({ error: seatCheck.message }, 403);
+      return json({ error: seatCheck.message }, 403, cors);
     }
   }
 
@@ -71,7 +76,7 @@ Deno.serve(async (req) => {
     .update({ is_active: nextActive })
     .eq("id", targetUserId);
   if (updateError) {
-    return json({ error: updateError.message }, 500);
+    return json({ error: updateError.message }, 500, cors);
   }
 
   await serviceClient.from("activity_log").insert({
@@ -83,5 +88,5 @@ Deno.serve(async (req) => {
     meta: {},
   });
 
-  return json({ user_id: targetUserId, is_active: nextActive }, 200);
+  return json({ user_id: targetUserId, is_active: nextActive }, 200, cors);
 });

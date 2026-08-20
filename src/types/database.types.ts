@@ -603,6 +603,8 @@ export type Database = {
           next_retry_date: string | null
           notes: string | null
           patient_id: string
+          reply_dismissed_at: string | null
+          reply_received_at: string | null
           status: string
           updated_at: string
           visit_id: string | null
@@ -618,6 +620,8 @@ export type Database = {
           next_retry_date?: string | null
           notes?: string | null
           patient_id: string
+          reply_dismissed_at?: string | null
+          reply_received_at?: string | null
           status?: string
           updated_at?: string
           visit_id?: string | null
@@ -633,6 +637,8 @@ export type Database = {
           next_retry_date?: string | null
           notes?: string | null
           patient_id?: string
+          reply_dismissed_at?: string | null
+          reply_received_at?: string | null
           status?: string
           updated_at?: string
           visit_id?: string | null

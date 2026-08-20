@@ -13,9 +13,11 @@ import {
   MessageSquare,
   Pause,
   Play,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
+import { sendRecallNow } from "@/lib/clinic-api";
 import { todayIST, daysUntilIST, formatDateIST } from "@/lib/dates";
 import type { Database } from "@/types/database.types";
 import { useToast } from "@/components/ui/toast";
@@ -58,6 +60,10 @@ export function TodayPage() {
 
   // Modal State
   const [visitModalOpen, setVisitModalOpen] = useState(false);
+
+  // Owner-only manual "Send Now" trigger -- tracks which single row is mid-send so only that
+  // row's button shows a spinner, not the whole table.
+  const [sendingNowId, setSendingNowId] = useState<string | null>(null);
 
   useEffect(() => {
     loadTodayData();
@@ -109,8 +115,14 @@ export function TodayPage() {
     (r) => r.status === "pending" && r.due_date === todayStr
   ).length;
 
-  // Replies waiting: recalls with status = 'contacted'
-  const repliesWaitingRecalls = recalls.filter((r) => r.status === "contacted");
+  // Replies waiting: a recall has an unacknowledged reply whenever reply_received_at is newer
+  // than reply_dismissed_at (or was never dismissed) -- deliberately independent of `status`, so
+  // dismissing a card can never suppress a genuinely new reply that arrives afterward, and a
+  // reply is never lost just because the recall's status happens to already be
+  // declined/booked/etc. (see handleDismissReply below for the other half of this).
+  const repliesWaitingRecalls = recalls.filter(
+    (r) => r.reply_received_at && (!r.reply_dismissed_at || r.reply_dismissed_at < r.reply_received_at)
+  );
   const repliesWaitingCount = repliesWaitingRecalls.length;
 
   // Monthly stats calculation
@@ -167,6 +179,25 @@ export function TodayPage() {
     loadTodayData();
   }
 
+  // Dismisses only the CURRENT reply from the pinned card -- must never touch `status`. Reusing
+  // handleMarkDeclined (status='declined') here was the actual bug: it permanently removed the
+  // recall from view, and since the webhook never auto-reopens a declined recall's status, a
+  // brand new reply afterward updated notes but could never make the card reappear.
+  async function handleDismissReply(r: JoinedRecall) {
+    const { error: err } = await supabase
+      .from("recalls")
+      .update({ reply_dismissed_at: new Date().toISOString() })
+      .eq("id", r.id);
+
+    if (err) {
+      toastError(err.message, "Action Failed");
+      return;
+    }
+
+    success("Reply dismissed.");
+    loadTodayData();
+  }
+
   async function handleMarkDeclined(r: JoinedRecall) {
     const { error: err } = await supabase
       .from("recalls")
@@ -179,6 +210,25 @@ export function TodayPage() {
     }
 
     success("Recall marked as not interested.");
+    loadTodayData();
+  }
+
+  async function handleSendNow(r: JoinedRecall) {
+    setSendingNowId(r.id);
+    const result = await sendRecallNow(r.id);
+    setSendingNowId(null);
+
+    if (!result.ok) {
+      toastError(result.error, "Send Failed");
+      return;
+    }
+    if (!result.data.success) {
+      // A real Meta error, surfaced verbatim -- not a generic failure message.
+      toastError(result.data.error_message || "Unknown error from Meta", `Send Failed (${result.data.error_code ?? "no code"})`);
+      return;
+    }
+
+    success(`WhatsApp message sent to ${r.patient?.name || "patient"}.`);
     loadTodayData();
   }
 
@@ -451,7 +501,8 @@ export function TodayPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleMarkDeclined(r)}
+                              title="Dismiss this reply"
+                              onClick={() => handleDismissReply(r)}
                               className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
                             >
                               <XCircle className="h-3.5 w-3.5" />
@@ -656,6 +707,23 @@ export function TodayPage() {
                               </Button>
                             ) : (
                               <>
+                                {profile?.role === "owner" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    title="Send WhatsApp message now (bypasses the scheduled send time)"
+                                    onClick={() => handleSendNow(r)}
+                                    disabled={sendingNowId === r.id}
+                                    className="h-8 px-2 text-xs text-primary hover:bg-primary/10"
+                                  >
+                                    {sendingNowId === r.id ? (
+                                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                    ) : (
+                                      <Send className="h-3.5 w-3.5 mr-1" />
+                                    )}
+                                    Send Now
+                                  </Button>
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="sm"

@@ -1,5 +1,5 @@
 import { authorizeOwnerOrSuperAdmin } from "../_shared/auth.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsHeadersForRequest } from "../_shared/cors.ts";
 import { json } from "../_shared/response.ts";
 import { buildTemplateMessage, callGraphApi } from "../_shared/whatsapp-graph-api.ts";
 import { incrementMessagesSent } from "../_shared/clinic-usage.ts";
@@ -12,11 +12,16 @@ import { validateSendTestMessageRequest, type SendTestMessageRequest } from "./v
 const TEST_SENDS_PER_HOUR_LIMIT = 5;
 
 Deno.serve(async (req) => {
+  // Per-request origin echo (allow-listed to the production frontend + local Vite dev server),
+  // not the shared static corsHeaders -- this is a browser-invoked, owner-triggered button that
+  // genuinely needs to work from localhost during development.
+  const cors = corsHeadersForRequest(req);
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: cors });
   }
   if (req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
+    return json({ error: "Method not allowed" }, 405, cors);
   }
 
   // Steps 1-3: verified JWT, active profile, role IN ('owner', 'super_admin') -- identical chain
@@ -25,19 +30,19 @@ Deno.serve(async (req) => {
   // belongs only to send-recall-messages and must never reach client code.
   const auth = await authorizeOwnerOrSuperAdmin(req);
   if (!auth.ok) {
-    return json({ error: auth.error }, auth.status);
+    return json({ error: auth.error }, auth.status, cors);
   }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return json({ error: "Invalid JSON body" }, 400);
+    return json({ error: "Invalid JSON body" }, 400, cors);
   }
 
   const validationErrors = validateSendTestMessageRequest(body);
   if (validationErrors) {
-    return json({ error: "Validation failed", fields: validationErrors }, 400);
+    return json({ error: "Validation failed", fields: validationErrors }, 400, cors);
   }
   const input = body as SendTestMessageRequest;
   const { serviceClient } = auth;
@@ -50,7 +55,7 @@ Deno.serve(async (req) => {
     clinicId = auth.clinicId as string;
   } else {
     if (typeof input.clinic_id !== "string" || !input.clinic_id) {
-      return json({ error: "Validation failed", fields: { clinic_id: "clinic_id is required" } }, 400);
+      return json({ error: "Validation failed", fields: { clinic_id: "clinic_id is required" } }, 400, cors);
     }
     const { data: clinicRow, error: clinicIdError } = await serviceClient
       .from("clinics")
@@ -61,6 +66,7 @@ Deno.serve(async (req) => {
       return json(
         { error: "Validation failed", fields: { clinic_id: "clinic_id does not refer to an existing clinic" } },
         400,
+        cors,
       );
     }
     clinicId = clinicRow.id;
@@ -69,7 +75,7 @@ Deno.serve(async (req) => {
   const accessToken = Deno.env.get("META_ACCESS_TOKEN");
   if (!accessToken) {
     console.error("META_ACCESS_TOKEN is not configured");
-    return json({ error: "Server misconfigured" }, 500);
+    return json({ error: "Server misconfigured" }, 500, cors);
   }
 
   const { data: clinic, error: clinicLoadError } = await serviceClient
@@ -78,10 +84,10 @@ Deno.serve(async (req) => {
     .eq("id", clinicId)
     .single();
   if (clinicLoadError || !clinic) {
-    return json({ error: "Clinic not found" }, 404);
+    return json({ error: "Clinic not found" }, 404, cors);
   }
   if (!clinic.waba_phone_number_id) {
-    return json({ error: "This clinic has no WABA phone number configured" }, 400);
+    return json({ error: "This clinic has no WABA phone number configured" }, 400, cors);
   }
 
   const { data: template, error: templateError } = await serviceClient
@@ -92,7 +98,7 @@ Deno.serve(async (req) => {
     .eq("approval_status", "approved")
     .maybeSingle();
   if (templateError || !template) {
-    return json({ error: "This clinic has no approved default template" }, 400);
+    return json({ error: "This clinic has no approved default template" }, 400, cors);
   }
 
   // Rate limit: max 5 test sends per clinic per hour, counted from message_log itself (is_test =
@@ -107,12 +113,13 @@ Deno.serve(async (req) => {
     .eq("is_test", true)
     .gte("created_at", oneHourAgoIso);
   if (rateLimitError) {
-    return json({ error: "Could not verify the test-send rate limit" }, 500);
+    return json({ error: "Could not verify the test-send rate limit" }, 500, cors);
   }
   if ((recentTestSendCount ?? 0) >= TEST_SENDS_PER_HOUR_LIMIT) {
     return json(
       { error: `Test message limit reached (${TEST_SENDS_PER_HOUR_LIMIT} per hour). Please try again later.` },
       429,
+      cors,
     );
   }
 
@@ -128,7 +135,7 @@ Deno.serve(async (req) => {
     .maybeSingle();
   const messagesSentThisMonth = usage?.messages_sent ?? 0;
   if (messagesSentThisMonth >= clinic.monthly_message_quota) {
-    return json({ error: "This clinic has reached its monthly message quota" }, 400);
+    return json({ error: "This clinic has reached its monthly message quota" }, 400, cors);
   }
 
   // There's no real recall behind a test send, so the template is rendered with placeholder
@@ -167,7 +174,7 @@ Deno.serve(async (req) => {
     .select("id")
     .single();
   if (logInsertError || !logRow) {
-    return json({ error: "Failed to record the test send attempt" }, 500);
+    return json({ error: "Failed to record the test send attempt" }, 500, cors);
   }
 
   const result = await callGraphApi(clinic.waba_phone_number_id, accessToken, message);
@@ -184,6 +191,7 @@ Deno.serve(async (req) => {
     return json(
       { success: true, wa_message_id: result.waMessageId, mobile: input.mobile, template_name: template.meta_template_name },
       200,
+      cors,
     );
   }
 
@@ -194,5 +202,5 @@ Deno.serve(async (req) => {
 
   // Meta's exact error is returned unmodified -- the caller needs the real error to diagnose a
   // WABA/template config problem, not a generic "send failed" message.
-  return json({ success: false, error_code: result.errorCode, error_message: result.errorMessage }, 200);
+  return json({ success: false, error_code: result.errorCode, error_message: result.errorMessage }, 200, cors);
 });

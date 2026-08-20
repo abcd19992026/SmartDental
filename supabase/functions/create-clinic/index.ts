@@ -1,5 +1,5 @@
 import { authorizeSuperAdmin } from "../_shared/auth.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsHeadersForRequest } from "../_shared/cors.ts";
 import { json } from "../_shared/response.ts";
 import { generateTempPassword } from "../_shared/password.ts";
 import { retryWithBackoff } from "../_shared/retry.ts";
@@ -14,28 +14,33 @@ function errMessage(err: unknown): string | null {
 }
 
 Deno.serve(async (req) => {
+  // Per-request origin echo (allow-listed to the production frontend + local Vite dev server),
+  // not the shared static corsHeaders -- this is a browser-invoked, super-admin-triggered action
+  // that genuinely needs to work from localhost during development.
+  const cors = corsHeadersForRequest(req);
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: cors });
   }
   if (req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
+    return json({ error: "Method not allowed" }, 405, cors);
   }
 
   const auth = await authorizeSuperAdmin(req);
   if (!auth.ok) {
-    return json({ error: auth.error }, auth.status);
+    return json({ error: auth.error }, auth.status, cors);
   }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return json({ error: "Invalid JSON body" }, 400);
+    return json({ error: "Invalid JSON body" }, 400, cors);
   }
 
   const validationErrors = validateCreateClinicRequest(body);
   if (validationErrors) {
-    return json({ error: "Validation failed", fields: validationErrors }, 400);
+    return json({ error: "Validation failed", fields: validationErrors }, 400, cors);
   }
   // Narrowed by validateCreateClinicRequest above -- role/clinic_id/user_id are never read from
   // this body anywhere below; the owner's identity comes only from auth.admin.createUser()'s
@@ -69,7 +74,7 @@ Deno.serve(async (req) => {
   });
 
   if (rpcError || !rpcData) {
-    return json({ error: rpcError?.message ?? "Failed to create clinic" }, 500);
+    return json({ error: rpcError?.message ?? "Failed to create clinic" }, 500, cors);
   }
 
   const clinicId = (rpcData as { clinic_id: string; branch_ids: string[] }).clinic_id;
@@ -135,6 +140,7 @@ Deno.serve(async (req) => {
         owner: { id: authUserId, email: input.owner.email, temporary_password: tempPassword },
       },
       200,
+      cors,
     );
   } catch (err) {
     // Compensation: retry each step up to 3x with exponential backoff before giving up on it.
@@ -188,6 +194,7 @@ Deno.serve(async (req) => {
         },
       },
       500,
+      cors,
     );
   }
 });
