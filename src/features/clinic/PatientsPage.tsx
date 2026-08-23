@@ -346,7 +346,7 @@ export function PatientsPage() {
         </div>
         <Button onClick={openAddPatient}>
           <Plus className="h-4 w-4 mr-1.5" />
-          + Add Patient
+          Add Patient
         </Button>
       </div>
 
@@ -359,56 +359,70 @@ export function PatientsPage() {
       {/* VIEW A: Patient Detail View */}
       {selectedPatient ? (
         <div className="flex flex-col gap-6">
-          {/* Header Row: Left = Name + Mobile + Branch; Right = Billing Figures */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+          {/* Unified Patient Header */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border pb-4">
+            {/* Left side: Back Button + Patient Details */}
+            <div className="flex items-start gap-3">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="icon"
                 onClick={() => setSearchParams({})}
                 title="Back to Patient List"
+                className="h-9 w-9 shrink-0 mt-0.5"
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-medium text-foreground">{selectedPatient.name}</h2>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-xl font-semibold text-foreground tracking-tight">{selectedPatient.name}</h2>
                   {selectedPatient.do_not_disturb && (
-                    <Badge variant="outline" className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40">
+                    <Badge variant="outline" className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-xs">
                       Do Not Disturb
                     </Badge>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Mobile: {selectedPatient.mobile} • Branch: {selectedPatient.branch?.name || "Main"}
-                </p>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                  <span>Mobile: <strong className="text-foreground font-medium">{selectedPatient.mobile}</strong></span>
+                  <span>•</span>
+                  <span>Branch: {selectedPatient.branch?.name || "Main"}</span>
+                  {selectedPatient.age ? (
+                    <>
+                      <span>•</span>
+                      <span>{selectedPatient.age} yrs / {selectedPatient.gender || "—"}</span>
+                    </>
+                  ) : null}
+                </div>
               </div>
             </div>
 
-            {/* Billing Figures on the right */}
-            <BillingBanner summary={billingSummary} loading={billingLoading} />
-          </div>
-
-          {/* Action button row: Edit Profile / Record Visit */}
-          <div className="flex items-center justify-end gap-2 border-b border-border pb-4">
-            <Button variant="outline" size="sm" onClick={() => openEditPatient(selectedPatient)}>
-              <Edit2 className="h-3.5 w-3.5 mr-1.5" />
-              Edit Profile
-            </Button>
-            <Button size="sm" onClick={() => setAddVisitOpen(true)}>
-              <Plus className="h-4 w-4 mr-1.5" />
-              Record Visit
-            </Button>
+            {/* Right side: Billing Numbers + Record Visit Button */}
+            <div className="flex items-center gap-6 sm:gap-8 lg:gap-12 flex-wrap sm:flex-nowrap justify-between lg:justify-end">
+              <BillingBanner summary={billingSummary} loading={billingLoading} />
+              <div className="h-8 w-px bg-border hidden sm:block shrink-0" />
+              <Button size="sm" onClick={() => setAddVisitOpen(true)} className="shadow-sm shrink-0">
+                <Plus className="h-4 w-4 mr-1.5" />
+                Record Visit
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-6 md:grid-cols-3">
             {/* Patient Profile Card */}
             <Card className="md:col-span-1">
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
                 <CardTitle className="text-base font-medium flex items-center gap-2">
                   <User className="h-4 w-4 text-primary" />
                   Patient Info
                 </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openEditPatient(selectedPatient)}
+                  className="h-8 px-2.5 text-xs"
+                >
+                  <Edit2 className="h-3.5 w-3.5 mr-1" />
+                  Edit Profile
+                </Button>
               </CardHeader>
               <CardContent className="space-y-4 text-sm">
                 <div>
