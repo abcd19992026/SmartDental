@@ -153,6 +153,13 @@ export type Database = {
             foreignKeyName: "appointments_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
+            referencedRelation: "patient_billing_summary"
+            referencedColumns: ["patient_id"]
+          },
+          {
+            foreignKeyName: "appointments_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
             referencedRelation: "patients"
             referencedColumns: ["id"]
           },
@@ -258,6 +265,7 @@ export type Database = {
           included_branches: number
           included_receptionists: number
           is_active: boolean
+          letterhead: Json | null
           logo_url: string | null
           monthly_message_quota: number
           name: string
@@ -284,6 +292,7 @@ export type Database = {
           included_branches?: number
           included_receptionists?: number
           is_active?: boolean
+          letterhead?: Json | null
           logo_url?: string | null
           monthly_message_quota?: number
           name: string
@@ -310,6 +319,7 @@ export type Database = {
           included_branches?: number
           included_receptionists?: number
           is_active?: boolean
+          letterhead?: Json | null
           logo_url?: string | null
           monthly_message_quota?: number
           name?: string
@@ -327,6 +337,50 @@ export type Database = {
           whatsapp_enabled?: boolean
         }
         Relationships: []
+      }
+      medicines: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          default_dosage: string | null
+          default_duration: string | null
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          default_dosage?: string | null
+          default_duration?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          default_dosage?: string | null
+          default_duration?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medicines_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       message_log: {
         Row: {
@@ -389,6 +443,13 @@ export type Database = {
             foreignKeyName: "message_log_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
+            referencedRelation: "patient_billing_summary"
+            referencedColumns: ["patient_id"]
+          },
+          {
+            foreignKeyName: "message_log_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
             referencedRelation: "patients"
             referencedColumns: ["id"]
           },
@@ -397,6 +458,100 @@ export type Database = {
             columns: ["recall_id"]
             isOneToOne: false
             referencedRelation: "recalls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_payments: {
+        Row: {
+          amount: number
+          branch_id: string
+          client_request_id: string | null
+          clinic_id: string
+          created_at: string
+          created_by: string
+          id: string
+          mode: string
+          notes: string | null
+          paid_on: string
+          patient_id: string
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          amount: number
+          branch_id: string
+          client_request_id?: string | null
+          clinic_id: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          mode: string
+          notes?: string | null
+          paid_on?: string
+          patient_id: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          amount?: number
+          branch_id?: string
+          client_request_id?: string | null
+          clinic_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          mode?: string
+          notes?: string | null
+          paid_on?: string
+          patient_id?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_payments_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_payments_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_payments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_payments_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patient_billing_summary"
+            referencedColumns: ["patient_id"]
+          },
+          {
+            foreignKeyName: "patient_payments_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_payments_voided_by_fkey"
+            columns: ["voided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -537,6 +692,136 @@ export type Database = {
           },
         ]
       }
+      prescriptions: {
+        Row: {
+          blood_pressure: string | null
+          branch_id: string
+          chief_complaint: string | null
+          client_request_id: string | null
+          clinic_id: string
+          created_at: string
+          created_by: string
+          doctor_name: string
+          height: string | null
+          id: string
+          investigation: Json | null
+          medical_history: Json | null
+          medications: Json | null
+          notes: string | null
+          occupation: string | null
+          oral_examination: string | null
+          past_dental_history: string | null
+          patient_id: string
+          prescribed_on: string
+          provisional_diagnosis: string | null
+          spo2: string | null
+          teeth: number[] | null
+          treatment_plan: string | null
+          updated_at: string
+          visit_id: string | null
+          weight: string | null
+        }
+        Insert: {
+          blood_pressure?: string | null
+          branch_id: string
+          chief_complaint?: string | null
+          client_request_id?: string | null
+          clinic_id: string
+          created_at?: string
+          created_by?: string
+          doctor_name: string
+          height?: string | null
+          id?: string
+          investigation?: Json | null
+          medical_history?: Json | null
+          medications?: Json | null
+          notes?: string | null
+          occupation?: string | null
+          oral_examination?: string | null
+          past_dental_history?: string | null
+          patient_id: string
+          prescribed_on?: string
+          provisional_diagnosis?: string | null
+          spo2?: string | null
+          teeth?: number[] | null
+          treatment_plan?: string | null
+          updated_at?: string
+          visit_id?: string | null
+          weight?: string | null
+        }
+        Update: {
+          blood_pressure?: string | null
+          branch_id?: string
+          chief_complaint?: string | null
+          client_request_id?: string | null
+          clinic_id?: string
+          created_at?: string
+          created_by?: string
+          doctor_name?: string
+          height?: string | null
+          id?: string
+          investigation?: Json | null
+          medical_history?: Json | null
+          medications?: Json | null
+          notes?: string | null
+          occupation?: string | null
+          oral_examination?: string | null
+          past_dental_history?: string | null
+          patient_id?: string
+          prescribed_on?: string
+          provisional_diagnosis?: string | null
+          spo2?: string | null
+          teeth?: number[] | null
+          treatment_plan?: string | null
+          updated_at?: string
+          visit_id?: string | null
+          weight?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prescriptions_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patient_billing_summary"
+            referencedColumns: ["patient_id"]
+          },
+          {
+            foreignKeyName: "prescriptions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -662,6 +947,13 @@ export type Database = {
             foreignKeyName: "recalls_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
+            referencedRelation: "patient_billing_summary"
+            referencedColumns: ["patient_id"]
+          },
+          {
+            foreignKeyName: "recalls_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
             referencedRelation: "patients"
             referencedColumns: ["id"]
           },
@@ -719,12 +1011,16 @@ export type Database = {
         Row: {
           amount: number | null
           branch_id: string
+          client_request_id: string | null
           clinic_id: string
           created_at: string
           created_by: string | null
+          discount_percent: number
           id: string
+          net_amount: number | null
           notes: string | null
           patient_id: string
+          teeth: number[] | null
           tooth_numbers: string | null
           treatment_type_id: string | null
           updated_at: string
@@ -733,12 +1029,16 @@ export type Database = {
         Insert: {
           amount?: number | null
           branch_id: string
+          client_request_id?: string | null
           clinic_id: string
           created_at?: string
           created_by?: string | null
+          discount_percent?: number
           id?: string
+          net_amount?: number | null
           notes?: string | null
           patient_id: string
+          teeth?: number[] | null
           tooth_numbers?: string | null
           treatment_type_id?: string | null
           updated_at?: string
@@ -747,12 +1047,16 @@ export type Database = {
         Update: {
           amount?: number | null
           branch_id?: string
+          client_request_id?: string | null
           clinic_id?: string
           created_at?: string
           created_by?: string | null
+          discount_percent?: number
           id?: string
+          net_amount?: number | null
           notes?: string | null
           patient_id?: string
+          teeth?: number[] | null
           tooth_numbers?: string | null
           treatment_type_id?: string | null
           updated_at?: string
@@ -779,6 +1083,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visits_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patient_billing_summary"
+            referencedColumns: ["patient_id"]
           },
           {
             foreignKeyName: "visits_patient_id_fkey"
@@ -848,7 +1159,24 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      patient_billing_summary: {
+        Row: {
+          clinic_id: string | null
+          due: number | null
+          patient_id: string | null
+          total_billed: number | null
+          total_paid: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patients_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       create_branch: {
@@ -867,9 +1195,12 @@ export type Database = {
       create_visit_with_recall: {
         Args: {
           p_amount: number
+          p_client_request_id?: string
+          p_discount_percent?: number
           p_notes: string
           p_patient_id: string
           p_recall_date_override?: string
+          p_teeth?: number[]
           p_tooth_numbers: string
           p_treatment_type_id: string
           p_visit_date: string
@@ -913,6 +1244,12 @@ export type Database = {
         Returns: undefined
       }
       is_super_admin: { Args: never; Returns: boolean }
+      prune_activity_log: { Args: never; Returns: undefined }
+      prune_message_log: { Args: never; Returns: undefined }
+      seed_default_medicines: {
+        Args: { p_clinic_id: string }
+        Returns: undefined
+      }
       seed_default_treatment_types: {
         Args: { p_clinic_id: string }
         Returns: undefined

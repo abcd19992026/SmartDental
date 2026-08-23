@@ -204,12 +204,18 @@ export async function processClinic(
   //     filter, since a failed attempt leaves due_date unchanged and in the past).
   //  2. status = 'sent' and next_retry_date has arrived (the day+3 / day+10 follow-up ladder for
   //     a recall that was already messaged once but hasn't been marked contacted/booked/etc).
+  // visits!inner (not the default left-embed): a recall with a null visit_id must never be
+  // selected here at all, regardless of how it went null. Deliberately defensive -- visit
+  // deletion is the only known path today, but this holds even if a future path nulls it too.
+  // Without this, sendOneRecallMessage would send Meta a template with empty {{2}}/{{3}} (Meta
+  // rejects it with 131008), and the recall would sit retrying that same guaranteed failure for
+  // up to 3 attempts before finally landing in status='failed'.
   const { data: recalls, error: recallsError } = await serviceClient
     .from("recalls")
     .select(
       `id, patient_id, due_date, attempt_count, last_attempt_at,
        patients!inner(name, mobile, is_active, do_not_disturb),
-       visits(visit_date, treatment_types(name))`,
+       visits!inner(visit_date, treatment_types(name))`,
     )
     .eq("clinic_id", clinic.id)
     .eq("patients.is_active", true)

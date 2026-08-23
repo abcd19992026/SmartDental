@@ -1,5 +1,5 @@
 import { useNavigate, useParams, Navigate } from "react-router-dom";
-import { Building2, GitBranch, Users, Stethoscope, Shield, MessageSquare } from "lucide-react";
+import { Building2, GitBranch, Users, Stethoscope, Pill, FileText, Shield, MessageSquare } from "lucide-react";
 import { useAuth } from "@/auth/useAuth";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -7,6 +7,8 @@ import { ClinicProfileTab } from "@/features/clinic/settings/ClinicProfileTab";
 import { BranchesTab } from "@/features/clinic/settings/BranchesTab";
 import { StaffTab } from "@/features/clinic/settings/StaffTab";
 import { TreatmentTypesTab } from "@/features/clinic/settings/TreatmentTypesTab";
+import { MedicinesTab } from "@/features/clinic/settings/MedicinesTab";
+import { LetterheadTab } from "@/features/clinic/settings/LetterheadTab";
 import { SubscriptionTab } from "@/features/clinic/settings/SubscriptionTab";
 import { WhatsAppTab } from "@/features/clinic/settings/WhatsAppTab";
 
@@ -20,7 +22,10 @@ export function SettingsPage() {
     return <Navigate to="/app" replace />;
   }
 
-  const activeTab = tab && ["profile", "branches", "staff", "treatments", "subscription", "whatsapp"].includes(tab) ? tab : "profile";
+  const activeTab =
+    tab && ["profile", "branches", "staff", "treatments", "medicines", "letterhead", "subscription", "whatsapp"].includes(tab)
+      ? tab
+      : "profile";
 
   function handleTabChange(value: string) {
     navigate(`/app/settings/${value}`);
@@ -31,12 +36,12 @@ export function SettingsPage() {
       <div>
         <h1 className="text-xl font-medium text-foreground">Clinic Settings</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Manage clinic details, physical branches, staff accounts, treatment types, subscription, and WhatsApp configuration
+          Manage clinic details, physical branches, staff accounts, treatment types, medicines, letterhead branding, subscription, and WhatsApp configuration
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 max-w-4xl">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 md:grid-cols-8 max-w-5xl">
           <TabsTrigger value="profile" className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">Clinic Profile</span>
@@ -53,6 +58,14 @@ export function SettingsPage() {
             <Stethoscope className="h-4 w-4" />
             <span className="hidden sm:inline">Treatment Types</span>
           </TabsTrigger>
+          <TabsTrigger value="medicines" className="flex items-center gap-2">
+            <Pill className="h-4 w-4" />
+            <span className="hidden sm:inline">Medicines</span>
+          </TabsTrigger>
+          <TabsTrigger value="letterhead" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Letterhead</span>
+          </TabsTrigger>
           <TabsTrigger value="subscription" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
             <span className="hidden sm:inline">Subscription</span>
@@ -68,6 +81,8 @@ export function SettingsPage() {
           {activeTab === "branches" && <BranchesTab />}
           {activeTab === "staff" && <StaffTab />}
           {activeTab === "treatments" && <TreatmentTypesTab />}
+          {activeTab === "medicines" && <MedicinesTab />}
+          {activeTab === "letterhead" && <LetterheadTab />}
           {activeTab === "subscription" && <SubscriptionTab />}
           {activeTab === "whatsapp" && <WhatsAppTab />}
         </div>

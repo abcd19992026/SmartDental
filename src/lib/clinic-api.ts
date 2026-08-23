@@ -1,6 +1,7 @@
 import type { ApiResult } from "@/lib/admin-api";
 import { toFunctionError } from "@/lib/admin-api";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/types/database.types";
 
 // Clinic-side (owner/receptionist) operations, kept separate from admin-api.ts's super-admin
 // surface -- these run under the caller's own RLS-scoped session, never a service-role client.
@@ -12,6 +13,14 @@ import { supabase } from "@/lib/supabase";
 // call the same one implementation.
 export { resetUserPassword, setUserActive } from "@/lib/admin-api";
 export type { ResetPasswordOutput, SetUserActiveOutput } from "@/lib/admin-api";
+
+/** True when an ApiResult's error is the client_request_id collision message
+ * (createVisitWithRecall / insertPayment / createPrescription all produce it verbatim on a
+ * 23505 against their partial unique index). A caller hitting this on a retry should treat it as
+ * success -- the row from the first attempt already exists -- not show it as a failure. */
+export function isAlreadySavedError(error: string): boolean {
+  return error.includes("already saved");
+}
 
 // ---------------------------------------------------------------------------
 // create_visit_with_recall
@@ -25,6 +34,19 @@ export interface CreateVisitWithRecallInput {
   notes?: string | null;
   amount?: number | null;
   recall_date_override?: string | null;
+  /** 0-100. Defaults to 0 (no discount) at the database level if omitted -- visits.net_amount is
+   * a generated column derived from amount and this field, so it's always internally consistent. */
+  discount_percent?: number | null;
+  /** FDI tooth numbers (permanent 11-48, deciduous 51-85) -- validated against the full valid set
+   * by visits_teeth_valid_fdi at the database level, and sorted/deduplicated inside the RPC
+   * regardless of click order. tooth_numbers (free text) is still written alongside this during
+   * the transition; teeth is the structured column new code should read. */
+  teeth?: number[] | null;
+  /** One value per form opening, sent unchanged on every submit attempt (including retries after
+   * a slow/failed network response) -- a duplicate collides with visits' partial unique index on
+   * this column instead of creating a second visit. Omit only for callers that accept the
+   * (rare, pre-S1) risk of a double-submit duplicating a visit. */
+  client_request_id?: string | null;
 }
 
 export interface CreateVisitWithRecallOutput {
@@ -44,7 +66,13 @@ export async function createVisitWithRecall(
     p_notes: input.notes ?? null,
     p_amount: input.amount ?? null,
     p_recall_date_override: input.recall_date_override ?? null,
+    p_discount_percent: input.discount_percent ?? 0,
+    p_teeth: input.teeth ?? null,
+    p_client_request_id: input.client_request_id ?? null,
   });
+  if (error && (error as { code?: string }).code === "23505") {
+    return { ok: false, error: "This visit was already saved -- refresh to see it." };
+  }
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: data as unknown as CreateVisitWithRecallOutput };
 }
@@ -143,6 +171,392 @@ export async function sendRecallNow(recallId: string): Promise<ApiResult<SendRec
   });
   if (error) return toFunctionError(error);
   if (!data) return { ok: false, error: "Empty response from server" };
+  return { ok: true, data };
+}
+
+// ---------------------------------------------------------------------------
+// patient_payments / patient_billing_summary -- Phase 6A. Plain RLS-scoped reads/writes, no Edge
+// Function: patient_payments is append-only (no DELETE policy exists at all; UPDATE is
+// owner/super_admin-only and an allowlist trigger permits changing only voided_at/voided_by/
+// void_reason), so "editing" a payment is never a real operation -- voidPayment below is the only
+// write path once a payment exists. clinic_id/branch_id sent from here are never trusted as-is:
+// the INSERT policy's WITH CHECK independently re-validates both against current_clinic_id() /
+// current_branch_id(), so a value that doesn't match the caller's own clinic/branch is rejected by
+// the database regardless of what this function is called with.
+// ---------------------------------------------------------------------------
+
+export interface PatientBillingSummary {
+  patient_id: string;
+  clinic_id: string;
+  total_billed: number;
+  total_paid: number;
+  due: number;
+}
+
+export async function fetchBillingSummary(patientId: string): Promise<ApiResult<PatientBillingSummary>> {
+  const { data, error } = await supabase
+    .from("patient_billing_summary")
+    .select("patient_id, clinic_id, total_billed, total_paid, due")
+    .eq("patient_id", patientId)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  // Not found = either the patient doesn't exist, or RLS (via the view's security_invoker) hid
+  // it -- both cases are indistinguishable from here by design, same as any other cross-tenant
+  // lookup in this codebase.
+  if (!data) return { ok: false, error: "Patient not found or not accessible" };
+  return {
+    ok: true,
+    data: {
+      patient_id: data.patient_id as string,
+      clinic_id: data.clinic_id as string,
+      total_billed: Number(data.total_billed ?? 0),
+      total_paid: Number(data.total_paid ?? 0),
+      due: Number(data.due ?? 0),
+    },
+  };
+}
+
+export interface PatientPaymentHistoryEntry {
+  id: string;
+  amount: number;
+  mode: string;
+  paid_on: string;
+  notes: string | null;
+  created_at: string;
+  created_by: string;
+  created_by_name: string | null;
+  is_voided: boolean;
+  voided_at: string | null;
+  voided_by: string | null;
+  voided_by_name: string | null;
+  void_reason: string | null;
+}
+
+interface PatientPaymentHistoryRow {
+  id: string;
+  amount: number;
+  mode: string;
+  paid_on: string;
+  notes: string | null;
+  created_at: string;
+  created_by: string;
+  voided_at: string | null;
+  voided_by: string | null;
+  void_reason: string | null;
+  creator: { full_name: string | null } | null;
+  voider: { full_name: string | null } | null;
+}
+
+/** Newest first (paid_on, then created_at as a tiebreaker for same-day entries). Includes the
+ * name of whoever recorded and whoever voided each entry, and an explicit is_voided flag so the
+ * UI never has to infer void state from `voided_at !== null` itself. */
+export async function fetchPaymentHistory(patientId: string): Promise<ApiResult<PatientPaymentHistoryEntry[]>> {
+  const { data, error } = await supabase
+    .from("patient_payments")
+    .select(
+      `id, amount, mode, paid_on, notes, created_at, created_by, voided_at, voided_by, void_reason,
+       creator:profiles!patient_payments_created_by_fkey(full_name),
+       voider:profiles!patient_payments_voided_by_fkey(full_name)`,
+    )
+    .eq("patient_id", patientId)
+    .order("paid_on", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: error.message };
+
+  const rows = (data ?? []) as unknown as PatientPaymentHistoryRow[];
+  return {
+    ok: true,
+    data: rows.map((row) => ({
+      id: row.id,
+      amount: Number(row.amount),
+      mode: row.mode,
+      paid_on: row.paid_on,
+      notes: row.notes,
+      created_at: row.created_at,
+      created_by: row.created_by,
+      created_by_name: row.creator?.full_name ?? null,
+      is_voided: row.voided_at !== null,
+      voided_at: row.voided_at,
+      voided_by: row.voided_by,
+      voided_by_name: row.voider?.full_name ?? null,
+      void_reason: row.void_reason,
+    })),
+  };
+}
+
+export interface InsertPaymentInput {
+  patient_id: string;
+  clinic_id: string;
+  /** Which branch collected the payment -- for a receptionist this must equal their own branch
+   * (current_branch_id()), enforced by RLS; an owner may record a payment against any branch of
+   * their own clinic. */
+  branch_id: string;
+  amount: number;
+  mode: "cash" | "upi" | "card" | "bank_transfer" | "other";
+  /** Defaults to today (current_date) at the database level if omitted. */
+  paid_on?: string;
+  notes?: string | null;
+  /** One value per form opening, sent unchanged on every submit attempt -- collides with
+   * patient_payments' partial unique index on this column instead of recording the same payment
+   * twice on a slow-network double-tap. */
+  client_request_id?: string | null;
+}
+
+export interface PatientPaymentRecord {
+  id: string;
+  clinic_id: string;
+  branch_id: string;
+  patient_id: string;
+  amount: number;
+  mode: string;
+  paid_on: string;
+  notes: string | null;
+  voided_at: string | null;
+  voided_by: string | null;
+  void_reason: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+/** created_by is deliberately never sent here -- it defaults to auth.uid() at the database level
+ * (see the patient_payments migration), which is what actually keeps it un-spoofable: a value
+ * supplied in the request body would not be. */
+export async function insertPayment(input: InsertPaymentInput): Promise<ApiResult<PatientPaymentRecord>> {
+  const { data, error } = await supabase
+    .from("patient_payments")
+    .insert({
+      patient_id: input.patient_id,
+      clinic_id: input.clinic_id,
+      branch_id: input.branch_id,
+      amount: input.amount,
+      mode: input.mode,
+      paid_on: input.paid_on,
+      notes: input.notes ?? null,
+      client_request_id: input.client_request_id ?? null,
+    })
+    .select()
+    .single();
+  if (error && error.code === "23505") {
+    return { ok: false, error: "This payment was already saved -- refresh to see it." };
+  }
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data as unknown as PatientPaymentRecord };
+}
+
+/** Owner/super_admin only -- enforced by patient_payments_update's RLS policy, not by this
+ * function. A receptionist's call will fail here (RLS filters the row out of the UPDATE's USING
+ * clause, `.select().single()` then errors on the resulting empty result set rather than
+ * silently reporting success), which is what surfaces as a real `.ok === false` result rather
+ * than a false-positive "voided" toast. */
+export async function voidPayment(paymentId: string, voidReason: string): Promise<ApiResult<PatientPaymentRecord>> {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    return { ok: false, error: "Not signed in" };
+  }
+
+  const { data, error } = await supabase
+    .from("patient_payments")
+    .update({
+      voided_at: new Date().toISOString(),
+      voided_by: userData.user.id,
+      void_reason: voidReason,
+    })
+    .eq("id", paymentId)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data as unknown as PatientPaymentRecord };
+}
+
+// ---------------------------------------------------------------------------
+// medicines -- per-clinic medicines master, curated in Settings, modeled on treatment_types.
+// SELECT is any authenticated clinic member (owner or receptionist -- a receptionist may need to
+// read a prescription that references a medicine); INSERT/UPDATE/DELETE are owner/super_admin
+// only, enforced by RLS (medicines_insert/_update/_delete in the Phase 8A migrations), not by
+// this file -- a receptionist calling create/update/delete gets 0 rows back, not an error.
+//
+// fetchMedicines takes no clinic_id: RLS already scopes every row to the caller's own clinic, so
+// there's nothing for the client to filter by. No search parameter either -- a clinic has at most
+// a few dozen rows, the UI filters client-side.
+// ---------------------------------------------------------------------------
+
+export type MedicineRow = Database["public"]["Tables"]["medicines"]["Row"];
+
+export async function fetchMedicines(): Promise<ApiResult<MedicineRow[]>> {
+  const { data, error } = await supabase
+    .from("medicines")
+    .select("*")
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data ?? [] };
+}
+
+export interface CreateMedicineInput {
+  clinic_id: string;
+  name: string;
+  default_dosage?: string | null;
+  default_duration?: string | null;
+  notes?: string | null;
+}
+
+export async function createMedicine(input: CreateMedicineInput): Promise<ApiResult<MedicineRow>> {
+  const { data, error } = await supabase
+    .from("medicines")
+    .insert({
+      clinic_id: input.clinic_id,
+      name: input.name,
+      default_dosage: input.default_dosage ?? null,
+      default_duration: input.default_duration ?? null,
+      notes: input.notes ?? null,
+    })
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data };
+}
+
+export interface UpdateMedicineInput {
+  name?: string;
+  default_dosage?: string | null;
+  default_duration?: string | null;
+  notes?: string | null;
+  is_active?: boolean;
+}
+
+export async function updateMedicine(
+  medicineId: string,
+  input: UpdateMedicineInput,
+): Promise<ApiResult<MedicineRow>> {
+  const { data, error } = await supabase
+    .from("medicines")
+    .update(input)
+    .eq("id", medicineId)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data };
+}
+
+export async function deleteMedicine(medicineId: string): Promise<ApiResult<{ id: string }>> {
+  const { data, error } = await supabase
+    .from("medicines")
+    .delete()
+    .eq("id", medicineId)
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data };
+}
+
+// ---------------------------------------------------------------------------
+// prescriptions -- digitises the clinic's paper prescription slip. SELECT is any clinic member,
+// branch-scoped for a receptionist (they may need to reprint a slip); INSERT/UPDATE/DELETE are
+// owner/super_admin only, enforced by RLS (prescriptions_insert/_update/_delete), not by this
+// file -- a receptionist calling create/update/delete gets 0 rows back, not an error.
+//
+// medications/medical_history/investigation are jsonb and deliberately typed loosely here
+// (Record<string, unknown> / unknown[]) rather than re-declaring their exact shape -- the
+// authoritative shape documentation lives on the columns themselves (see the Phase 9A migration),
+// and duplicating it here as a TS type would just be a second place for it to drift out of sync.
+// ---------------------------------------------------------------------------
+
+export type PrescriptionRow = Database["public"]["Tables"]["prescriptions"]["Row"];
+
+export interface PrescriptionMedication {
+  name: string;
+  dosage: string | null;
+  duration: string | null;
+  notes: string | null;
+}
+
+export async function fetchPrescriptionsForPatient(patientId: string): Promise<ApiResult<PrescriptionRow[]>> {
+  const { data, error } = await supabase
+    .from("prescriptions")
+    .select("*")
+    .eq("patient_id", patientId)
+    .order("prescribed_on", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data ?? [] };
+}
+
+export async function fetchPrescriptionById(prescriptionId: string): Promise<ApiResult<PrescriptionRow>> {
+  const { data, error } = await supabase
+    .from("prescriptions")
+    .select("*")
+    .eq("id", prescriptionId)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Prescription not found or not accessible" };
+  return { ok: true, data };
+}
+
+export interface CreatePrescriptionInput {
+  clinic_id: string;
+  branch_id: string;
+  patient_id: string;
+  visit_id?: string | null;
+  doctor_name: string;
+  prescribed_on?: string;
+  occupation?: string | null;
+  height?: string | null;
+  weight?: string | null;
+  blood_pressure?: string | null;
+  spo2?: string | null;
+  chief_complaint?: string | null;
+  medical_history?: Record<string, unknown> | null;
+  past_dental_history?: string | null;
+  oral_examination?: string | null;
+  investigation?: Record<string, unknown> | null;
+  provisional_diagnosis?: string | null;
+  treatment_plan?: string | null;
+  teeth?: number[] | null;
+  medications?: PrescriptionMedication[] | null;
+  notes?: string | null;
+  /** One value per form opening, sent unchanged on every submit attempt -- collides with
+   * prescriptions' partial unique index on this column instead of recording the same
+   * prescription twice on a slow-network double-tap. */
+  client_request_id?: string | null;
+}
+
+export async function createPrescription(input: CreatePrescriptionInput): Promise<ApiResult<PrescriptionRow>> {
+  const { data, error } = await supabase
+    .from("prescriptions")
+    .insert(input as unknown as Database["public"]["Tables"]["prescriptions"]["Insert"])
+    .select()
+    .single();
+  if (error && error.code === "23505") {
+    return { ok: false, error: "This prescription was already saved -- refresh to see it." };
+  }
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data };
+}
+
+export type UpdatePrescriptionInput = Partial<Omit<CreatePrescriptionInput, "clinic_id" | "patient_id">>;
+
+export async function updatePrescription(
+  prescriptionId: string,
+  input: UpdatePrescriptionInput,
+): Promise<ApiResult<PrescriptionRow>> {
+  const { data, error } = await supabase
+    .from("prescriptions")
+    .update(input as unknown as Database["public"]["Tables"]["prescriptions"]["Update"])
+    .eq("id", prescriptionId)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data };
+}
+
+export async function deletePrescription(prescriptionId: string): Promise<ApiResult<{ id: string }>> {
+  const { data, error } = await supabase
+    .from("prescriptions")
+    .delete()
+    .eq("id", prescriptionId)
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
   return { ok: true, data };
 }
 
@@ -325,4 +739,70 @@ export async function removeClinicLogo(clinicId: string): Promise<ApiResult<{ lo
   const { error: updateError } = await supabase.from("clinics").update({ logo_url: null }).eq("id", clinicId);
   if (updateError) return { ok: false, error: updateError.message };
   return { ok: true, data: { logo_url: null } };
+}
+
+// ---------------------------------------------------------------------------
+// letterhead -- branding data around a printed prescription (Phase 10A). The layout itself is
+// fixed and owned by us; this is data only, never markup. logo_both_sides is a display flag over
+// the existing clinics.logo_url (same clinic-logos upload flow above) -- not a second logo.
+//
+// RLS: clinics_select (any clinic member, own clinic only) / clinics_owner_write (owner only) --
+// enforced by RLS, not by this file. protect_clinic_billing_fields is a blocklist of named
+// subscription fields (confirmed from source in Step 0), so letterhead is unprotected/editable
+// by an owner by default; a receptionist's update call gets 0 rows back, not an error.
+// ---------------------------------------------------------------------------
+
+export interface ClinicLetterheadDoctor {
+  name: string;
+  qualification: string | null;
+}
+
+export interface ClinicLetterhead {
+  regd_no?: string | null;
+  tagline?: string | null;
+  doctors?: ClinicLetterheadDoctor[];
+  timings?: string | null;
+  sunday_timings?: string | null;
+  footer_note?: string | null;
+  logo_both_sides?: boolean;
+}
+
+/** Everything the print page's header/footer needs, in one call -- a half-loaded print header is
+ * worse than a slow one, so this deliberately isn't split across several fetches. */
+export interface ClinicLetterheadData {
+  id: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  email: string | null;
+  logo_url: string | null;
+  letterhead: ClinicLetterhead;
+}
+
+export async function fetchClinicLetterheadData(clinicId: string): Promise<ApiResult<ClinicLetterheadData>> {
+  const { data, error } = await supabase
+    .from("clinics")
+    .select("id, name, phone, address, email, logo_url, letterhead")
+    .eq("id", clinicId)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Clinic not found or not accessible" };
+  return {
+    ok: true,
+    data: { ...data, letterhead: (data.letterhead ?? {}) as ClinicLetterhead } as ClinicLetterheadData,
+  };
+}
+
+export async function updateClinicLetterhead(
+  clinicId: string,
+  letterhead: ClinicLetterhead,
+): Promise<ApiResult<{ letterhead: ClinicLetterhead }>> {
+  const { data, error } = await supabase
+    .from("clinics")
+    .update({ letterhead: letterhead as unknown as Database["public"]["Tables"]["clinics"]["Update"]["letterhead"] })
+    .eq("id", clinicId)
+    .select("letterhead")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: { letterhead: (data.letterhead ?? {}) as ClinicLetterhead } };
 }

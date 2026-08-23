@@ -1,0 +1,13 @@
+-- Found live while verifying Step 5's grant check, not assumed: seed_default_medicines came out
+-- of the previous migration with EXECUTE granted to PUBLIC (confirmed via pg_proc.proacl:
+-- '{=X/postgres,postgres=X/postgres,service_role=X/postgres}' -- the leading bare "=" entry is
+-- PUBLIC), unlike seed_default_treatment_types's ACL ('{postgres=X/postgres,service_role=X/
+-- postgres}'), which has no PUBLIC entry. Postgres auto-grants EXECUTE to PUBLIC on function
+-- creation unless explicitly revoked; seed_default_treatment_types apparently had this revoked at
+-- some point, this one didn't. Since anon and authenticated both inherit from PUBLIC, this meant
+-- ANY caller -- unauthenticated included -- could invoke this SECURITY DEFINER function directly
+-- with an arbitrary p_clinic_id and seed medicines into any clinic, entirely bypassing RLS (the
+-- function has no internal authorization check of its own; SECURITY DEFINER is what makes that
+-- omission dangerous). This makes it explicitly service-role-only, matching the spec and matching
+-- seed_default_treatment_types's actual (if implicit) effective state.
+revoke execute on function public.seed_default_medicines(uuid) from public;

@@ -116,6 +116,11 @@ Deno.serve(async (req) => {
     });
     if (seedError) throw new Error(seedError.message);
 
+    const { error: seedMedicinesError } = await serviceClient.rpc("seed_default_medicines", {
+      p_clinic_id: clinicId,
+    });
+    if (seedMedicinesError) throw new Error(seedMedicinesError.message);
+
     const { error: completeError } = await serviceClient
       .from("clinics")
       .update({ onboarding_completed: true })

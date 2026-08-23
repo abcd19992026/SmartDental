@@ -18,6 +18,7 @@ import { TodayPage } from "@/features/clinic/TodayPage";
 import { PatientsPage } from "@/features/clinic/PatientsPage";
 import { ClinicMessagesPage } from "@/features/clinic/ClinicMessagesPage";
 import { SettingsPage } from "@/features/clinic/settings/SettingsPage";
+import { PrescriptionPrintPage } from "@/features/clinic/prescriptions/PrescriptionPrintPage";
 
 export function AppRoutes() {
   return (
@@ -42,6 +43,18 @@ export function AppRoutes() {
               <Route path="settings" element={<SettingsPage />} />
               <Route path="settings/:tab" element={<SettingsPage />} />
             </Route>
+
+            {/* Standalone print route -- deliberately outside ClinicShell so it renders with no
+               sidebar/topbar chrome. Still behind its own ProtectedRoute, so RLS applies via the
+               normal authenticated session; a receptionist may open it to reprint a slip. */}
+            <Route
+              path="/app/prescriptions/:id/print"
+              element={
+                <ProtectedRoute allowedRoles={["owner", "receptionist"]}>
+                  <PrescriptionPrintPage />
+                </ProtectedRoute>
+              }
+            />
 
             <Route
               path="/admin"

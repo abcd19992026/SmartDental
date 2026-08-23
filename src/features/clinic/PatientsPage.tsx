@@ -17,6 +17,12 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
 import { formatDateIST } from "@/lib/dates";
+import {
+  fetchBillingSummary,
+  fetchPaymentHistory,
+  type PatientBillingSummary,
+  type PatientPaymentHistoryEntry,
+} from "@/lib/clinic-api";
 import type { Database } from "@/types/database.types";
 import { useToast } from "@/components/ui/toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +33,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AddVisitModal } from "@/features/clinic/AddVisitModal";
-import { cn } from "@/lib/utils";
+import { BillingBanner } from "@/features/clinic/billing/BillingBanner";
+import { PaymentHistoryCard } from "@/features/clinic/billing/PaymentHistoryCard";
+import { AddPaymentModal } from "@/features/clinic/billing/AddPaymentModal";
+import { PrescriptionsCard } from "@/features/clinic/prescriptions/PrescriptionsCard";
+import { cn, formatINR } from "@/lib/utils";
 
 type PatientRow = Database["public"]["Tables"]["patients"]["Row"];
 type BranchRow = Database["public"]["Tables"]["branches"]["Row"];
@@ -80,9 +90,46 @@ export function PatientsPage() {
   // Add Visit Modal State
   const [addVisitOpen, setAddVisitOpen] = useState(false);
 
+  // Billing & Payment States
+  const [billingSummary, setBillingSummary] = useState<PatientBillingSummary | null>(null);
+  const [paymentHistory, setPaymentHistory] = useState<PatientPaymentHistoryEntry[]>([]);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [addPaymentOpen, setAddPaymentOpen] = useState(false);
+
+  // Bumped whenever a visit save might have created a prescription, so PrescriptionsCard reloads.
+  const [prescriptionsRefreshKey, setPrescriptionsRefreshKey] = useState(0);
+
   useEffect(() => {
     loadPatientsData();
   }, []);
+
+  async function loadBillingData(patientId: string) {
+    setBillingLoading(true);
+    const [sRes, pRes] = await Promise.all([
+      fetchBillingSummary(patientId),
+      fetchPaymentHistory(patientId),
+    ]);
+    if (sRes.ok) {
+      setBillingSummary(sRes.data);
+    } else {
+      setBillingSummary(null);
+    }
+    if (pRes.ok) {
+      setPaymentHistory(pRes.data);
+    } else {
+      setPaymentHistory([]);
+    }
+    setBillingLoading(false);
+  }
+
+  useEffect(() => {
+    if (activePatientId) {
+      loadBillingData(activePatientId);
+    } else {
+      setBillingSummary(null);
+      setPaymentHistory([]);
+    }
+  }, [activePatientId]);
 
   async function loadPatientsData() {
     setLoading(true);
@@ -312,7 +359,8 @@ export function PatientsPage() {
       {/* VIEW A: Patient Detail View */}
       {selectedPatient ? (
         <div className="flex flex-col gap-6">
-          <div className="flex items-center justify-between border-b border-border pb-4">
+          {/* Header Row: Left = Name + Mobile + Branch; Right = Billing Figures */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
@@ -337,16 +385,20 @@ export function PatientsPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => openEditPatient(selectedPatient)}>
-                <Edit2 className="h-3.5 w-3.5 mr-1.5" />
-                Edit Profile
-              </Button>
-              <Button size="sm" onClick={() => setAddVisitOpen(true)}>
-                <Plus className="h-4 w-4 mr-1.5" />
-                Record Visit
-              </Button>
-            </div>
+            {/* Billing Figures on the right */}
+            <BillingBanner summary={billingSummary} loading={billingLoading} />
+          </div>
+
+          {/* Action button row: Edit Profile / Record Visit */}
+          <div className="flex items-center justify-end gap-2 border-b border-border pb-4">
+            <Button variant="outline" size="sm" onClick={() => openEditPatient(selectedPatient)}>
+              <Edit2 className="h-3.5 w-3.5 mr-1.5" />
+              Edit Profile
+            </Button>
+            <Button size="sm" onClick={() => setAddVisitOpen(true)}>
+              <Plus className="h-4 w-4 mr-1.5" />
+              Record Visit
+            </Button>
           </div>
 
           <div className="grid gap-6 md:grid-cols-3">
@@ -398,8 +450,19 @@ export function PatientsPage() {
               </CardContent>
             </Card>
 
-            {/* Visit & Recall Timelines */}
+            {/* Visit, Payment & Recall Timelines */}
             <div className="md:col-span-2 flex flex-col gap-6">
+              {/* Payment History Card */}
+              <PaymentHistoryCard
+                payments={paymentHistory}
+                loading={billingLoading}
+                onAddPayment={() => setAddPaymentOpen(true)}
+                onRefresh={() => {
+                  loadBillingData(selectedPatient.id);
+                  loadPatientsData();
+                }}
+              />
+
               {/* Visit History Timeline */}
               <Card>
                 <CardHeader>
@@ -428,16 +491,49 @@ export function PatientsPage() {
                                 {formatDateIST(v.visit_date)}
                               </span>
                             </div>
-                            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                              {v.tooth_numbers && (
-                                <p>
-                                  <strong>Teeth:</strong> {v.tooth_numbers}
-                                </p>
+                            <div className="text-xs text-muted-foreground mt-1 space-y-1">
+                              {/* Teeth chips (renders pills if present, nothing if empty) */}
+                              {((v.teeth && v.teeth.length > 0) || (v.tooth_numbers && v.tooth_numbers.trim())) && (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <strong className="text-foreground">Teeth:</strong>
+                                  {(v.teeth && v.teeth.length > 0
+                                    ? [...v.teeth].sort((a, b) => a - b)
+                                    : v.tooth_numbers!.split(",").map((s) => s.trim()).filter(Boolean)
+                                  ).map((t) => (
+                                    <Badge
+                                      key={String(t)}
+                                      variant="outline"
+                                      className="h-5 px-1.5 py-0 border-teal-500/30 text-teal-400 bg-teal-500/10 font-mono text-[11px] font-medium"
+                                    >
+                                      {t}
+                                    </Badge>
+                                  ))}
+                                </div>
                               )}
-                              {v.amount && (
-                                <p>
-                                  <strong>Amount:</strong> ₹{v.amount}
-                                </p>
+                              {v.amount !== null && v.amount !== undefined && (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <strong>Amount:</strong>
+                                  {v.discount_percent && v.discount_percent > 0 ? (
+                                    <>
+                                      <span className="line-through text-muted-foreground">
+                                        {formatINR(v.amount)}
+                                      </span>
+                                      <Badge
+                                        variant="outline"
+                                        className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-[10px] py-0 px-1.5 font-normal"
+                                      >
+                                        {v.discount_percent}% off
+                                      </Badge>
+                                      <span className="font-semibold text-foreground">
+                                        {formatINR(v.net_amount ?? Math.round(v.amount * (1 - v.discount_percent / 100)))}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="font-medium text-foreground">
+                                      {formatINR(v.net_amount ?? v.amount)}
+                                    </span>
+                                  )}
+                                </div>
                               )}
                               {v.notes && <p><strong>Notes:</strong> {v.notes}</p>}
                             </div>
@@ -447,6 +543,9 @@ export function PatientsPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Prescriptions */}
+              <PrescriptionsCard patientId={selectedPatient.id} refreshKey={prescriptionsRefreshKey} />
 
               {/* Recalls History */}
               <Card>
@@ -853,7 +952,27 @@ export function PatientsPage() {
           open={addVisitOpen}
           onOpenChange={setAddVisitOpen}
           initialPatientId={selectedPatient.id}
-          onSuccess={loadPatientsData}
+          onSuccess={() => {
+            loadPatientsData();
+            loadBillingData(selectedPatient.id);
+            setPrescriptionsRefreshKey((k) => k + 1);
+          }}
+        />
+      )}
+
+      {/* Add Payment Modal for Selected Patient */}
+      {selectedPatient && (
+        <AddPaymentModal
+          open={addPaymentOpen}
+          onOpenChange={setAddPaymentOpen}
+          patientId={selectedPatient.id}
+          patientName={selectedPatient.name}
+          clinicId={selectedPatient.clinic_id}
+          branchId={selectedPatient.branch_id}
+          onSuccess={() => {
+            loadBillingData(selectedPatient.id);
+            loadPatientsData();
+          }}
         />
       )}
     </div>
