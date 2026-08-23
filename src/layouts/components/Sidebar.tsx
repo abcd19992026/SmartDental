@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { InstallPwaBanner } from "@/components/InstallPwaBanner";
 
 export interface NavItem {
   to: string;
@@ -55,6 +56,7 @@ export function Sidebar({ panelLabel, navItems, mobileOpen, onMobileOpenChange }
           </span>
         </div>
         {navContent}
+        <InstallPwaBanner />
       </aside>
 
       {/* Mobile Nav Drawer */}
@@ -85,6 +87,7 @@ export function Sidebar({ panelLabel, navItems, mobileOpen, onMobileOpenChange }
               </button>
             </div>
             {navContent}
+            <InstallPwaBanner />
           </div>
         </div>
       )}
