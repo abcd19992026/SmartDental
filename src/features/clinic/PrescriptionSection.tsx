@@ -187,22 +187,104 @@ function TogglePill({ active, label, onClick }: { active: boolean; label: string
 }
 
 interface MedicationRowEditorProps {
+  index: number;
   row: MedicationRowState;
+  allMedications: MedicationRowState[];
   medicines: MedicineRow[];
   onChange: (partial: Partial<MedicationRowState>) => void;
   onSelectMedicine: (medicine: MedicineRow) => void;
   onRemove: () => void;
 }
 
-function MedicationRowEditor({ row, medicines, onChange, onSelectMedicine, onRemove }: MedicationRowEditorProps) {
+function MedicationRowEditor({
+  index,
+  row,
+  allMedications,
+  medicines,
+  onChange,
+  onSelectMedicine,
+  onRemove,
+}: MedicationRowEditorProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const suggestions = useMemo(() => {
     const q = row.name.trim().toLowerCase();
-    if (!q) return medicines.slice(0, 8);
-    return medicines.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 8);
+    if (!q) return medicines;
+    return medicines.filter((m) => m.name.toLowerCase().includes(q));
   }, [medicines, row.name]);
+
+  // Check if current row's name matches another row (case-insensitive & trimmed)
+  const isDuplicate = useMemo(() => {
+    const trimmed = row.name.trim().toLowerCase();
+    if (!trimmed) return false;
+    return allMedications.some((m, idx) => idx !== index && m.name.trim().toLowerCase() === trimmed);
+  }, [row.name, allMedications, index]);
+
+  // Clear duplicate warning when row name is edited to non-duplicate
+  useEffect(() => {
+    if (!isDuplicate) {
+      setDuplicateWarning(null);
+    }
+  }, [isDuplicate]);
+
+  // Auto-scroll highlighted item into view
+  useEffect(() => {
+    if (highlightedIndex >= 0 && listRef.current) {
+      const items = listRef.current.querySelectorAll("[data-medicine-item]");
+      const target = items[highlightedIndex] as HTMLElement | undefined;
+      if (target) {
+        target.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }, [highlightedIndex]);
+
+  function handleSelectMedicine(m: MedicineRow) {
+    const targetName = m.name.trim().toLowerCase();
+    const alreadyExists = allMedications.some(
+      (other, idx) => idx !== index && other.name.trim().toLowerCase() === targetName,
+    );
+    if (alreadyExists) {
+      setDuplicateWarning("This medicine is already added");
+      setPickerOpen(false);
+      return;
+    }
+    setDuplicateWarning(null);
+    onSelectMedicine(m);
+    setPickerOpen(false);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!pickerOpen) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setPickerOpen(true);
+        setHighlightedIndex(0);
+      }
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+    } else if (e.key === "Enter") {
+      if (highlightedIndex >= 0 && highlightedIndex < suggestions.length) {
+        e.preventDefault();
+        handleSelectMedicine(suggestions[highlightedIndex]);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setPickerOpen(false);
+    }
+  }
+
+  const showWarning = isDuplicate || Boolean(duplicateWarning);
 
   return (
     <div className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] items-start rounded-lg border border-border bg-muted/20 p-2.5">
@@ -210,25 +292,46 @@ function MedicationRowEditor({ row, medicines, onChange, onSelectMedicine, onRem
         <Input
           placeholder="Medicine name"
           value={row.name}
-          onChange={(e) => onChange({ name: e.target.value })}
-          onFocus={() => setPickerOpen(true)}
-          onBlur={() => setTimeout(() => setPickerOpen(false), 100)}
+          onChange={(e) => {
+            setDuplicateWarning(null);
+            onChange({ name: e.target.value });
+          }}
+          onFocus={() => {
+            setPickerOpen(true);
+            setHighlightedIndex(-1);
+          }}
+          onBlur={() => setTimeout(() => setPickerOpen(false), 150)}
+          onKeyDown={handleKeyDown}
+          className={cn(showWarning && "border-amber-500/70 focus-visible:ring-amber-500/30")}
         />
+        {showWarning && (
+          <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-1 pl-0.5">
+            This medicine is already added
+          </p>
+        )}
         {pickerOpen && suggestions.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-border bg-popover shadow-md">
-            {suggestions.map((m) => (
+          <div
+            ref={listRef}
+            className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto rounded-md border border-border bg-popover shadow-md"
+          >
+            {suggestions.map((m, idx) => (
               <button
                 key={m.id}
                 type="button"
-                onMouseDown={() => {
-                  onSelectMedicine(m);
-                  setPickerOpen(false);
+                data-medicine-item
+                onMouseEnter={() => setHighlightedIndex(idx)}
+                onMouseDown={(e) => {
+                  e.preventDefault(); // Prevent input blur before click handler
+                  handleSelectMedicine(m);
                 }}
-                className="flex w-full flex-col items-start px-2.5 py-1.5 text-left text-xs hover:bg-muted"
+                className={cn(
+                  "flex w-full flex-col items-start px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer",
+                  idx === highlightedIndex ? "bg-accent text-accent-foreground" : "hover:bg-muted text-foreground",
+                )}
               >
-                <span className="font-medium text-foreground">{m.name}</span>
+                <span className="font-medium">{m.name}</span>
                 {(m.default_dosage || m.default_duration || m.notes) && (
-                  <span className="text-muted-foreground">
+                  <span className="text-muted-foreground text-[11px]">
                     {[m.default_dosage, m.default_duration, m.notes].filter(Boolean).join(" · ")}
                   </span>
                 )}
@@ -451,7 +554,9 @@ export function PrescriptionSection({ value, onChange }: PrescriptionSectionProp
           {value.medications.map((m, i) => (
             <MedicationRowEditor
               key={i}
+              index={i}
               row={m}
+              allMedications={value.medications}
               medicines={medicines}
               onChange={(partial) => updateMedicationRow(i, partial)}
               onSelectMedicine={(medicine) => selectMedicineForRow(i, medicine)}

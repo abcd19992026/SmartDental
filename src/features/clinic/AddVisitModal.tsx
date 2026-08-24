@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Search, Stethoscope, AlertCircle, Loader2, ChevronDown, ChevronUp, ClipboardPlus } from "lucide-react";
+import { Search, Stethoscope, AlertCircle, Loader2, ChevronDown, ChevronUp, ClipboardPlus, Printer } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
 import { createVisitWithRecall, createPrescription, isAlreadySavedError } from "@/lib/clinic-api";
@@ -157,8 +157,15 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
 
   /** Attempts the prescription write for an already-saved visit. Shared by the main submit path
    * (visit just created) and the "retry just the prescription" path (savedVisitId already set
-   * from a previous failed attempt). Never touches the visit -- it already exists. */
-  async function attemptPrescriptionSave(visitId: string, forPatientId: string, forBranchId: string) {
+   * from a previous failed attempt). Never touches the visit -- it already exists. Returns the
+   * saved/reused prescription's id so Save & Print can navigate the pre-opened tab to it --
+   * createPrescription() (clinic-api.ts) already resolves a client_request_id collision to the
+   * original row's id rather than swallowing it, so this never has to re-fetch it itself. */
+  async function attemptPrescriptionSave(
+    visitId: string,
+    forPatientId: string,
+    forBranchId: string,
+  ): Promise<{ ok: boolean; prescriptionId: string | null }> {
     const rxRes = await createPrescription({
       clinic_id: profile!.clinic_id!,
       branch_id: forBranchId,
@@ -178,14 +185,18 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
       investigation: draftToInvestigationJson(rxDraft.investigation),
       provisional_diagnosis: rxDraft.provisional_diagnosis.trim() || null,
       treatment_plan: rxDraft.treatment_plan.trim() || null,
+      teeth: selectedTeeth.length > 0 ? selectedTeeth : null,
       medications: draftToMedications(rxDraft.medications),
       notes: rxDraft.notes.trim() || null,
       client_request_id: rxClientRequestId,
     });
 
-    if (rxRes.ok === false && !isAlreadySavedError(rxRes.error)) {
+    if (rxRes.ok === false) {
       // The visit is already saved and billing is correct -- never rolled back. Tell the dentist
       // plainly that the prescription did not save, and leave the form in retry mode.
+      // (createPrescription() already resolves a client_request_id collision to a success with
+      // the original row, so reaching here means a genuine, non-idempotent failure -- the old
+      // isAlreadySavedError escape hatch is no longer reachable and has been dropped.)
       setSavedVisitId(visitId);
       setSavedPatientId(forPatientId);
       setSavedBranchId(forBranchId);
@@ -193,24 +204,28 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
         `The visit was saved, but the prescription could not be saved: ${rxRes.error}. Nothing else was changed -- resubmit to retry just the prescription.`,
       );
       setSubmitting(false);
-      return;
+      return { ok: false, prescriptionId: null };
     }
 
     toastSuccess("Visit and prescription recorded successfully.");
     setSubmitting(false);
     onOpenChange(false);
     if (onSuccess) onSuccess();
+    return { ok: true, prescriptionId: rxRes.data.id };
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  /** The full save flow (patient/visit/prescription), shared by the plain Save button and Save &
+   * Print -- the only difference between the two is what happens with the returned
+   * prescriptionId after this resolves (nothing, vs. navigating a pre-opened tab to its print
+   * page). Every UI side effect that already happens on success today (toast, closing the
+   * dialog, onSuccess) stays exactly as before; this just also hands the caller the id. */
+  async function performSave(): Promise<{ ok: boolean; prescriptionId: string | null }> {
     setErrorMsg(null);
     setSubmitting(true);
 
     // Retry-prescription-only path: the visit from an earlier attempt already exists.
     if (savedVisitId && savedPatientId && savedBranchId) {
-      await attemptPrescriptionSave(savedVisitId, savedPatientId, savedBranchId);
-      return;
+      return attemptPrescriptionSave(savedVisitId, savedPatientId, savedBranchId);
     }
 
     let activePatientId = patientId;
@@ -221,18 +236,18 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
       if (!inlineName.trim()) {
         setErrorMsg("Please enter patient name.");
         setSubmitting(false);
-        return;
+        return { ok: false, prescriptionId: null };
       }
       if (!/^\d{10}$/.test(inlineMobile.trim())) {
         setErrorMsg("Mobile number must be exactly 10 digits.");
         setSubmitting(false);
-        return;
+        return { ok: false, prescriptionId: null };
       }
       const targetBranchId = profile?.role === "receptionist" ? profile.branch_id : inlineBranchId;
       if (!targetBranchId) {
         setErrorMsg("Please select a branch for the new patient.");
         setSubmitting(false);
-        return;
+        return { ok: false, prescriptionId: null };
       }
 
       const { data: newP, error: pErr } = await supabase
@@ -254,7 +269,7 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
           setErrorMsg(pErr.message);
         }
         setSubmitting(false);
-        return;
+        return { ok: false, prescriptionId: null };
       }
       activePatientId = newP.id;
       activeBranchId = targetBranchId;
@@ -265,27 +280,27 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
     if (!activePatientId) {
       setErrorMsg("Please select or create a patient.");
       setSubmitting(false);
-      return;
+      return { ok: false, prescriptionId: null };
     }
 
     if (!treatmentTypeId) {
       setErrorMsg("Please select a treatment type.");
       setSubmitting(false);
-      return;
+      return { ok: false, prescriptionId: null };
     }
 
     // Amount validation: required (accepts 0, rejects empty or negative)
     if (!amount.trim()) {
       setErrorMsg("Enter an amount. Use 0 if this visit is free.");
       setSubmitting(false);
-      return;
+      return { ok: false, prescriptionId: null };
     }
 
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount < 0) {
       setErrorMsg("Amount cannot be negative.");
       setSubmitting(false);
-      return;
+      return { ok: false, prescriptionId: null };
     }
 
     // Discount validation
@@ -295,7 +310,7 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
       if (isNaN(parsedDiscount) || parsedDiscount < 0 || parsedDiscount > 100) {
         setErrorMsg("Discount % must be between 0 and 100.");
         setSubmitting(false);
-        return;
+        return { ok: false, prescriptionId: null };
       }
     }
 
@@ -304,12 +319,12 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
     if (hasRxContent && !rxDraft.doctor_name.trim()) {
       setErrorMsg("Enter the doctor's name for the prescription.");
       setSubmitting(false);
-      return;
+      return { ok: false, prescriptionId: null };
     }
     if (hasRxContent && !activeBranchId) {
       setErrorMsg("Could not determine the branch for this prescription.");
       setSubmitting(false);
-      return;
+      return { ok: false, prescriptionId: null };
     }
 
     // 2. Create the visit first. If this fails outright, nothing else happens -- unchanged from
@@ -339,17 +354,17 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
             "The visit was already saved, but the prescription could not be linked automatically. Please refresh and re-enter it.",
           );
           setSubmitting(false);
-          return;
+          return { ok: false, prescriptionId: null };
         }
         toastSuccess("Visit and recall recorded successfully.");
         setSubmitting(false);
         onOpenChange(false);
         if (onSuccess) onSuccess();
-        return;
+        return { ok: true, prescriptionId: null };
       }
       setErrorMsg(visitRes.error);
       setSubmitting(false);
-      return;
+      return { ok: false, prescriptionId: null };
     }
 
     const newVisitId = visitRes.data.visit_id;
@@ -359,11 +374,33 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
       setSubmitting(false);
       onOpenChange(false);
       if (onSuccess) onSuccess();
-      return;
+      return { ok: true, prescriptionId: null };
     }
 
     // 3. Create the prescription, linked to the visit that now definitely exists.
-    await attemptPrescriptionSave(newVisitId, activePatientId, activeBranchId!);
+    return attemptPrescriptionSave(newVisitId, activePatientId, activeBranchId!);
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    await performSave();
+  }
+
+  /** Opens a blank tab SYNCHRONOUSLY, before any await, so the browser still attributes it to
+   * this click and the popup blocker lets it through -- an open() called after an await is no
+   * longer inside the user-gesture window and gets silently blocked in most browsers. Only ever
+   * navigated to the print page on a save that both succeeded AND produced a prescription id;
+   * any other outcome closes it again rather than leaving a blank tab behind. */
+  async function handleSaveAndPrint() {
+    const win = window.open("", "_blank");
+    const result = await performSave();
+    if (!result.ok || !result.prescriptionId) {
+      win?.close();
+      return;
+    }
+    if (win) {
+      win.location.href = `/app/prescriptions/${result.prescriptionId}/print?print=1`;
+    }
   }
 
   // Live calculation for amount & discount
@@ -645,6 +682,14 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancel
           </Button>
+          {/* Doctor-only, same gate as the prescription section itself -- printing a prescription
+             only makes sense for the person who can write one. */}
+          {canPrescribe && (
+            <Button type="button" variant="outline" onClick={handleSaveAndPrint} disabled={submitting}>
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Printer className="h-4 w-4 mr-2" />}
+              Save & Print
+            </Button>
+          )}
           <Button type="submit" disabled={submitting}>
             {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             {retryingRxOnly ? "Retry Prescription" : "Record Visit & Recall"}

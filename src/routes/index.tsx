@@ -19,6 +19,7 @@ import { PatientsPage } from "@/features/clinic/PatientsPage";
 import { ClinicMessagesPage } from "@/features/clinic/ClinicMessagesPage";
 import { SettingsPage } from "@/features/clinic/settings/SettingsPage";
 import { PrescriptionPrintPage } from "@/features/clinic/prescriptions/PrescriptionPrintPage";
+import { ConsultationPage } from "@/features/clinic/ConsultationPage";
 
 export function AppRoutes() {
   return (
@@ -39,6 +40,9 @@ export function AppRoutes() {
             >
               <Route index element={<TodayPage />} />
               <Route path="patients" element={<PatientsPage />} />
+              {/* ?visitId=<id> puts the page in "+ Prescription on an existing visit" mode
+                 (Phase 13A) -- inside ClinicShell (sidebar/topbar), unlike the print route. */}
+              <Route path="patients/:patientId/consultation" element={<ConsultationPage />} />
               <Route path="messages" element={<ClinicMessagesPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="settings/:tab" element={<SettingsPage />} />

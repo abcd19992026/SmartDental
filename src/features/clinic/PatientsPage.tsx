@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Plus,
   Search,
@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   User,
   Pause,
   Play,
@@ -18,6 +19,10 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
 import { formatDateIST } from "@/lib/dates";
 import {
+  createPatient,
+  updatePatientClinicalProfile,
+  DEFAULT_MEDICAL_HISTORY,
+  type MedicalHistory,
   fetchBillingSummary,
   fetchPaymentHistory,
   type PatientBillingSummary,
@@ -32,7 +37,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { AddVisitModal } from "@/features/clinic/AddVisitModal";
 import { BillingBanner } from "@/features/clinic/billing/BillingBanner";
 import { PaymentHistoryCard } from "@/features/clinic/billing/PaymentHistoryCard";
 import { AddPaymentModal } from "@/features/clinic/billing/AddPaymentModal";
@@ -49,9 +53,28 @@ interface JoinedPatient extends PatientRow {
   branch?: BranchRow | null;
   visits?: (VisitRow & { treatment_type?: TreatmentTypeRow | null })[];
   recalls?: RecallRow[];
+  /** id + visit_id only -- just enough to tell which visits already have a prescription, for the
+   * "+ Prescription" link on visits that don't (Phase 13A, Task 4). */
+  prescriptions?: { id: string; visit_id: string | null }[];
 }
 
+const MEDICAL_HISTORY_TOGGLES: Array<{
+  key: keyof Omit<MedicalHistory, "allergies_detail" | "other_text">;
+  label: string;
+}> = [
+  { key: "diabetes", label: "Diabetes" },
+  { key: "hypertension", label: "Hypertension" },
+  { key: "thyroid", label: "Thyroid" },
+  { key: "asthma", label: "Asthma" },
+  { key: "tuberculosis", label: "Tuberculosis" },
+  { key: "cardiac", label: "Cardiac" },
+  { key: "arthritis", label: "Arthritis" },
+  { key: "allergies", label: "Allergies" },
+  { key: "other", label: "Other" },
+];
+
 export function PatientsPage() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activePatientId = searchParams.get("id");
 
@@ -72,7 +95,19 @@ export function PatientsPage() {
   // Add / Edit Patient Panel
   const [patientModalOpen, setPatientModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<PatientRow | null>(null);
-  const [patientForm, setPatientForm] = useState({
+  const [patientForm, setPatientForm] = useState<{
+    name: string;
+    mobile: string;
+    alt_mobile: string;
+    age: string;
+    gender: string;
+    address: string;
+    notes: string;
+    branch_id: string;
+    occupation: string;
+    height: string;
+    medical_history: MedicalHistory;
+  }>({
     name: "",
     mobile: "",
     alt_mobile: "",
@@ -81,6 +116,9 @@ export function PatientsPage() {
     address: "",
     notes: "",
     branch_id: "",
+    occupation: "",
+    height: "",
+    medical_history: { ...DEFAULT_MEDICAL_HISTORY },
   });
 
   // Duplicate mobile handling
@@ -88,7 +126,6 @@ export function PatientsPage() {
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   // Add Visit Modal State
-  const [addVisitOpen, setAddVisitOpen] = useState(false);
 
   // Billing & Payment States
   const [billingSummary, setBillingSummary] = useState<PatientBillingSummary | null>(null);
@@ -96,8 +133,11 @@ export function PatientsPage() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [addPaymentOpen, setAddPaymentOpen] = useState(false);
 
+  // Visit History Timeline collapsible dropdown state
+  const [visitTimelineOpen, setVisitTimelineOpen] = useState(false);
+
   // Bumped whenever a visit save might have created a prescription, so PrescriptionsCard reloads.
-  const [prescriptionsRefreshKey, setPrescriptionsRefreshKey] = useState(0);
+  const [prescriptionsRefreshKey] = useState(0);
 
   useEffect(() => {
     loadPatientsData();
@@ -138,7 +178,7 @@ export function PatientsPage() {
     const [pRes, bRes] = await Promise.all([
       supabase
         .from("patients")
-        .select("*, branch:branches(*), visits(*, treatment_type:treatment_types(*)), recalls(*)")
+        .select("*, branch:branches(*), visits(*, treatment_type:treatment_types(*)), recalls(*), prescriptions(id, visit_id)")
         .order("created_at", { ascending: false }),
       supabase.from("branches").select("*").eq("is_active", true),
     ]);
@@ -194,6 +234,9 @@ export function PatientsPage() {
       address: "",
       notes: "",
       branch_id: profile?.branch_id || (branches[0]?.id ?? ""),
+      occupation: "",
+      height: "",
+      medical_history: { ...DEFAULT_MEDICAL_HISTORY },
     });
     setPatientModalOpen(true);
   }
@@ -203,6 +246,11 @@ export function PatientsPage() {
     setEditingPatient(p);
     setDuplicateMatchId(null);
     setDuplicateError(null);
+    const pMedHistory =
+      p.medical_history && typeof p.medical_history === "object"
+        ? (p.medical_history as unknown as Partial<MedicalHistory>)
+        : null;
+
     setPatientForm({
       name: p.name,
       mobile: p.mobile,
@@ -212,6 +260,12 @@ export function PatientsPage() {
       address: p.address || "",
       notes: p.notes || "",
       branch_id: p.branch_id,
+      occupation: p.occupation || "",
+      height: p.height || "",
+      medical_history: {
+        ...DEFAULT_MEDICAL_HISTORY,
+        ...(pMedHistory || {}),
+      },
     });
     setPatientModalOpen(true);
   }
@@ -235,6 +289,16 @@ export function PatientsPage() {
       return;
     }
 
+    const sanitizedMedicalHistory: MedicalHistory = {
+      ...patientForm.medical_history,
+      allergies_detail: patientForm.medical_history.allergies
+        ? patientForm.medical_history.allergies_detail?.trim() || null
+        : null,
+      other_text: patientForm.medical_history.other
+        ? patientForm.medical_history.other_text?.trim() || null
+        : null,
+    };
+
     if (editingPatient) {
       const { error: err } = await supabase
         .from("patients")
@@ -253,7 +317,7 @@ export function PatientsPage() {
       if (err) {
         if (err.code === "23505") {
           // Unique mobile violation
-          const existing = patients.find((p) => p.mobile === patientForm.mobile.trim());
+          const existing = patients.find((p) => p.mobile === patientForm.mobile.trim() && p.id !== editingPatient.id);
           setDuplicateError("A patient with this mobile number already exists.");
           if (existing) setDuplicateMatchId(existing.id);
         } else {
@@ -262,34 +326,47 @@ export function PatientsPage() {
         return;
       }
 
+      const clinicalRes = await updatePatientClinicalProfile(editingPatient.id, {
+        occupation: patientForm.occupation.trim() || null,
+        height: patientForm.height.trim() || null,
+        medical_history: sanitizedMedicalHistory,
+      });
+
+      if (!clinicalRes.ok) {
+        toastError(clinicalRes.error, "Clinical Profile Update Failed");
+        return;
+      }
+
       success("Patient details updated.");
       setPatientModalOpen(false);
       loadPatientsData();
     } else {
-      const { data: newP, error: err } = await supabase
-        .from("patients")
-        .insert({
-          clinic_id: profile?.clinic_id!,
-          branch_id: patientForm.branch_id,
-          name: patientForm.name.trim(),
-          mobile: patientForm.mobile.trim(),
-          alt_mobile: patientForm.alt_mobile.trim() || null,
-          age: patientForm.age ? parseInt(patientForm.age) : null,
-          gender: patientForm.gender as any,
-          address: patientForm.address.trim() || null,
-          notes: patientForm.notes.trim() || null,
-          is_active: true,
-        })
-        .select("id")
-        .single();
+      const result = await createPatient({
+        clinic_id: profile?.clinic_id!,
+        branch_id: patientForm.branch_id,
+        name: patientForm.name.trim(),
+        mobile: patientForm.mobile.trim(),
+        alt_mobile: patientForm.alt_mobile.trim() || null,
+        age: patientForm.age ? parseInt(patientForm.age) : null,
+        gender: (patientForm.gender as "male" | "female" | "other") || null,
+        address: patientForm.address.trim() || null,
+        notes: patientForm.notes.trim() || null,
+        occupation: patientForm.occupation.trim() || null,
+        height: patientForm.height.trim() || null,
+        medical_history: sanitizedMedicalHistory,
+      });
 
-      if (err) {
-        if (err.code === "23505") {
+      if (!result.ok) {
+        if (
+          result.error.includes("23505") ||
+          result.error.toLowerCase().includes("duplicate") ||
+          result.error.toLowerCase().includes("unique")
+        ) {
           const existing = patients.find((p) => p.mobile === patientForm.mobile.trim());
           setDuplicateError("This patient already exists — open record?");
           if (existing) setDuplicateMatchId(existing.id);
         } else {
-          toastError(err.message, "Save Failed");
+          toastError(result.error, "Save Failed");
         }
         return;
       }
@@ -297,7 +374,7 @@ export function PatientsPage() {
       success("Patient created successfully.");
       setPatientModalOpen(false);
       loadPatientsData();
-      if (newP) setSearchParams({ id: newP.id });
+      if (result.data) setSearchParams({ id: result.data.id });
     }
   }
 
@@ -357,11 +434,37 @@ export function PatientsPage() {
       )}
 
       {/* VIEW A: Patient Detail View */}
-      {selectedPatient ? (
+      {selectedPatient ? (() => {
+        const selectedPatientMedHistory: MedicalHistory =
+          selectedPatient.medical_history && typeof selectedPatient.medical_history === "object"
+            ? {
+                ...DEFAULT_MEDICAL_HISTORY,
+                ...(selectedPatient.medical_history as unknown as Partial<MedicalHistory>),
+              }
+            : DEFAULT_MEDICAL_HISTORY;
+
+        const activeConditions: string[] = [];
+        if (selectedPatientMedHistory.diabetes) activeConditions.push("Diabetes");
+        if (selectedPatientMedHistory.hypertension) activeConditions.push("Hypertension");
+        if (selectedPatientMedHistory.thyroid) activeConditions.push("Thyroid");
+        if (selectedPatientMedHistory.asthma) activeConditions.push("Asthma");
+        if (selectedPatientMedHistory.tuberculosis) activeConditions.push("Tuberculosis");
+        if (selectedPatientMedHistory.cardiac) activeConditions.push("Cardiac");
+        if (selectedPatientMedHistory.arthritis) activeConditions.push("Arthritis");
+        if (selectedPatientMedHistory.other) {
+          const otherText = selectedPatientMedHistory.other_text?.trim();
+          if (otherText) {
+            activeConditions.push(otherText);
+          } else {
+            activeConditions.push("Other");
+          }
+        }
+
+        return (
         <div className="flex flex-col gap-6">
           {/* Unified Patient Header */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border pb-4">
-            {/* Left side: Back Button + Patient Details */}
+            {/* Left side: Back Button + Patient Name + DND Badge + Allergy Banner */}
             <div className="flex items-start gap-3">
               <Button
                 variant="outline"
@@ -372,7 +475,7 @@ export function PatientsPage() {
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl font-semibold text-foreground tracking-tight">{selectedPatient.name}</h2>
                   {selectedPatient.do_not_disturb && (
@@ -381,17 +484,18 @@ export function PatientsPage() {
                     </Badge>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                  <span>Mobile: <strong className="text-foreground font-medium">{selectedPatient.mobile}</strong></span>
-                  <span>•</span>
-                  <span>Branch: {selectedPatient.branch?.name || "Main"}</span>
-                  {selectedPatient.age ? (
-                    <>
-                      <span>•</span>
-                      <span>{selectedPatient.age} yrs / {selectedPatient.gender || "—"}</span>
-                    </>
-                  ) : null}
-                </div>
+
+                {/* TASK 2: Prominent Red Allergy Banner (single warning icon) */}
+                {selectedPatientMedHistory.allergies && (
+                  <div className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-600 text-white dark:bg-red-950/90 dark:border dark:border-red-600 dark:text-red-200 text-xs sm:text-sm font-semibold tracking-wide shadow-sm">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-white dark:text-red-400" />
+                    <span>
+                      {selectedPatientMedHistory.allergies_detail && selectedPatientMedHistory.allergies_detail.trim()
+                        ? `Allergy: ${selectedPatientMedHistory.allergies_detail.trim()}`
+                        : "Allergy noted (no details recorded)"}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -399,7 +503,11 @@ export function PatientsPage() {
             <div className="flex items-center gap-6 sm:gap-8 lg:gap-12 flex-wrap sm:flex-nowrap justify-between lg:justify-end">
               <BillingBanner summary={billingSummary} loading={billingLoading} />
               <div className="h-8 w-px bg-border hidden sm:block shrink-0" />
-              <Button size="sm" onClick={() => setAddVisitOpen(true)} className="shadow-sm shrink-0">
+              <Button
+                size="sm"
+                onClick={() => navigate(`/app/patients/${selectedPatient.id}/consultation`)}
+                className="shadow-sm shrink-0"
+              >
                 <Plus className="h-4 w-4 mr-1.5" />
                 Record Visit
               </Button>
@@ -426,14 +534,36 @@ export function PatientsPage() {
               </CardHeader>
               <CardContent className="space-y-4 text-sm">
                 <div>
+                  <span className="text-xs text-muted-foreground block">Mobile</span>
+                  <span className="font-medium text-foreground">{selectedPatient.mobile}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground block">Alt Mobile</span>
+                  <span className="text-foreground">{selectedPatient.alt_mobile || "—"}</span>
+                </div>
+                <div>
                   <span className="text-xs text-muted-foreground block">Age / Gender</span>
                   <span className="font-medium capitalize text-foreground">
                     {selectedPatient.age ? `${selectedPatient.age} yrs` : "—"} / {selectedPatient.gender || "—"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-xs text-muted-foreground block">Alt Mobile</span>
-                  <span className="text-foreground">{selectedPatient.alt_mobile || "—"}</span>
+                  <span className="text-xs text-muted-foreground block">Branch</span>
+                  <span className="text-foreground">{selectedPatient.branch?.name || "Main"}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground block">Occupation</span>
+                  <span className="text-foreground">{selectedPatient.occupation || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground block">Height</span>
+                  <span className="text-foreground">{selectedPatient.height || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground block">Medical Conditions</span>
+                  <span className="text-foreground font-medium">
+                    {activeConditions.length > 0 ? activeConditions.join(" · ") : "—"}
+                  </span>
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground block">Address</span>
@@ -466,6 +596,121 @@ export function PatientsPage() {
 
             {/* Visit, Payment & Recall Timelines */}
             <div className="md:col-span-2 flex flex-col gap-6">
+              {/* Prescriptions */}
+              <PrescriptionsCard patientId={selectedPatient.id} refreshKey={prescriptionsRefreshKey} />
+
+              {/* Visit History Timeline (Collapsible Dropdown) */}
+              <Card>
+                <CardHeader
+                  className="flex flex-row items-center justify-between cursor-pointer select-none py-3.5 hover:bg-muted/40 transition-colors rounded-t-lg"
+                  onClick={() => setVisitTimelineOpen((prev) => !prev)}
+                >
+                  <div className="flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4 text-primary" />
+                    <CardTitle className="text-base font-medium">
+                      Visit History Timeline
+                    </CardTitle>
+                    <Badge variant="outline" className="text-xs font-normal ml-1">
+                      {selectedPatient.visits?.length || 0} {selectedPatient.visits?.length === 1 ? "visit" : "visits"}
+                    </Badge>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0">
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 transition-transform duration-200",
+                        visitTimelineOpen && "rotate-180"
+                      )}
+                    />
+                  </Button>
+                </CardHeader>
+                {visitTimelineOpen && (
+                  <CardContent className="pt-2 border-t border-border">
+                    {!selectedPatient.visits || selectedPatient.visits.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-4 text-center">
+                        No visits recorded yet for this patient.
+                      </p>
+                    ) : (
+                      <div className="relative border-l-2 border-primary/20 ml-3 pl-4 space-y-6 pt-2">
+                        {selectedPatient.visits
+                          .sort((a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime())
+                          .map((v) => {
+                            const hasPrescription = selectedPatient.prescriptions?.some((rx) => rx.visit_id === v.id) ?? false;
+                            return (
+                            <div key={v.id} className="relative">
+                              <span className="absolute -left-[23px] top-1 h-3 w-3 rounded-full bg-primary ring-4 ring-background" />
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                <span className="font-medium text-foreground text-sm">
+                                  {v.treatment_type?.name || "Treatment Visit"}
+                                </span>
+                                <span className="text-xs text-muted-foreground font-mono">
+                                  {formatDateIST(v.visit_date)}
+                                </span>
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1 space-y-1">
+                                {/* Teeth chips (renders pills if present, nothing if empty) */}
+                                {((v.teeth && v.teeth.length > 0) || (v.tooth_numbers && v.tooth_numbers.trim())) && (
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <strong className="text-foreground">Teeth:</strong>
+                                    {(v.teeth && v.teeth.length > 0
+                                      ? [...v.teeth].sort((a, b) => a - b)
+                                      : v.tooth_numbers!.split(",").map((s) => s.trim()).filter(Boolean)
+                                    ).map((t) => (
+                                      <Badge
+                                        key={String(t)}
+                                        variant="outline"
+                                        className="h-5 px-1.5 py-0 border-teal-500/30 text-teal-400 bg-teal-500/10 font-mono text-[11px] font-medium"
+                                      >
+                                        {t}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                                {v.amount !== null && v.amount !== undefined && (
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <strong>Amount:</strong>
+                                    {v.discount_percent && v.discount_percent > 0 ? (
+                                      <>
+                                        <span className="line-through text-muted-foreground">
+                                          {formatINR(v.amount)}
+                                        </span>
+                                        <Badge
+                                          variant="outline"
+                                          className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-[10px] py-0 px-1.5 font-normal"
+                                        >
+                                          {v.discount_percent}% off
+                                        </Badge>
+                                        <span className="font-semibold text-foreground">
+                                          {formatINR(v.net_amount ?? Math.round(v.amount * (1 - v.discount_percent / 100)))}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className="font-medium text-foreground">
+                                        {formatINR(v.net_amount ?? v.amount)}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                {v.notes && <p><strong>Notes:</strong> {v.notes}</p>}
+                              </div>
+                              {/* Doc's Problem 1 (Phase 13A): a visit with no prescription can
+                                 have one attached later, without re-billing it. */}
+                              {!hasPrescription && (
+                                <Link
+                                  to={`/app/patients/${selectedPatient.id}/consultation?visitId=${v.id}`}
+                                  className="text-xs text-primary underline underline-offset-2 font-medium mt-1.5 inline-block"
+                                >
+                                  + Prescription
+                                </Link>
+                              )}
+                            </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+
               {/* Payment History Card */}
               <PaymentHistoryCard
                 payments={paymentHistory}
@@ -476,90 +721,6 @@ export function PatientsPage() {
                   loadPatientsData();
                 }}
               />
-
-              {/* Visit History Timeline */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base font-medium flex items-center gap-2">
-                    <Stethoscope className="h-4 w-4 text-primary" />
-                    Visit History Timeline
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {!selectedPatient.visits || selectedPatient.visits.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center">
-                      No visits recorded yet for this patient.
-                    </p>
-                  ) : (
-                    <div className="relative border-l-2 border-primary/20 ml-3 pl-4 space-y-6">
-                      {selectedPatient.visits
-                        .sort((a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime())
-                        .map((v) => (
-                          <div key={v.id} className="relative">
-                            <span className="absolute -left-[23px] top-1 h-3 w-3 rounded-full bg-primary ring-4 ring-background" />
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                              <span className="font-medium text-foreground text-sm">
-                                {v.treatment_type?.name || "Treatment Visit"}
-                              </span>
-                              <span className="text-xs text-muted-foreground font-mono">
-                                {formatDateIST(v.visit_date)}
-                              </span>
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-1 space-y-1">
-                              {/* Teeth chips (renders pills if present, nothing if empty) */}
-                              {((v.teeth && v.teeth.length > 0) || (v.tooth_numbers && v.tooth_numbers.trim())) && (
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <strong className="text-foreground">Teeth:</strong>
-                                  {(v.teeth && v.teeth.length > 0
-                                    ? [...v.teeth].sort((a, b) => a - b)
-                                    : v.tooth_numbers!.split(",").map((s) => s.trim()).filter(Boolean)
-                                  ).map((t) => (
-                                    <Badge
-                                      key={String(t)}
-                                      variant="outline"
-                                      className="h-5 px-1.5 py-0 border-teal-500/30 text-teal-400 bg-teal-500/10 font-mono text-[11px] font-medium"
-                                    >
-                                      {t}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                              {v.amount !== null && v.amount !== undefined && (
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <strong>Amount:</strong>
-                                  {v.discount_percent && v.discount_percent > 0 ? (
-                                    <>
-                                      <span className="line-through text-muted-foreground">
-                                        {formatINR(v.amount)}
-                                      </span>
-                                      <Badge
-                                        variant="outline"
-                                        className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-[10px] py-0 px-1.5 font-normal"
-                                      >
-                                        {v.discount_percent}% off
-                                      </Badge>
-                                      <span className="font-semibold text-foreground">
-                                        {formatINR(v.net_amount ?? Math.round(v.amount * (1 - v.discount_percent / 100)))}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <span className="font-medium text-foreground">
-                                      {formatINR(v.net_amount ?? v.amount)}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {v.notes && <p><strong>Notes:</strong> {v.notes}</p>}
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Prescriptions */}
-              <PrescriptionsCard patientId={selectedPatient.id} refreshKey={prescriptionsRefreshKey} />
 
               {/* Recalls History */}
               <Card>
@@ -656,7 +817,8 @@ export function PatientsPage() {
             </div>
           </div>
         </div>
-      ) : (
+        );
+      })() : (
         /* VIEW B: Patients Table View */
         <div className="flex flex-col gap-4">
           {/* Search & Filters */}
@@ -947,6 +1109,124 @@ export function PatientsPage() {
                 onChange={(e) => setPatientForm({ ...patientForm, notes: e.target.value })}
               />
             </div>
+
+            {/* Medical & Clinical Section */}
+            <div className="border-t border-border pt-4 mt-2 space-y-4">
+              <div className="flex items-center gap-2">
+                <Stethoscope className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Medical & Clinical</h3>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="p-occupation">Occupation</Label>
+                  <Input
+                    id="p-occupation"
+                    placeholder="e.g. Software Engineer, Teacher"
+                    value={patientForm.occupation}
+                    onChange={(e) => setPatientForm({ ...patientForm, occupation: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="p-height">Height</Label>
+                  <Input
+                    id="p-height"
+                    placeholder="e.g. 5ft 6in"
+                    value={patientForm.height}
+                    onChange={(e) => setPatientForm({ ...patientForm, height: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs font-medium text-foreground">Medical History</Label>
+                <div className="flex flex-wrap gap-2">
+                  {MEDICAL_HISTORY_TOGGLES.map(({ key, label }) => {
+                    const active = !!patientForm.medical_history[key];
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() =>
+                          setPatientForm((prev) => ({
+                            ...prev,
+                            medical_history: {
+                              ...prev.medical_history,
+                              [key]: !prev.medical_history[key],
+                            },
+                          }))
+                        }
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none",
+                          active
+                            ? key === "allergies"
+                              ? "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400 font-semibold ring-1 ring-red-500/30"
+                              : "border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary/30"
+                            : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "h-1.5 w-1.5 rounded-full",
+                            active
+                              ? key === "allergies"
+                                ? "bg-red-600 dark:bg-red-400"
+                                : "bg-primary"
+                              : "bg-muted-foreground/40"
+                          )}
+                        />
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {patientForm.medical_history.allergies && (
+                <div className="flex flex-col gap-1.5 animate-in fade-in-50 duration-200">
+                  <Label htmlFor="p-allergies-detail" className="text-xs font-medium text-red-600 dark:text-red-400">
+                    Allergy Details
+                  </Label>
+                  <Input
+                    id="p-allergies-detail"
+                    placeholder="e.g. Penicillin, NSAIDs, Latex..."
+                    value={patientForm.medical_history.allergies_detail || ""}
+                    onChange={(e) =>
+                      setPatientForm((prev) => ({
+                        ...prev,
+                        medical_history: {
+                          ...prev.medical_history,
+                          allergies_detail: e.target.value,
+                        },
+                      }))
+                    }
+                    className="border-red-300 dark:border-red-900/50 focus-visible:ring-red-500"
+                  />
+                </div>
+              )}
+
+              {patientForm.medical_history.other && (
+                <div className="flex flex-col gap-1.5 animate-in fade-in-50 duration-200">
+                  <Label htmlFor="p-other-text" className="text-xs font-medium">
+                    Other Details
+                  </Label>
+                  <Input
+                    id="p-other-text"
+                    placeholder="Specify other medical conditions..."
+                    value={patientForm.medical_history.other_text || ""}
+                    onChange={(e) =>
+                      setPatientForm((prev) => ({
+                        ...prev,
+                        medical_history: {
+                          ...prev.medical_history,
+                          other_text: e.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           <DialogFooter className="border-t border-border pt-3">
@@ -959,20 +1239,6 @@ export function PatientsPage() {
           </DialogFooter>
         </form>
       </Dialog>
-
-      {/* Add Visit Modal for Selected Patient */}
-      {selectedPatient && (
-        <AddVisitModal
-          open={addVisitOpen}
-          onOpenChange={setAddVisitOpen}
-          initialPatientId={selectedPatient.id}
-          onSuccess={() => {
-            loadPatientsData();
-            loadBillingData(selectedPatient.id);
-            setPrescriptionsRefreshKey((k) => k + 1);
-          }}
-        />
-      )}
 
       {/* Add Payment Modal for Selected Patient */}
       {selectedPatient && (

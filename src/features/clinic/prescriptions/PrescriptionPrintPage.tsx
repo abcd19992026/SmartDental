@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
 import { Printer } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -80,11 +80,17 @@ function capitalize(s: string): string {
 
 export function PrescriptionPrintPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  // Save & Print (AddVisitModal) passes ?print=1 so the dialog opens automatically; the plain
+  // View button (PrescriptionsCard) does not, so that path stays view-only, unchanged.
+  const autoPrint = searchParams.get("print") === "1";
   const [prescription, setPrescription] = useState<PrescriptionRow | null>(null);
   const [patient, setPatient] = useState<PatientInfo | null>(null);
   const [clinic, setClinic] = useState<ClinicLetterheadData | null>(null);
+  const [visit, setVisit] = useState<{ teeth?: number[] | null; tooth_numbers?: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasAutoPrintedRef = useRef(false);
 
   useEffect(() => {
     if (!id) return;
@@ -102,9 +108,12 @@ export function PrescriptionPrintPage() {
         return;
       }
 
-      const [patientRes, clinicRes] = await Promise.all([
+      const [patientRes, clinicRes, visitRes] = await Promise.all([
         supabase.from("patients").select("name, mobile, address, age, gender").eq("id", rxRes.data.patient_id).maybeSingle(),
         fetchClinicLetterheadData(rxRes.data.clinic_id),
+        rxRes.data.visit_id
+          ? supabase.from("visits").select("teeth, tooth_numbers").eq("id", rxRes.data.visit_id).maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
       ]);
       if (!active) return;
 
@@ -122,6 +131,7 @@ export function PrescriptionPrintPage() {
       setPrescription(rxRes.data);
       setPatient(patientRes.data);
       setClinic(clinicRes.data);
+      setVisit(visitRes.data ?? null);
       setLoading(false);
     })();
 
@@ -129,6 +139,16 @@ export function PrescriptionPrintPage() {
       active = false;
     };
   }, [id]);
+
+  // Fires window.print() once, only when Save & Print asked for it (?print=1) and only once the
+  // real data has actually rendered -- printing the loading/error placeholder would produce a
+  // blank or wrong page. The ref guards against firing again on an unrelated re-render.
+  useEffect(() => {
+    if (autoPrint && !loading && !error && prescription && patient && clinic && !hasAutoPrintedRef.current) {
+      hasAutoPrintedRef.current = true;
+      window.print();
+    }
+  }, [autoPrint, loading, error, prescription, patient, clinic]);
 
   if (loading) {
     return (
@@ -148,7 +168,19 @@ export function PrescriptionPrintPage() {
 
   const lh = clinic.letterhead ?? {};
   const doctors = Array.isArray(lh.doctors) ? lh.doctors : [];
-  const teeth = Array.isArray(prescription.teeth) ? [...prescription.teeth].sort((a, b) => a - b) : [];
+
+  let teethNumbers: number[] = [];
+  if (Array.isArray(prescription.teeth) && prescription.teeth.length > 0) {
+    teethNumbers = [...prescription.teeth];
+  } else if (visit?.teeth && Array.isArray(visit.teeth) && visit.teeth.length > 0) {
+    teethNumbers = [...visit.teeth];
+  } else if (visit?.tooth_numbers && typeof visit.tooth_numbers === "string") {
+    teethNumbers = visit.tooth_numbers
+      .split(",")
+      .map((t) => parseInt(t.trim(), 10))
+      .filter((n) => !isNaN(n));
+  }
+  const teeth = Array.from(new Set(teethNumbers)).sort((a, b) => a - b);
   const medications = Array.isArray(prescription.medications)
     ? (prescription.medications as unknown as PrescriptionMedication[])
     : [];
@@ -186,11 +218,11 @@ export function PrescriptionPrintPage() {
       </div>
 
       <div
-        className="mx-auto flex flex-col justify-between"
+        className="mx-auto flex flex-col justify-between text-black text-[11px] leading-[1.45]"
         style={{
           width: "210mm",
           minHeight: "297mm",
-          padding: "2mm 15mm 2mm 15mm",
+          padding: "6mm 8mm 6mm 14mm",
           boxSizing: "border-box",
         }}
       >
@@ -198,13 +230,13 @@ export function PrescriptionPrintPage() {
         <div className="flex-1 flex flex-col">
           {/* Header */}
           <header>
-            <div className="flex justify-between text-[11px] font-medium text-gray-700">
+            <div className="flex justify-between text-[11px] font-medium text-gray-700 leading-[1.4]">
               <span>{lh.regd_no ? `Regd. No : ${lh.regd_no}` : ""}</span>
               <span>{clinic.phone ? `Mob : ${clinic.phone}` : ""}</span>
             </div>
 
             {/* Clinic Name with Anchored Logos */}
-            <div className="flex items-center justify-between gap-4 mt-2">
+            <div className="flex items-center justify-between gap-4 mt-1.5">
               {/* Left Logo Anchor */}
               <div className="w-20 shrink-0 flex justify-start">
                 {clinic.logo_url ? (
@@ -217,20 +249,20 @@ export function PrescriptionPrintPage() {
               {/* Centered Prominent Clinic Name */}
               <div className="text-center flex-1 min-w-0">
                 <div
-                  className="text-[42px] font-black tracking-[0.04em] uppercase text-[#0a2540] leading-tight"
+                  className="text-[40px] font-black tracking-[0.04em] uppercase text-[#0a2540] leading-[1.15] py-0.5"
                   style={{
-                    fontFamily: "'Baskerville', 'Times New Roman', 'Georgia', serif",
-                    WebkitTextStroke: "1px #0a2540",
-
+                    fontFamily: "'Georgia', 'Times New Roman', serif",
+                    fontWeight: 900,
                   }}
                 >
                   {clinic.name}
                 </div>
                 {lh.tagline && (
                   <div
-                    className="text-[15px] italic text-[#1b3b6f] tracking-wide mt-0.5"
+                    className="text-[14px] italic text-[#1b3b6f] tracking-wide leading-[1.4] mt-0.5"
                     style={{
                       fontFamily: "'Lucida Calligraphy', 'Monotype Corsiva', 'Apple Chancery', 'Georgia', cursive, serif",
+                      fontVariantLigatures: "none",
                     }}
                   >
                     {lh.tagline}
@@ -250,23 +282,23 @@ export function PrescriptionPrintPage() {
 
             {/* Doctor Names & Qualifications */}
             {doctors.length > 0 && (
-              <div className="flex justify-center flex-wrap gap-x-8 gap-y-2 mt-3 text-center">
+              <div className="flex justify-center flex-wrap gap-x-8 gap-y-1.5 mt-2 text-center">
                 {doctors.map((d, i) => (
-                  <div key={i} className="text-center">
-                    <div className="text-2xl font-bold text-black">{d.name}</div>
+                  <div key={i} className="text-center leading-[1.4]">
+                    <div className="text-[20px] font-bold text-black leading-[1.25]">{d.name}</div>
                     {d.qualification && (
-                      <div className="text-xs text-gray-700 mt-0.5">{d.qualification}</div>
+                      <div className="text-[11px] text-gray-700 mt-0.5 leading-[1.4]">{d.qualification}</div>
                     )}
                   </div>
                 ))}
               </div>
             )}
 
-            <hr className="border-t border-black mt-2.5" />
+            <hr className="border-t border-black mt-2" />
           </header>
 
           {/* Patient block -- three-column grid matching the paper slip */}
-          <div className="grid grid-cols-3 gap-x-6 gap-y-1 text-xs mt-3">
+          <div className="grid grid-cols-3 gap-x-6 gap-y-1 text-[11px] leading-[1.45] mt-2">
             <div>
               <span className="font-semibold">Patient : </span>
               {patient.name}
@@ -333,14 +365,14 @@ export function PrescriptionPrintPage() {
                   {prescription.blood_pressure && (
                     <span>
                       <span className="font-semibold">BP : </span>
-                      <span>{prescription.blood_pressure}</span>
+                      <span className="font-bold text-black">{prescription.blood_pressure}</span>
                     </span>
                   )}
                   {prescription.blood_pressure && prescription.spo2 && <span> · </span>}
                   {prescription.spo2 && (
                     <span>
                       <span className="font-semibold">SpO2 : </span>
-                      <span>{prescription.spo2}</span>
+                      <span className="font-bold text-black">{prescription.spo2}</span>
                     </span>
                   )}
                 </div>
@@ -348,62 +380,62 @@ export function PrescriptionPrintPage() {
             )}
           </div>
 
-          <hr className="border-t border-gray-400 mt-2.5" />
+          <hr className="border-t border-gray-400 mt-2" />
 
-          {/* Body -- 3-column layout with perfectly vertically aligned colons */}
-          <div className="mt-3 text-xs space-y-1.5">
+          {/* Body -- 3-column layout with aligned colons and proper descent room */}
+          <div className="mt-2 text-[11px] leading-[1.45] space-y-1">
             {prescription.chief_complaint && (
-              <div className="flex items-baseline">
+              <div className="flex items-start">
                 <span className="font-semibold w-40 shrink-0">Chief Complaint</span>
                 <span className="font-semibold w-3 shrink-0 text-left">:</span>
                 <span className="flex-1 min-w-0">{prescription.chief_complaint}</span>
               </div>
             )}
             {medicalHistoryText && (
-              <div className="flex items-baseline">
+              <div className="flex items-start">
                 <span className="font-semibold w-40 shrink-0">Medical History</span>
                 <span className="font-semibold w-3 shrink-0 text-left">:</span>
                 <span className="flex-1 min-w-0">{medicalHistoryText}</span>
               </div>
             )}
             {prescription.past_dental_history && (
-              <div className="flex items-baseline">
+              <div className="flex items-start">
                 <span className="font-semibold w-40 shrink-0">Past Dental History</span>
                 <span className="font-semibold w-3 shrink-0 text-left">:</span>
                 <span className="flex-1 min-w-0">{prescription.past_dental_history}</span>
               </div>
             )}
             {prescription.oral_examination && (
-              <div className="flex items-baseline">
+              <div className="flex items-start">
                 <span className="font-semibold w-40 shrink-0">Oral Examination</span>
                 <span className="font-semibold w-3 shrink-0 text-left">:</span>
                 <span className="flex-1 min-w-0">{prescription.oral_examination}</span>
               </div>
             )}
             {investigationText && (
-              <div className="flex items-baseline">
+              <div className="flex items-start">
                 <span className="font-semibold w-40 shrink-0">Investigation</span>
                 <span className="font-semibold w-3 shrink-0 text-left">:</span>
                 <span className="flex-1 min-w-0">{investigationText}</span>
               </div>
             )}
             {prescription.provisional_diagnosis && (
-              <div className="flex items-baseline">
+              <div className="flex items-start">
                 <span className="font-semibold w-40 shrink-0">Provisional Diagnosis</span>
                 <span className="font-semibold w-3 shrink-0 text-left">:</span>
                 <span className="flex-1 min-w-0">{prescription.provisional_diagnosis}</span>
               </div>
             )}
             {prescription.treatment_plan && (
-              <div className="flex items-baseline">
+              <div className="flex items-start">
                 <span className="font-semibold w-40 shrink-0">Treatment Plan</span>
                 <span className="font-semibold w-3 shrink-0 text-left">:</span>
                 <span className="flex-1 min-w-0">{prescription.treatment_plan}</span>
               </div>
             )}
             {teeth.length > 0 && (
-              <div className="flex items-baseline">
-                <span className="font-semibold w-40 shrink-0">Teeth Involved</span>
+              <div className="flex items-start">
+                <span className="font-semibold w-40 shrink-0">Teeth</span>
                 <span className="font-semibold w-3 shrink-0 text-left">:</span>
                 <span className="flex-1 min-w-0">{teeth.join(", ")}</span>
               </div>
@@ -411,31 +443,31 @@ export function PrescriptionPrintPage() {
           </div>
 
           {/* Section Divider between Clinical Notes and Rx */}
-          <hr className="border-t border-black mt-2.5 mb-1" />
+          <hr className="border-t border-black mt-2 mb-1" />
 
-          {/* Rx -- the most important block on the page, rendered as a 3-column table */}
+          {/* Rx -- 3-column table */}
           {medications.length > 0 && (
             <div className="mt-0.5 break-inside-avoid" style={{ breakInside: "avoid" }}>
-              <div className="text-[19px] font-bold pb-0.5 mb-1 text-black">Rx</div>
+              <div className="text-[18px] font-bold pb-0.5 mb-1 text-black leading-tight">Rx</div>
               <table className="w-full text-left border-collapse table-fixed">
                 <thead>
-                  <tr className="border-b border-gray-400 text-[12px] font-bold text-black">
-                    <th className="py-1.5 pr-4 font-bold text-left w-[55%]">Medicine</th>
-                    <th className="py-1.5 px-4 font-bold text-left w-[25%]">Dosage</th>
-                    <th className="py-1.5 pl-4 font-bold text-left w-[20%]">Duration</th>
+                  <tr className="border-b border-gray-400 text-[11px] font-bold text-black leading-[1.4]">
+                    <th className="py-1 pr-4 font-bold text-left w-[55%]">Medicine</th>
+                    <th className="py-1 px-4 font-bold text-left w-[25%]">Dosage</th>
+                    <th className="py-1 pl-4 font-bold text-left w-[20%]">Duration</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {medications.map((m, i) => (
-                    <tr key={i} className="text-[12px] text-black">
+                    <tr key={i} className="text-[11px] text-black leading-[1.45]">
                       {/* Medicine Name with Number and Sub-line Notes */}
                       <td className="py-1 pr-4 align-top w-[55%]">
-                        <div className="font-semibold text-[12px] text-black leading-snug">
+                        <div className="font-semibold text-[11.5px] text-black leading-[1.4]">
                           <span className="font-bold text-[10px] mr-1.5">{i + 1})</span>
                           {m.name}
                         </div>
                         {m.notes && (
-                          <div className="text-[11px] text-gray-700 italic pl-5 mt-0.5">
+                          <div className="text-[10px] text-gray-700 italic pl-4 mt-0.5 leading-[1.4]">
                             <span className="font-medium not-italic">Notes : </span>
                             {m.notes}
                           </div>
@@ -443,12 +475,12 @@ export function PrescriptionPrintPage() {
                       </td>
 
                       {/* Dosage Column */}
-                      <td className="py-1 px-4 align-top font-medium text-[12px] text-gray-900 w-[25%]">
+                      <td className="py-1 px-4 align-top font-medium text-[11px] text-gray-900 leading-[1.4] w-[25%]">
                         {m.dosage || ""}
                       </td>
 
                       {/* Duration Column */}
-                      <td className="py-1 pl-4 align-top font-medium text-[12px] text-gray-900 w-[20%]">
+                      <td className="py-1 pl-4 align-top font-medium text-[11px] text-gray-900 leading-[1.4] w-[20%]">
                         {m.duration || ""}
                       </td>
                     </tr>
@@ -459,26 +491,26 @@ export function PrescriptionPrintPage() {
           )}
 
           {prescription.notes && (
-            <div className="mt-3 text-xs">
-              <span className="font-semibold">Notes: </span>
+            <div className="mt-2.5 text-[11px] leading-[1.45] text-black">
+              <span className="font-semibold">Advice : </span>
               {prescription.notes}
             </div>
           )}
         </div>
 
         {/* Bottom Area: Pinned Signature & Structured Footer */}
-        <div className="mt-auto pt-6 break-inside-avoid">
+        <div className="mt-auto pt-4 break-inside-avoid">
           {/* Signature -- pinned to the bottom above the footer */}
-          <div className="flex justify-end mb-4 break-inside-avoid">
-            <div className="text-center text-xs">
-              <div className="border-t border-black w-44 pt-1.5 font-medium">{prescription.doctor_name}</div>
+          <div className="flex justify-end mb-3 break-inside-avoid">
+            <div className="text-center text-[11px] leading-[1.4]">
+              <div className="border-t border-black w-44 pt-1 pb-1 font-medium">{prescription.doctor_name}</div>
             </div>
           </div>
 
           {/* Footer -- structured and labelled, matching real printed slip */}
-          <footer className="border-t border-gray-400 pt-3 text-[10px] text-gray-800 space-y-1 break-inside-avoid">
+          <footer className="border-t border-gray-400 pt-2 text-[10px] leading-[1.4] text-gray-800 space-y-0.5 break-inside-avoid">
             {(lh.timings || lh.sunday_timings) && (
-              <div className="flex justify-between items-baseline gap-4">
+              <div className="flex justify-between items-start gap-4">
                 <div>
                   {lh.timings ? (
                     <>
@@ -489,10 +521,10 @@ export function PrescriptionPrintPage() {
                 </div>
                 <div>
                   {lh.sunday_timings ? (
-                    <span>
-                      ( <span className="font-semibold">Sunday Timing : </span>
-                      {lh.sunday_timings} )
-                    </span>
+                    <>
+                      <span className="font-semibold">Sunday Timing : </span>
+                      {lh.sunday_timings}
+                    </>
                   ) : null}
                 </div>
               </div>
@@ -513,7 +545,7 @@ export function PrescriptionPrintPage() {
             )}
 
             {lh.footer_note && (
-              <div className="text-center text-[10px] text-gray-600 font-black pt-1">
+              <div className="text-center text-[10.5px] font-bold text-black pt-1 tracking-wide leading-[1.4]">
                 * {lh.footer_note} *
               </div>
             )}

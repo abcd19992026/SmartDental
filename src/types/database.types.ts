@@ -90,6 +90,7 @@ export type Database = {
       appointments: {
         Row: {
           branch_id: string
+          checked_in_at: string | null
           clinic_id: string
           created_at: string
           created_by: string | null
@@ -100,9 +101,11 @@ export type Database = {
           scheduled_at: string
           status: string
           updated_at: string
+          visit_id: string | null
         }
         Insert: {
           branch_id: string
+          checked_in_at?: string | null
           clinic_id: string
           created_at?: string
           created_by?: string | null
@@ -113,9 +116,11 @@ export type Database = {
           scheduled_at: string
           status?: string
           updated_at?: string
+          visit_id?: string | null
         }
         Update: {
           branch_id?: string
+          checked_in_at?: string | null
           clinic_id?: string
           created_at?: string
           created_by?: string | null
@@ -126,6 +131,7 @@ export type Database = {
           scheduled_at?: string
           status?: string
           updated_at?: string
+          visit_id?: string | null
         }
         Relationships: [
           {
@@ -168,6 +174,13 @@ export type Database = {
             columns: ["recall_id"]
             isOneToOne: false
             referencedRelation: "recalls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
             referencedColumns: ["id"]
           },
         ]
@@ -567,11 +580,14 @@ export type Database = {
           created_by: string | null
           do_not_disturb: boolean
           gender: string | null
+          height: string | null
           id: string
           is_active: boolean
+          medical_history: Json
           mobile: string
           name: string
           notes: string | null
+          occupation: string | null
           updated_at: string
         }
         Insert: {
@@ -584,11 +600,14 @@ export type Database = {
           created_by?: string | null
           do_not_disturb?: boolean
           gender?: string | null
+          height?: string | null
           id?: string
           is_active?: boolean
+          medical_history?: Json
           mobile: string
           name: string
           notes?: string | null
+          occupation?: string | null
           updated_at?: string
         }
         Update: {
@@ -601,11 +620,14 @@ export type Database = {
           created_by?: string | null
           do_not_disturb?: boolean
           gender?: string | null
+          height?: string | null
           id?: string
           is_active?: boolean
+          medical_history?: Json
           mobile?: string
           name?: string
           notes?: string | null
+          occupation?: string | null
           updated_at?: string
         }
         Relationships: [

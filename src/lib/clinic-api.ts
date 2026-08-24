@@ -2,6 +2,7 @@ import type { ApiResult } from "@/lib/admin-api";
 import { toFunctionError } from "@/lib/admin-api";
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/types/database.types";
+import { todayIST } from "@/lib/dates";
 
 // Clinic-side (owner/receptionist) operations, kept separate from admin-api.ts's super-admin
 // surface -- these run under the caller's own RLS-scoped session, never a service-role client.
@@ -450,6 +451,112 @@ export async function deleteMedicine(medicineId: string): Promise<ApiResult<{ id
 }
 
 // ---------------------------------------------------------------------------
+// patients -- clinical profile (occupation/height/medical_history). Phase 11A moves these off the
+// prescription form and onto the patient master record, entered once and reused across visits.
+// prescriptions_snapshot_from_patient() (see the Phase 11A migration) copies the patient's current
+// values into a prescription at insert time whenever the form leaves them null, so a past
+// prescription's snapshot is never affected by a later edit here. Runs under the caller's normal
+// patients_update RLS -- no service role -- so a receptionist calling this outside their own
+// branch (or clinic) gets 0 rows back, not an error, same as every other write in this file.
+// ---------------------------------------------------------------------------
+
+export type PatientRow = Database["public"]["Tables"]["patients"]["Row"];
+
+// Canonical shape of patients.medical_history. MUST stay in sync with that column's DB default
+// (see the Phase 11A migration) -- both this constant and the DB default exist so a patient row
+// always has the full checkbox shape, never a partial one a reader has to guard against. Reused
+// by the Add/Edit Patient form (a separate task) as well as createPatient below.
+export interface MedicalHistory {
+  diabetes: boolean;
+  hypertension: boolean;
+  thyroid: boolean;
+  asthma: boolean;
+  tuberculosis: boolean;
+  cardiac: boolean;
+  arthritis: boolean;
+  allergies: boolean;
+  allergies_detail: string | null;
+  other: boolean;
+  other_text: string | null;
+}
+
+export const DEFAULT_MEDICAL_HISTORY: MedicalHistory = {
+  diabetes: false,
+  hypertension: false,
+  thyroid: false,
+  asthma: false,
+  tuberculosis: false,
+  cardiac: false,
+  arthritis: false,
+  allergies: false,
+  allergies_detail: null,
+  other: false,
+  other_text: null,
+};
+
+export interface CreatePatientInput {
+  clinic_id: string;
+  branch_id: string;
+  name: string;
+  mobile: string;
+  alt_mobile?: string | null;
+  age?: number | null;
+  gender?: "male" | "female" | "other" | null;
+  address?: string | null;
+  notes?: string | null;
+  occupation?: string | null;
+  height?: string | null;
+  /** Omitted entirely (not sent as null) when left undefined, so the NOT NULL DB default
+   * (DEFAULT_MEDICAL_HISTORY) applies -- patients.medical_history has no null branch to satisfy. */
+  medical_history?: MedicalHistory;
+}
+
+export async function createPatient(input: CreatePatientInput): Promise<ApiResult<PatientRow>> {
+  const payload = {
+    clinic_id: input.clinic_id,
+    branch_id: input.branch_id,
+    name: input.name,
+    mobile: input.mobile,
+    alt_mobile: input.alt_mobile ?? null,
+    age: input.age ?? null,
+    gender: input.gender ?? null,
+    address: input.address ?? null,
+    notes: input.notes ?? null,
+    occupation: input.occupation ?? null,
+    height: input.height ?? null,
+    is_active: true,
+    ...(input.medical_history !== undefined ? { medical_history: input.medical_history } : {}),
+  };
+  const { data, error } = await supabase
+    .from("patients")
+    .insert(payload as Database["public"]["Tables"]["patients"]["Insert"])
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data };
+}
+
+export interface UpdatePatientClinicalProfileInput {
+  occupation?: string | null;
+  height?: string | null;
+  medical_history?: MedicalHistory;
+}
+
+export async function updatePatientClinicalProfile(
+  patientId: string,
+  input: UpdatePatientClinicalProfileInput,
+): Promise<ApiResult<PatientRow>> {
+  const { data, error } = await supabase
+    .from("patients")
+    .update(input as Database["public"]["Tables"]["patients"]["Update"])
+    .eq("id", patientId)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data };
+}
+
+// ---------------------------------------------------------------------------
 // prescriptions -- digitises the clinic's paper prescription slip. SELECT is any clinic member,
 // branch-scoped for a receptionist (they may need to reprint a slip); INSERT/UPDATE/DELETE are
 // owner/super_admin only, enforced by RLS (prescriptions_insert/_update/_delete), not by this
@@ -479,6 +586,27 @@ export async function fetchPrescriptionsForPatient(patientId: string): Promise<A
     .order("created_at", { ascending: false });
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: data ?? [] };
+}
+
+/** Most recent prescription for a patient, or null if they have none -- separate from
+ * fetchPrescriptionsForPatient (which returns the full history) so a caller that only needs the
+ * latest one (the consultation page's patient-history context, and a later "copy last Rx"
+ * feature) doesn't fetch and discard the rest. Same ordering as fetchPrescriptionsForPatient
+ * (prescribed_on desc, then created_at desc), so same-day prescriptions still resolve to
+ * whichever was actually written most recently. */
+export async function fetchLatestPrescriptionForPatient(
+  patientId: string,
+): Promise<ApiResult<PrescriptionRow | null>> {
+  const { data, error } = await supabase
+    .from("prescriptions")
+    .select("*")
+    .eq("patient_id", patientId)
+    .order("prescribed_on", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data ?? null };
 }
 
 export async function fetchPrescriptionById(prescriptionId: string): Promise<ApiResult<PrescriptionRow>> {
@@ -527,6 +655,20 @@ export async function createPrescription(input: CreatePrescriptionInput): Promis
     .select()
     .single();
   if (error && error.code === "23505") {
+    // A retry of an already-saved submit (same client_request_id colliding with
+    // idx_prescriptions_client_request_id) -- this is success, per the idempotency contract, not
+    // an error, so callers that need the row (e.g. Save & Print, which must reuse the original
+    // id rather than fail silently) get it back instead of just a "already saved" message.
+    if (input.client_request_id) {
+      const existing = await supabase
+        .from("prescriptions")
+        .select("*")
+        .eq("client_request_id", input.client_request_id)
+        .maybeSingle();
+      if (!existing.error && existing.data) {
+        return { ok: true, data: existing.data };
+      }
+    }
     return { ok: false, error: "This prescription was already saved -- refresh to see it." };
   }
   if (error) return { ok: false, error: error.message };
@@ -805,4 +947,174 @@ export async function updateClinicLetterhead(
     .single();
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: { letterhead: (data.letterhead ?? {}) as ClinicLetterhead } };
+}
+
+// ---------------------------------------------------------------------------
+// Today's walk-in day-sheet (Phase 14A). Plain RLS-scoped inserts/updates throughout -- no RPC --
+// appointments_insert/appointments_update already enforce clinic/branch/patient ownership.
+// ---------------------------------------------------------------------------
+
+export type AppointmentRow = Database["public"]["Tables"]["appointments"]["Row"];
+
+export type AppointmentStatus =
+  | "scheduled"
+  | "completed"
+  | "no_show"
+  | "cancelled"
+  | "waiting"
+  | "in_chair"
+  | "done";
+
+export interface CreateWalkInInput {
+  clinic_id: string;
+  branch_id: string;
+  patient_id: string;
+}
+
+/** Adds a walk-in to today's in-clinic queue: status='waiting', checked_in_at=scheduled_at=now().
+ * "+ Walk-in" on the Today screen calls this directly. */
+export async function createWalkIn(input: CreateWalkInInput): Promise<ApiResult<AppointmentRow>> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("appointments")
+    .insert({
+      clinic_id: input.clinic_id,
+      branch_id: input.branch_id,
+      patient_id: input.patient_id,
+      scheduled_at: now,
+      checked_in_at: now,
+      status: "waiting",
+    })
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data };
+}
+
+/** Moves an appointment through the walk-in queue (waiting -> in_chair -> done). */
+export async function updateAppointmentStatus(
+  appointmentId: string,
+  status: AppointmentStatus,
+): Promise<ApiResult<{ id: string; status: string }>> {
+  const { data, error } = await supabase
+    .from("appointments")
+    .update({ status })
+    .eq("id", appointmentId)
+    .select("id, status")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data };
+}
+
+/** Links an appointment to the visit eventually recorded from it. Not called from
+ * ConsultationPage yet -- wiring that in is a follow-up phase once this function is confirmed
+ * (Phase 14A brief, Task 5). */
+export async function setAppointmentVisitId(
+  appointmentId: string,
+  visitId: string,
+): Promise<ApiResult<{ id: string; visit_id: string | null }>> {
+  const { data, error } = await supabase
+    .from("appointments")
+    .update({ visit_id: visitId })
+    .eq("id", appointmentId)
+    .select("id, visit_id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data };
+}
+
+export interface DaySheetEntry {
+  appointment_id: string;
+  status: string;
+  checked_in_at: string | null;
+  scheduled_at: string;
+  visit_id: string | null;
+  patient_id: string;
+  patient_name: string;
+  patient_age: number | null;
+  patient_gender: string | null;
+  patient_mobile: string;
+  visit_exists_today: boolean;
+  /** See fetchTodayDaySheet's doc comment -- this is a patient-level "any balance outstanding"
+   * flag, not a per-visit one; patient_payments has no visit_id to attribute a payment to a
+   * specific visit. */
+  payment_due: boolean;
+}
+
+interface DaySheetAppointmentRow {
+  id: string;
+  status: string;
+  checked_in_at: string | null;
+  scheduled_at: string;
+  visit_id: string | null;
+  patient_id: string;
+  patient: { name: string; age: number | null; gender: string | null; mobile: string } | null;
+}
+
+/** Today's in-clinic queue for the current clinic -- receptionists see their own branch, owners
+ * see every branch (same scoping as appointments_select), ordered by checked_in_at (old-style
+ * scheduled/recall appointments with no checked_in_at sort last).
+ *
+ * visit_exists_today: true once visit_id is set (Task 5), or -- before that link is made -- by
+ * falling back to "does this patient have a visit dated today".
+ *
+ * payment_due reuses patient_billing_summary (Phase 6A's view) rather than reimplementing the
+ * due-amount math, per the brief. That view is patient-level (sum of all visits vs. all
+ * payments), and patient_payments has no visit_id column to tie a payment to one specific visit --
+ * so this flag really answers "does this patient have any outstanding balance at all", not "is
+ * THIS visit specifically unpaid". Those coincide for a patient with a single visit (the common
+ * walk-in case); for a patient with older unpaid visits, today's visit will also show as due even
+ * if it alone was paid in full. */
+export async function fetchTodayDaySheet(): Promise<ApiResult<DaySheetEntry[]>> {
+  const todayStr = todayIST();
+  const startOfDay = new Date(`${todayStr}T00:00:00+05:30`);
+  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+
+  const { data: appts, error: apptError } = await supabase
+    .from("appointments")
+    .select(
+      "id, status, checked_in_at, scheduled_at, visit_id, patient_id, patient:patients(name, age, gender, mobile)",
+    )
+    .gte("scheduled_at", startOfDay.toISOString())
+    .lt("scheduled_at", endOfDay.toISOString())
+    .order("checked_in_at", { ascending: true, nullsFirst: false });
+  if (apptError) return { ok: false, error: apptError.message };
+
+  const rows = (appts ?? []) as unknown as DaySheetAppointmentRow[];
+  if (rows.length === 0) return { ok: true, data: [] };
+
+  const patientIds = Array.from(new Set(rows.map((r) => r.patient_id)));
+
+  const { data: visitsToday, error: visitsError } = await supabase
+    .from("visits")
+    .select("patient_id")
+    .in("patient_id", patientIds)
+    .eq("visit_date", todayStr);
+  if (visitsError) return { ok: false, error: visitsError.message };
+  const patientsWithVisitToday = new Set((visitsToday ?? []).map((v) => v.patient_id as string));
+
+  const { data: billing, error: billingError } = await supabase
+    .from("patient_billing_summary")
+    .select("patient_id, due")
+    .in("patient_id", patientIds);
+  if (billingError) return { ok: false, error: billingError.message };
+  const dueByPatient = new Map((billing ?? []).map((b) => [b.patient_id as string, Number(b.due ?? 0)]));
+
+  return {
+    ok: true,
+    data: rows.map((r) => ({
+      appointment_id: r.id,
+      status: r.status,
+      checked_in_at: r.checked_in_at,
+      scheduled_at: r.scheduled_at,
+      visit_id: r.visit_id,
+      patient_id: r.patient_id,
+      patient_name: r.patient?.name ?? "",
+      patient_age: r.patient?.age ?? null,
+      patient_gender: r.patient?.gender ?? null,
+      patient_mobile: r.patient?.mobile ?? "",
+      visit_exists_today: r.visit_id !== null || patientsWithVisitToday.has(r.patient_id),
+      payment_due: (dueByPatient.get(r.patient_id) ?? 0) > 0,
+    })),
+  };
 }
