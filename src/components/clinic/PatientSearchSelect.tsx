@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Search, X, Check, User, Phone, UserX } from "lucide-react";
+import { Search, X, Phone, UserX } from "lucide-react";
 import type { PatientRow } from "@/lib/clinic-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

@@ -26,6 +26,7 @@ import {
   createVisitWithRecall,
   createPrescription,
   fetchLatestPrescriptionForPatient,
+  fetchLatestCheckinVitalsForPatient,
   fetchMedicines,
   isAlreadySavedError,
   DEFAULT_MEDICAL_HISTORY,
@@ -294,7 +295,7 @@ export function ConsultationPage() {
       setLoading(true);
       setLoadError(null);
 
-      const [patientRes, ttRes, latestRxRes, visitRes, medRes] = await Promise.all([
+      const [patientRes, ttRes, latestRxRes, visitRes, medRes, checkinVitalsRes] = await Promise.all([
         supabase.from("patients").select("*").eq("id", patientId).maybeSingle(),
         supabase.from("treatment_types").select("*").eq("is_active", true).order("sort_order"),
         fetchLatestPrescriptionForPatient(patientId),
@@ -302,6 +303,9 @@ export function ConsultationPage() {
           ? supabase.from("visits").select("*").eq("id", visitId).eq("patient_id", patientId).maybeSingle()
           : Promise.resolve({ data: null, error: null }),
         fetchMedicines(),
+        !visitId
+          ? fetchLatestCheckinVitalsForPatient(patientId)
+          : Promise.resolve({ ok: true, data: null }),
       ]);
       if (!active) return;
 
@@ -321,6 +325,19 @@ export function ConsultationPage() {
       if (latestRxRes.ok) setLatestPrescription(latestRxRes.data);
       if (visitId) setExistingVisit(visitRes.data as VisitRow);
       if (medRes.ok) setMedicines(medRes.data);
+
+      if (checkinVitalsRes.ok && checkinVitalsRes.data) {
+        const vitals = checkinVitalsRes.data;
+        setRxDraft((prev) => ({
+          ...prev,
+          weight: vitals.checkin_weight ?? prev.weight,
+          blood_pressure: vitals.checkin_blood_pressure ?? prev.blood_pressure,
+          spo2: vitals.checkin_spo2 ?? prev.spo2,
+          chief_complaint: vitals.checkin_chief_complaint ?? prev.chief_complaint,
+          past_dental_history: vitals.checkin_past_dental_history ?? prev.past_dental_history,
+        }));
+      }
+
       setLoading(false);
     })();
 

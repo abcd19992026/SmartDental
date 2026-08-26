@@ -991,6 +991,43 @@ export async function createWalkIn(input: CreateWalkInInput): Promise<ApiResult<
   return { ok: true, data };
 }
 
+export interface CreatePatientAndQueueInput extends CreatePatientInput {
+  addToTodayQueue?: boolean;
+}
+
+export interface CreatePatientAndQueueResult {
+  patient: PatientRow;
+  queued: boolean;
+  queueError?: string;
+}
+
+/** Creates a patient and, when requested, adds them to today's walk-in queue.
+ * If the walk-in step fails, the already-created patient is still returned as a success --
+ * queue failure is surfaced via `queueError`, not as an overall error. */
+export async function createPatientAndQueue(
+  input: CreatePatientAndQueueInput,
+): Promise<ApiResult<CreatePatientAndQueueResult>> {
+  const { addToTodayQueue, ...patientInput } = input;
+  const patientRes = await createPatient(patientInput);
+  if (!patientRes.ok) return patientRes;
+
+  const patient = patientRes.data;
+  if (!addToTodayQueue) {
+    return { ok: true, data: { patient, queued: false } };
+  }
+
+  const walkInRes = await createWalkIn({
+    clinic_id: input.clinic_id,
+    branch_id: input.branch_id,
+    patient_id: patient.id,
+  });
+  if (!walkInRes.ok) {
+    return { ok: true, data: { patient, queued: false, queueError: walkInRes.error } };
+  }
+
+  return { ok: true, data: { patient, queued: true } };
+}
+
 /** Moves an appointment through the walk-in queue (waiting -> in_chair -> done). */
 export async function updateAppointmentStatus(
   appointmentId: string,
@@ -1118,3 +1155,57 @@ export async function fetchTodayDaySheet(): Promise<ApiResult<DaySheetEntry[]>> 
     })),
   };
 }
+
+export interface AppointmentCheckinVitals {
+  checkin_weight: string | null;
+  checkin_blood_pressure: string | null;
+  checkin_spo2: string | null;
+  checkin_chief_complaint: string | null;
+  checkin_past_dental_history: string | null;
+}
+
+/** Fetches the latest check-in vitals for a patient from active queue appointments (status waiting or in_chair). */
+export async function fetchLatestCheckinVitalsForPatient(
+  patientId: string,
+): Promise<ApiResult<AppointmentCheckinVitals | null>> {
+  const { data, error } = await supabase
+    .from("appointments")
+    .select(
+      "checkin_weight, checkin_blood_pressure, checkin_spo2, checkin_chief_complaint, checkin_past_dental_history",
+    )
+    .eq("patient_id", patientId)
+    .in("status", ["waiting", "in_chair"])
+    .not("checked_in_at", "is", null)
+    .order("checked_in_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data as AppointmentCheckinVitals | null };
+}
+
+export interface CheckInAppointmentInput {
+  appointment_id: string;
+  weight?: string | null;
+  blood_pressure?: string | null;
+  spo2?: string | null;
+  chief_complaint?: string | null;
+  past_dental_history?: string | null;
+}
+
+/** Check in a booked appointment with optional vitals and complaint, transitioning it to 'waiting'. */
+export async function checkInAppointment(
+  input: CheckInAppointmentInput,
+): Promise<ApiResult<{ id: string }>> {
+  const { data, error } = await (supabase.rpc as any)("check_in_appointment", {
+    p_appointment_id: input.appointment_id,
+    p_weight: input.weight ?? null,
+    p_blood_pressure: input.blood_pressure ?? null,
+    p_spo2: input.spo2 ?? null,
+    p_chief_complaint: input.chief_complaint ?? null,
+    p_past_dental_history: input.past_dental_history ?? null,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: { id: data as string } };
+}
+

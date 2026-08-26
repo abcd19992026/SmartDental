@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Search, Stethoscope, AlertCircle, Loader2, ChevronDown, ChevronUp, ClipboardPlus, Printer } from "lucide-react";
+import { Stethoscope, AlertCircle, Loader2, ChevronDown, ChevronUp, ClipboardPlus, Printer } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
 import { createVisitWithRecall, createPrescription, isAlreadySavedError } from "@/lib/clinic-api";

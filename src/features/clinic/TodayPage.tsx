@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Plus,
@@ -28,6 +28,7 @@ import {
   fetchTodayDaySheet,
   createWalkIn,
   updateAppointmentStatus,
+  checkInAppointment,
   createPatient,
   DEFAULT_MEDICAL_HISTORY,
   type DaySheetEntry,
@@ -132,8 +133,18 @@ export function TodayPage() {
   const [appointments, setAppointments] = useState<BookedAppointment[]>([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
-  const [checkingInApptId, setCheckingInApptId] = useState<string | null>(null);
   const [noShowApptId, setNoShowApptId] = useState<string | null>(null);
+
+  // Check-in Vitals Modal State (Phase 17B)
+  const [checkInModalOpen, setCheckInModalOpen] = useState(false);
+  const [checkInAppt, setCheckInAppt] = useState<BookedAppointment | null>(null);
+  const [checkInWeight, setCheckInWeight] = useState("");
+  const [checkInBloodPressure, setCheckInBloodPressure] = useState("");
+  const [checkInSpo2, setCheckInSpo2] = useState("");
+  const [checkInChiefComplaint, setCheckInChiefComplaint] = useState("");
+  const [checkInPastDentalHistory, setCheckInPastDentalHistory] = useState("");
+  const [submittingCheckIn, setSubmittingCheckIn] = useState(false);
+  const [checkInError, setCheckInError] = useState<string | null>(null);
 
   // ---- Recalls State ----
   const [recalls, setRecalls] = useState<JoinedRecall[]>([]);
@@ -526,22 +537,50 @@ export function TodayPage() {
   }
 
   // Task 3: "Patient Arrived" & "Mark No-show" handlers
-  async function handlePatientArrived(appt: BookedAppointment) {
-    setCheckingInApptId(appt.appointment_id);
-    const { error } = await (supabase.rpc as any)("check_in_appointment", {
-      p_appointment_id: appt.appointment_id,
-    });
-    setCheckingInApptId(null);
+  function handleOpenCheckInModal(appt: BookedAppointment) {
+    setCheckInAppt(appt);
+    setCheckInWeight("");
+    setCheckInBloodPressure("");
+    setCheckInSpo2("");
+    setCheckInChiefComplaint("");
+    setCheckInPastDentalHistory("");
+    setCheckInError(null);
+    setCheckInModalOpen(true);
+  }
 
-    if (error) {
-      toastError(error.message, "Check-in failed");
+  async function handleConfirmCheckIn(e: React.FormEvent) {
+    e.preventDefault();
+    if (!checkInAppt) return;
+
+    setSubmittingCheckIn(true);
+    setCheckInError(null);
+
+    const res = await checkInAppointment({
+      appointment_id: checkInAppt.appointment_id,
+      weight: checkInWeight.trim() || null,
+      blood_pressure: checkInBloodPressure.trim() || null,
+      spo2: checkInSpo2.trim() || null,
+      chief_complaint: checkInChiefComplaint.trim() || null,
+      past_dental_history: checkInPastDentalHistory.trim() || null,
+    });
+
+    setSubmittingCheckIn(false);
+
+    if (!res.ok) {
+      setCheckInError(res.error);
+      toastError(res.error, "Check-in failed");
       return;
     }
 
+    const apptId = checkInAppt.appointment_id;
+    const patientName = checkInAppt.patient_name;
+    setCheckInModalOpen(false);
+    setCheckInAppt(null);
+
     // Remove from appointments list and refetch Today's Day-sheet queue so patient visibly appears
-    setAppointments((prev) => prev.filter((a) => a.appointment_id !== appt.appointment_id));
+    setAppointments((prev) => prev.filter((a) => a.appointment_id !== apptId));
     loadDaySheetData();
-    success(`${appt.patient_name} checked in and added to queue.`);
+    success(`${patientName} checked in and added to queue.`);
   }
 
   async function handleMarkNoShow(appt: BookedAppointment) {
@@ -1214,22 +1253,18 @@ export function TodayPage() {
                               <div className="flex items-center justify-end gap-1.5">
                                 <Button
                                   size="sm"
-                                  onClick={() => handlePatientArrived(appt)}
-                                  disabled={checkingInApptId === appt.appointment_id || noShowApptId === appt.appointment_id}
+                                  onClick={() => handleOpenCheckInModal(appt)}
+                                  disabled={noShowApptId === appt.appointment_id}
                                   className="h-8 px-2.5 text-xs shadow-sm bg-primary text-primary-foreground hover:bg-primary/90"
                                 >
-                                  {checkingInApptId === appt.appointment_id ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                                  ) : (
-                                    <UserCheck className="h-3.5 w-3.5 mr-1" />
-                                  )}
+                                  <UserCheck className="h-3.5 w-3.5 mr-1" />
                                   Patient Arrived
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => handleMarkNoShow(appt)}
-                                  disabled={checkingInApptId === appt.appointment_id || noShowApptId === appt.appointment_id}
+                                  disabled={noShowApptId === appt.appointment_id}
                                   className="h-8 px-2.5 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                 >
                                   {noShowApptId === appt.appointment_id ? (
@@ -2088,6 +2123,109 @@ export function TodayPage() {
                 <Calendar className="h-4 w-4 mr-2" />
               )}
               Confirm Appointment
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL: PATIENT ARRIVED / CHECK-IN VITALS (Phase 17B) */}
+      {/* ========================================================================= */}
+      <Dialog open={checkInModalOpen} onOpenChange={setCheckInModalOpen}>
+        <form onSubmit={handleConfirmCheckIn}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck className="h-5 w-5 text-primary" />
+              Patient Check-In
+            </DialogTitle>
+            <DialogDescription>
+              Capture vitals and chief complaint for{" "}
+              <span className="font-semibold text-foreground">{checkInAppt?.patient_name}</span>.
+              All fields are optional.
+            </DialogDescription>
+          </DialogHeader>
+
+          {checkInError && (
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{checkInError}</span>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-4 py-4 max-h-[65vh] overflow-y-auto px-1">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ci-weight" className="text-xs">Weight</Label>
+                <Input
+                  id="ci-weight"
+                  placeholder="e.g. 68 kg"
+                  value={checkInWeight}
+                  onChange={(e) => setCheckInWeight(e.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ci-bp" className="text-xs">Blood Pressure</Label>
+                <Input
+                  id="ci-bp"
+                  placeholder="e.g. 120/80 mmHg"
+                  value={checkInBloodPressure}
+                  onChange={(e) => setCheckInBloodPressure(e.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ci-spo2" className="text-xs">SpO2</Label>
+                <Input
+                  id="ci-spo2"
+                  placeholder="e.g. 98%"
+                  value={checkInSpo2}
+                  onChange={(e) => setCheckInSpo2(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ci-chief-complaint" className="text-xs">Chief Complaint</Label>
+              <textarea
+                id="ci-chief-complaint"
+                rows={2}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                placeholder="Patient's primary concern or symptoms (e.g. Severe toothache lower right molar)"
+                value={checkInChiefComplaint}
+                onChange={(e) => setCheckInChiefComplaint(e.target.value)}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ci-past-dental" className="text-xs">Past Dental History</Label>
+              <textarea
+                id="ci-past-dental"
+                rows={2}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                placeholder="Prior dental treatments, restorations, extractions, or complications"
+                value={checkInPastDentalHistory}
+                onChange={(e) => setCheckInPastDentalHistory(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCheckInModalOpen(false)}
+              disabled={submittingCheckIn}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submittingCheckIn}>
+              {submittingCheckIn ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <UserCheck className="h-4 w-4 mr-2" />
+              )}
+              Confirm Check-In
             </Button>
           </DialogFooter>
         </form>
