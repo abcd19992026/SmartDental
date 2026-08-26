@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
   Building2,
@@ -13,6 +13,7 @@ import {
   Copy,
   Check,
   KeyRound,
+  LogIn,
   Power,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -20,6 +21,7 @@ import { resetUserPassword, setUserActive } from "@/lib/admin-api";
 import { formatDateIST, todayIST } from "@/lib/dates";
 import type { Database } from "@/types/database.types";
 import { useToast } from "@/components/ui/toast";
+import { useAuth } from "@/auth/useAuth";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +43,9 @@ type TemplateRow = Database["public"]["Tables"]["whatsapp_templates"]["Row"];
 
 export function ClinicDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { success, error: toastError } = useToast();
+  const { startImpersonation } = useAuth();
 
   const [clinic, setClinic] = useState<ClinicRow | null>(null);
   const [branches, setBranches] = useState<BranchRow[]>([]);
@@ -364,6 +368,15 @@ export function ClinicDetailPage() {
   }
 
   // --- Users Tab Actions ---
+  async function handleOpenPanel(u: ProfileRow) {
+    const res = await startImpersonation(u.id);
+    if (!res.ok) {
+      toastError(res.error || "Could not open panel for this user.", "Open Panel Failed");
+      return;
+    }
+    navigate("/app");
+  }
+
   async function handleResetPassword(u: ProfileRow) {
     setDestructiveAction({
       title: "Reset User Password",
@@ -928,6 +941,26 @@ export function ClinicDetailPage() {
                           )}
                         </td>
                         <td className="py-3 px-4 text-right flex justify-end gap-2">
+                          <Tooltip
+                            disabled={u.role !== "super_admin" && u.is_active}
+                            content={
+                              u.role === "super_admin"
+                                ? "Cannot open a panel as another platform admin"
+                                : "Cannot open a panel for an inactive user"
+                            }
+                          >
+                            <span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={u.role === "super_admin" || !u.is_active}
+                                onClick={() => handleOpenPanel(u)}
+                              >
+                                <LogIn className="h-3.5 w-3.5 mr-1" />
+                                Open Panel
+                              </Button>
+                            </span>
+                          </Tooltip>
                           <Button variant="outline" size="sm" onClick={() => handleResetPassword(u)}>
                             <KeyRound className="h-3.5 w-3.5 mr-1" />
                             Reset Password

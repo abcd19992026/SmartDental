@@ -4,6 +4,7 @@ import { CalendarClock, Users, Settings, MessageSquare } from "lucide-react";
 import { useAuth } from "@/auth/useAuth";
 import { Sidebar, type NavItem } from "@/layouts/components/Sidebar";
 import { TopBar } from "@/layouts/components/TopBar";
+import { ImpersonationBanner } from "@/layouts/components/ImpersonationBanner";
 import { SubscriptionGate } from "@/features/access-gate/SubscriptionGate";
 import { ToastProvider } from "@/components/ui/toast";
 
@@ -31,6 +32,7 @@ export function ClinicShell() {
             onMobileOpenChange={setMobileNavOpen}
           />
           <div className="flex flex-1 flex-col h-screen overflow-hidden">
+            <ImpersonationBanner />
             <TopBar onOpenMobileNav={() => setMobileNavOpen(true)} />
             <main className="flex-1 overflow-y-auto p-4 sm:p-6">
               <Outlet />
