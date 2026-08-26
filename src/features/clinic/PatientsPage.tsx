@@ -19,7 +19,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
 import { formatDateIST } from "@/lib/dates";
 import {
-  createPatient,
+  createPatientAndQueue,
   updatePatientClinicalProfile,
   DEFAULT_MEDICAL_HISTORY,
   type MedicalHistory,
@@ -79,7 +79,7 @@ export function PatientsPage() {
   const activePatientId = searchParams.get("id");
 
   const { profile } = useAuth();
-  const { success, error: toastError } = useToast();
+  const { toast, success, error: toastError } = useToast();
 
   const [patients, setPatients] = useState<JoinedPatient[]>([]);
   const [branches, setBranches] = useState<BranchRow[]>([]);
@@ -95,6 +95,7 @@ export function PatientsPage() {
   // Add / Edit Patient Panel
   const [patientModalOpen, setPatientModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<PatientRow | null>(null);
+  const [addToTodayQueue, setAddToTodayQueue] = useState(false);
   const [patientForm, setPatientForm] = useState<{
     name: string;
     mobile: string;
@@ -225,6 +226,7 @@ export function PatientsPage() {
     setEditingPatient(null);
     setDuplicateMatchId(null);
     setDuplicateError(null);
+    setAddToTodayQueue(false);
     setPatientForm({
       name: "",
       mobile: "",
@@ -341,7 +343,7 @@ export function PatientsPage() {
       setPatientModalOpen(false);
       loadPatientsData();
     } else {
-      const result = await createPatient({
+      const result = await createPatientAndQueue({
         clinic_id: profile?.clinic_id!,
         branch_id: patientForm.branch_id,
         name: patientForm.name.trim(),
@@ -354,6 +356,7 @@ export function PatientsPage() {
         occupation: patientForm.occupation.trim() || null,
         height: patientForm.height.trim() || null,
         medical_history: sanitizedMedicalHistory,
+        addToTodayQueue,
       });
 
       if (!result.ok) {
@@ -371,10 +374,21 @@ export function PatientsPage() {
         return;
       }
 
-      success("Patient created successfully.");
+      if (result.data.queued === true) {
+        success("Patient created and added to today's queue.");
+      } else if (result.data.queueError) {
+        toast({
+          title: "Patient created",
+          description: "Could not add to today's queue — add manually via +Walk-in on the Today page.",
+          type: "info",
+        });
+      } else {
+        success("Patient created successfully.");
+      }
+
       setPatientModalOpen(false);
       loadPatientsData();
-      if (result.data) setSearchParams({ id: result.data.id });
+      if (result.data?.patient) setSearchParams({ id: result.data.patient.id });
     }
   }
 
@@ -1227,6 +1241,27 @@ export function PatientsPage() {
                 </div>
               )}
             </div>
+
+            {/* Optional Queue Placement (New Patients Only) */}
+            {!editingPatient && (
+              <div className="flex items-start gap-2.5 pt-3 border-t border-border">
+                <input
+                  id="p-add-to-queue"
+                  type="checkbox"
+                  checked={addToTodayQueue}
+                  onChange={(e) => setAddToTodayQueue(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                />
+                <div className="flex flex-col gap-0.5">
+                  <Label htmlFor="p-add-to-queue" className="text-xs font-medium cursor-pointer">
+                    Add to today's in-clinic queue
+                  </Label>
+                  <span className="text-[11px] text-muted-foreground">
+                    Doctor will see this patient in Today's queue right away.
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter className="border-t border-border pt-3">
