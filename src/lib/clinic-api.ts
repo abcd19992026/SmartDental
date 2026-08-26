@@ -244,8 +244,8 @@ interface PatientPaymentHistoryRow {
   voided_at: string | null;
   voided_by: string | null;
   void_reason: string | null;
-  creator: { full_name: string | null } | null;
-  voider: { full_name: string | null } | null;
+  creator: { full_name: string | null; role?: string | null } | null;
+  voider: { full_name: string | null; role?: string | null } | null;
 }
 
 /** Newest first (paid_on, then created_at as a tiebreaker for same-day entries). Includes the
@@ -256,8 +256,8 @@ export async function fetchPaymentHistory(patientId: string): Promise<ApiResult<
     .from("patient_payments")
     .select(
       `id, amount, mode, paid_on, notes, created_at, created_by, voided_at, voided_by, void_reason,
-       creator:profiles!patient_payments_created_by_fkey(full_name),
-       voider:profiles!patient_payments_voided_by_fkey(full_name)`,
+       creator:profiles!patient_payments_created_by_fkey(full_name, role),
+       voider:profiles!patient_payments_voided_by_fkey(full_name, role)`,
     )
     .eq("patient_id", patientId)
     .order("paid_on", { ascending: false })
@@ -275,11 +275,11 @@ export async function fetchPaymentHistory(patientId: string): Promise<ApiResult<
       notes: row.notes,
       created_at: row.created_at,
       created_by: row.created_by,
-      created_by_name: row.creator?.full_name ?? null,
+      created_by_name: row.creator?.role === "super_admin" ? null : (row.creator?.full_name ?? null),
       is_voided: row.voided_at !== null,
       voided_at: row.voided_at,
       voided_by: row.voided_by,
-      voided_by_name: row.voider?.full_name ?? null,
+      voided_by_name: row.voider?.role === "super_admin" ? null : (row.voider?.full_name ?? null),
       void_reason: row.void_reason,
     })),
   };

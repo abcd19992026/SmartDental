@@ -120,8 +120,12 @@ export function PaymentHistoryCard({
 
                       <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                         <span>Paid on {formatDateIST(p.paid_on)}</span>
-                        <span>•</span>
-                        <span>Recorded by {p.created_by_name || "Staff"}</span>
+                        {p.created_by_name && (
+                          <>
+                            <span>•</span>
+                            <span>Recorded by {p.created_by_name}</span>
+                          </>
+                        )}
                       </div>
 
                       {p.notes && (
