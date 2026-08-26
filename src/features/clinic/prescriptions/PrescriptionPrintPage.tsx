@@ -508,6 +508,12 @@ export function PrescriptionPrintPage() {
             </div>
           </div>
 
+          {clinic.show_branding && (
+            <div className="text-center text-[10px] text-gray-1000 pb-2 ">
+              Powered by SmartDentist{clinic.branding_domain ? ` · ${clinic.branding_domain}` : ""}
+            </div>
+          )}
+
           {/* Footer -- structured and labelled, matching real printed slip */}
           <footer className="border-t border-gray-400 pt-2 text-[10px] leading-[1.4] text-gray-800 space-y-0.5 break-inside-avoid">
             {(lh.timings || lh.sunday_timings) && (

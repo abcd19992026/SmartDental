@@ -919,12 +919,14 @@ export interface ClinicLetterheadData {
   email: string | null;
   logo_url: string | null;
   letterhead: ClinicLetterhead;
+  show_branding: boolean;
+  branding_domain: string | null;
 }
 
 export async function fetchClinicLetterheadData(clinicId: string): Promise<ApiResult<ClinicLetterheadData>> {
   const { data, error } = await supabase
     .from("clinics")
-    .select("id, name, phone, address, email, logo_url, letterhead")
+    .select("id, name, phone, address, email, logo_url, letterhead, show_branding, branding_domain")
     .eq("id", clinicId)
     .maybeSingle();
   if (error) return { ok: false, error: error.message };

@@ -287,6 +287,8 @@ export function ClinicDetailPage() {
         monthly_message_quota: planForm.monthly_message_quota,
         included_branches: includedBranches,
         included_receptionists: includedReceptionists,
+        show_branding: planForm.show_branding,
+        branding_domain: planForm.branding_domain?.trim() || null,
       })
       .eq("id", id);
 
@@ -809,6 +811,34 @@ export function ClinicDetailPage() {
                     <span className="text-xs text-muted-foreground">
                       {activeReceptionistCount} active receptionist{activeReceptionistCount === 1 ? "" : "s"} right now
                     </span>
+                  </div>
+                </div>
+
+                {/* Prescription Branding */}
+                <div className="rounded-lg border border-border bg-muted/30 p-4 mt-2">
+                  <h4 className="font-medium text-foreground mb-3">Prescription branding</h4>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="p-show-branding"
+                      checked={planForm.show_branding ?? true}
+                      onChange={(e) => setPlanForm({ ...planForm, show_branding: e.target.checked })}
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                    />
+                    <Label htmlFor="p-show-branding" className="cursor-pointer font-medium">
+                      Show "Powered by SmartDentist" on printed prescriptions
+                    </Label>
+                  </div>
+                  <div className="flex flex-col gap-1.5 mt-3 max-w-xs">
+                    <Label htmlFor="p-branding-domain">Branding domain (optional)</Label>
+                    <Input
+                      id="p-branding-domain"
+                      placeholder="smartdentist.in"
+                      disabled={!(planForm.show_branding ?? true)}
+                      value={planForm.branding_domain || ""}
+                      onChange={(e) => setPlanForm({ ...planForm, branding_domain: e.target.value })}
+                    />
+                    <span className="text-xs text-muted-foreground">Leave blank to show the name only.</span>
                   </div>
                 </div>
 

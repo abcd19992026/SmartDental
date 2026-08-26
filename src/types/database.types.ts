@@ -285,6 +285,7 @@ export type Database = {
       clinics: {
         Row: {
           address: string | null
+          branding_domain: string | null
           city: string | null
           created_at: string
           daily_message_cap: number
@@ -304,6 +305,7 @@ export type Database = {
           plan_name: string
           plan_started_on: string | null
           send_time: string
+          show_branding: boolean
           suspension_reason: string | null
           updated_at: string
           waba_business_id: string | null
@@ -312,6 +314,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          branding_domain?: string | null
           city?: string | null
           created_at?: string
           daily_message_cap?: number
@@ -331,6 +334,7 @@ export type Database = {
           plan_name?: string
           plan_started_on?: string | null
           send_time?: string
+          show_branding?: boolean
           suspension_reason?: string | null
           updated_at?: string
           waba_business_id?: string | null
@@ -339,6 +343,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          branding_domain?: string | null
           city?: string | null
           created_at?: string
           daily_message_cap?: number
@@ -358,6 +363,7 @@ export type Database = {
           plan_name?: string
           plan_started_on?: string | null
           send_time?: string
+          show_branding?: boolean
           suspension_reason?: string | null
           updated_at?: string
           waba_business_id?: string | null
