@@ -151,6 +151,11 @@ Deno.serve(async (req) => {
   if (result.ok) {
     return json({ success: true, wa_message_id: result.waMessageId, recall_id: input.recall_id }, 200, cors);
   }
+  if (result.skipped) {
+    // Required field (patient/treatment/visit/due-date/clinic name) missing -- no message_log
+    // row was inserted, no Graph API call was made. Distinct from a real Meta failure below.
+    return json({ success: false, error: result.reason, recall_id: input.recall_id }, 200, cors);
+  }
   // Meta's exact error is returned unmodified -- the caller needs the real error to diagnose a
   // WABA/template config problem, not a generic "send failed" message.
   return json(

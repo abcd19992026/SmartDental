@@ -45,6 +45,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AddPaymentModal } from "@/features/clinic/billing/AddPaymentModal";
 import { ActiveRecallsPopover } from "@/components/clinic/ActiveRecallsPopover";
+import { PatientSearchSelect } from "@/components/clinic/PatientSearchSelect";
 import { cn } from "@/lib/utils";
 
 type RecallRow = Database["public"]["Tables"]["recalls"]["Row"];
@@ -56,6 +57,17 @@ type TreatmentTypeRow = Database["public"]["Tables"]["treatment_types"]["Row"];
 interface JoinedRecall extends RecallRow {
   patient?: PatientRow | null;
   visit?: (VisitRow & { treatment_type?: TreatmentTypeRow | null }) | null;
+}
+
+interface BookedAppointment {
+  appointment_id: string;
+  patient_id: string;
+  patient_name: string;
+  patient_mobile: string;
+  branch_id?: string | null;
+  branch_name?: string | null;
+  scheduled_at: string;
+  notes?: string | null;
 }
 
 function formatTimeIST(isoString: string | null | undefined): string {
@@ -72,12 +84,42 @@ function formatTimeIST(isoString: string | null | undefined): string {
   }
 }
 
+function formatScheduledDateTime(isoString: string): string {
+  try {
+    const d = new Date(isoString);
+    const datePart = d.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "Asia/Kolkata",
+    });
+    const timePart = d.toLocaleTimeString("en-IN", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "Asia/Kolkata",
+    });
+    return `${datePart}, ${timePart}`;
+  } catch {
+    return isoString;
+  }
+}
+
+function isTodayISTDate(isoString: string): boolean {
+  try {
+    const apptDate = new Date(isoString).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    return apptDate === todayIST();
+  } catch {
+    return false;
+  }
+}
+
 export function TodayPage() {
   const { profile } = useAuth();
   const { success, error: toastError } = useToast();
   const navigate = useNavigate();
 
-  // Active top-level Tab ("in_clinic" | "recalls") -- default "in_clinic" per Task 1
+  // Active top-level Tab ("in_clinic" | "appointments" | "recalls") -- default "in_clinic"
   const [activeTab, setActiveTab] = useState<string>("in_clinic");
 
   // ---- Day Sheet ("In Clinic") State ----
@@ -85,6 +127,13 @@ export function TodayPage() {
   const [daySheetLoading, setDaySheetLoading] = useState(true);
   const [daySheetError, setDaySheetError] = useState<string | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+
+  // ---- Booked Appointments State (Phase 1 Appointments System) ----
+  const [appointments, setAppointments] = useState<BookedAppointment[]>([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
+  const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
+  const [checkingInApptId, setCheckingInApptId] = useState<string | null>(null);
+  const [noShowApptId, setNoShowApptId] = useState<string | null>(null);
 
   // ---- Recalls State ----
   const [recalls, setRecalls] = useState<JoinedRecall[]>([]);
@@ -106,7 +155,6 @@ export function TodayPage() {
 
   // Walk-in Modal State
   const [walkInModalOpen, setWalkInModalOpen] = useState(false);
-  const [walkInSearch, setWalkInSearch] = useState("");
   const [selectedWalkInPatientId, setSelectedWalkInPatientId] = useState("");
   const [isNewWalkInPatient, setIsNewWalkInPatient] = useState(false);
   const [newWalkInName, setNewWalkInName] = useState("");
@@ -118,11 +166,8 @@ export function TodayPage() {
   const [walkInError, setWalkInError] = useState<string | null>(null);
   const [allPatients, setAllPatients] = useState<PatientRow[]>([]);
 
-  // Recalls tab "+ Add Visit" patient picker (Phase 15A -- retires AddVisitModal). Same
-  // search-existing-or-create-inline pattern as the walk-in picker above (reuses allPatients),
-  // just followed by a navigate() into ConsultationPage instead of an in-place visit form.
+  // Recalls tab "+ Add Visit" patient picker (Phase 15A -- retires AddVisitModal).
   const [addVisitPickerOpen, setAddVisitPickerOpen] = useState(false);
-  const [addVisitPatientSearch, setAddVisitPatientSearch] = useState("");
   const [selectedAddVisitPatientId, setSelectedAddVisitPatientId] = useState("");
   const [isNewAddVisitPatient, setIsNewAddVisitPatient] = useState(false);
   const [newAddVisitName, setNewAddVisitName] = useState("");
@@ -133,12 +178,24 @@ export function TodayPage() {
   const [submittingAddVisitPicker, setSubmittingAddVisitPicker] = useState(false);
   const [addVisitPickerError, setAddVisitPickerError] = useState<string | null>(null);
 
+  // "Book Visit" -> Book Appointment Modal State (Task 1 & Phase 16B addendum)
+  const [bookApptModalOpen, setBookApptModalOpen] = useState(false);
+  const [bookingPatient, setBookingPatient] = useState<{ id: string; name: string; mobile?: string } | null>(null);
+  const [bookingRecallId, setBookingRecallId] = useState<string | null>(null);
+  const [bookingDate, setBookingDate] = useState<string>("");
+  const [bookingTime, setBookingTime] = useState<string>("10:00");
+  const [bookingBranchId, setBookingBranchId] = useState<string>("");
+  const [bookingNotes, setBookingNotes] = useState<string>("");
+  const [submittingBooking, setSubmittingBooking] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+
   // Owner-only manual "Send Now" trigger
   const [sendingNowId, setSendingNowId] = useState<string | null>(null);
 
   useEffect(() => {
     loadTodayData();
     loadDaySheetData();
+    loadAppointmentsData();
   }, []);
 
   async function loadDaySheetData() {
@@ -151,6 +208,18 @@ export function TodayPage() {
       setDaySheetError(res.error);
     }
     setDaySheetLoading(false);
+  }
+
+  async function loadAppointmentsData() {
+    setAppointmentsLoading(true);
+    setAppointmentsError(null);
+    const { data, error } = await (supabase.rpc as any)("get_appointments");
+    if (error) {
+      setAppointmentsError(error.message);
+    } else {
+      setAppointments((data as BookedAppointment[]) || []);
+    }
+    setAppointmentsLoading(false);
   }
 
   async function loadTodayData() {
@@ -186,6 +255,9 @@ export function TodayPage() {
       if (bRes.data.length > 0 && !walkInBranchId) {
         setWalkInBranchId(profile?.branch_id || bRes.data[0].id);
       }
+      if (bRes.data.length > 0 && !bookingBranchId) {
+        setBookingBranchId(profile?.branch_id || bRes.data[0].id);
+      }
     }
     if (vRes.count !== null) setVisitsThisMonth(vRes.count);
     if (mRes.count !== null) setSentTodayCount(mRes.count);
@@ -201,21 +273,12 @@ export function TodayPage() {
     setNewWalkInMobile("");
     setNewWalkInAge("");
     setNewWalkInGender("male");
-    setWalkInSearch("");
     setWalkInBranchId(profile?.branch_id || (branches.length > 0 ? branches[0].id : ""));
     setWalkInModalOpen(true);
 
     const { data: pData } = await supabase.from("patients").select("*").eq("is_active", true).order("name");
     if (pData) setAllPatients(pData);
   }
-
-  const filteredWalkInPatients = useMemo(() => {
-    if (!walkInSearch.trim()) return allPatients.slice(0, 50);
-    const q = walkInSearch.toLowerCase().trim();
-    return allPatients
-      .filter((p) => p.name.toLowerCase().includes(q) || p.mobile.includes(q))
-      .slice(0, 50);
-  }, [allPatients, walkInSearch]);
 
   async function handleConfirmWalkIn(e: React.FormEvent) {
     e.preventDefault();
@@ -301,6 +364,7 @@ export function TodayPage() {
     loadDaySheetData();
   }
 
+  // Recalls tab "+ Add Visit" Patient Picker
   async function openAddVisitPatientPicker() {
     setAddVisitPickerError(null);
     setSelectedAddVisitPatientId("");
@@ -309,7 +373,6 @@ export function TodayPage() {
     setNewAddVisitMobile("");
     setNewAddVisitAge("");
     setNewAddVisitGender("male");
-    setAddVisitPatientSearch("");
     setAddVisitBranchId(profile?.branch_id || (branches.length > 0 ? branches[0].id : ""));
     setAddVisitPickerOpen(true);
 
@@ -317,47 +380,46 @@ export function TodayPage() {
     if (pData) setAllPatients(pData);
   }
 
-  const filteredAddVisitPatients = useMemo(() => {
-    if (!addVisitPatientSearch.trim()) return allPatients.slice(0, 50);
-    const q = addVisitPatientSearch.toLowerCase().trim();
-    return allPatients
-      .filter((p) => p.name.toLowerCase().includes(q) || p.mobile.includes(q))
-      .slice(0, 50);
-  }, [allPatients, addVisitPatientSearch]);
-
-  /** Resolves a patient (existing or created inline) then navigates into ConsultationPage's
-   * normal new-visit mode (no ?visitId=) -- this dialog only ever picks a patient, it never
-   * creates the visit itself (that's ConsultationPage's job, same as PatientsPage's "Record
-   * Visit" button). */
   async function handleConfirmAddVisitPicker(e: React.FormEvent) {
     e.preventDefault();
     setAddVisitPickerError(null);
+    setSubmittingAddVisitPicker(true);
+
+    if (!profile?.clinic_id) {
+      setAddVisitPickerError("Clinic profile not loaded.");
+      setSubmittingAddVisitPicker(false);
+      return;
+    }
+
+    const activeBranchId =
+      profile.role === "owner" && branches.length > 1 && addVisitBranchId
+        ? addVisitBranchId
+        : profile.branch_id || (branches.length > 0 ? branches[0].id : "");
+
+    if (!activeBranchId) {
+      setAddVisitPickerError("Branch could not be determined.");
+      setSubmittingAddVisitPicker(false);
+      return;
+    }
+
+    let finalPatientId = selectedAddVisitPatientId;
 
     if (isNewAddVisitPatient) {
-      if (!profile?.clinic_id) {
-        setAddVisitPickerError("Clinic profile not loaded.");
-        return;
-      }
       if (!newAddVisitName.trim()) {
         setAddVisitPickerError("Patient full name is required.");
+        setSubmittingAddVisitPicker(false);
         return;
       }
       const cleanMob = newAddVisitMobile.replace(/\D/g, "");
       if (cleanMob.length !== 10) {
         setAddVisitPickerError("Please enter a valid 10-digit mobile number.");
-        return;
-      }
-      const targetBranchId =
-        profile.role === "receptionist" ? profile.branch_id : addVisitBranchId;
-      if (!targetBranchId) {
-        setAddVisitPickerError("Please select a branch for the new patient.");
+        setSubmittingAddVisitPicker(false);
         return;
       }
 
-      setSubmittingAddVisitPicker(true);
       const patientRes = await createPatient({
         clinic_id: profile.clinic_id,
-        branch_id: targetBranchId,
+        branch_id: activeBranchId,
         name: newAddVisitName.trim(),
         mobile: cleanMob,
         age: newAddVisitAge ? parseInt(newAddVisitAge, 10) : null,
@@ -368,26 +430,137 @@ export function TodayPage() {
         height: null,
         medical_history: DEFAULT_MEDICAL_HISTORY,
       });
-      setSubmittingAddVisitPicker(false);
 
       if (!patientRes.ok) {
         setAddVisitPickerError(patientRes.error);
+        setSubmittingAddVisitPicker(false);
         return;
       }
-      setAddVisitPickerOpen(false);
-      navigate(`/app/patients/${patientRes.data.id}/consultation`);
-      return;
+
+      finalPatientId = patientRes.data.id;
+    } else {
+      if (!finalPatientId) {
+        setAddVisitPickerError("Please select a patient or add a new patient.");
+        setSubmittingAddVisitPicker(false);
+        return;
+      }
     }
 
-    if (!selectedAddVisitPatientId) {
-      setAddVisitPickerError("Please select a patient or add a new patient.");
-      return;
-    }
+    setSubmittingAddVisitPicker(false);
     setAddVisitPickerOpen(false);
-    navigate(`/app/patients/${selectedAddVisitPatientId}/consultation`);
+    navigate(`/app/patients/${finalPatientId}/consultation`);
   }
 
-  // Action button handlers for DaySheet entries (Task 2)
+  // Task 1: "Book Visit" -> Open Date/Time Appointment Modal with Recall Context (Phase 16B)
+  function openBookAppointmentModal(r: JoinedRecall) {
+    setBookingPatient({
+      id: r.patient_id,
+      name: r.patient?.name || "Patient",
+      mobile: r.patient?.mobile || undefined,
+    });
+    setBookingRecallId(r.id);
+    setBookingDate(todayIST());
+    setBookingTime("10:00");
+    setBookingBranchId(profile?.branch_id || (branches.length > 0 ? branches[0].id : ""));
+    setBookingNotes(r.notes ? r.notes.replace(/^Patient reply:\s*/i, "") : "");
+    setBookingError(null);
+    setBookApptModalOpen(true);
+  }
+
+  async function handleConfirmBookAppointment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!bookingPatient) return;
+    setBookingError(null);
+    setSubmittingBooking(true);
+
+    if (!bookingDate || !bookingTime) {
+      setBookingError("Please select both date and time.");
+      setSubmittingBooking(false);
+      return;
+    }
+
+    // Owner check: MUST pass branch id
+    let branchToPass: string | null = null;
+    if (profile?.role === "owner") {
+      if (!bookingBranchId) {
+        setBookingError("Please select a branch for this appointment.");
+        setSubmittingBooking(false);
+        return;
+      }
+      branchToPass = bookingBranchId;
+    }
+
+    // Combine date + time into ISO timestamptz string in Asia/Kolkata timezone
+    const scheduledIso = new Date(`${bookingDate}T${bookingTime}:00+05:30`).toISOString();
+
+    const rpcParams: Record<string, any> = {
+      p_patient_id: bookingPatient.id,
+      p_scheduled_at: scheduledIso,
+    };
+    if (branchToPass) {
+      rpcParams.p_branch_id = branchToPass;
+    }
+    if (bookingNotes.trim()) {
+      rpcParams.p_notes = bookingNotes.trim();
+    }
+    if (bookingRecallId) {
+      rpcParams.p_recall_id = bookingRecallId;
+    }
+
+    const { error } = await (supabase.rpc as any)("create_appointment", rpcParams);
+
+    if (error) {
+      setBookingError(error.message);
+      toastError(error.message, "Booking Failed");
+      setSubmittingBooking(false);
+      return;
+    }
+
+    success(`Appointment booked for ${bookingPatient.name}.`);
+    setSubmittingBooking(false);
+    setBookApptModalOpen(false);
+    setBookingRecallId(null);
+    loadAppointmentsData();
+    loadTodayData();
+    loadDaySheetData();
+  }
+
+  // Task 3: "Patient Arrived" & "Mark No-show" handlers
+  async function handlePatientArrived(appt: BookedAppointment) {
+    setCheckingInApptId(appt.appointment_id);
+    const { error } = await (supabase.rpc as any)("check_in_appointment", {
+      p_appointment_id: appt.appointment_id,
+    });
+    setCheckingInApptId(null);
+
+    if (error) {
+      toastError(error.message, "Check-in failed");
+      return;
+    }
+
+    // Remove from appointments list and refetch Today's Day-sheet queue so patient visibly appears
+    setAppointments((prev) => prev.filter((a) => a.appointment_id !== appt.appointment_id));
+    loadDaySheetData();
+    success(`${appt.patient_name} checked in and added to queue.`);
+  }
+
+  async function handleMarkNoShow(appt: BookedAppointment) {
+    setNoShowApptId(appt.appointment_id);
+    const { error } = await (supabase.rpc as any)("mark_appointment_no_show", {
+      p_appointment_id: appt.appointment_id,
+    });
+    setNoShowApptId(null);
+
+    if (error) {
+      toastError(error.message, "Action failed");
+      return;
+    }
+
+    setAppointments((prev) => prev.filter((a) => a.appointment_id !== appt.appointment_id));
+    success(`Appointment for ${appt.patient_name} marked as no-show.`);
+  }
+
+  // Action button handlers for DaySheet entries
   async function handleStartConsultation(entry: DaySheetEntry) {
     setUpdatingStatusId(entry.appointment_id);
     const res = await updateAppointmentStatus(entry.appointment_id, "in_chair");
@@ -425,9 +598,12 @@ export function TodayPage() {
     (r) => r.status === "pending" && r.due_date === todayStr
   ).length;
 
-  const repliesWaitingRecalls = recalls.filter(
-    (r) => r.reply_received_at && (!r.reply_dismissed_at || r.reply_dismissed_at < r.reply_received_at)
-  );
+  // "Replies waiting" means "patient replied AND staff has not yet acted" -- that's exactly
+  // status = 'contacted' (set by the webhook on reply; moved off by staff booking/declining it,
+  // or a visit completing it). status is the single source of truth here, not the presence of a
+  // reply note -- a reply note can be stale on an already-terminal recall (booked/declined/
+  // completed), which must not surface it as still needing action.
+  const repliesWaitingRecalls = recalls.filter((r) => r.status === "contacted");
   const repliesWaitingCount = repliesWaitingRecalls.length;
 
   // Monthly stats calculation for Recalls
@@ -655,13 +831,13 @@ export function TodayPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Top Tabs & Action Row (Task 1) */}
+      {/* Top Tabs & Action Row */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
           <div>
             <h1 className="text-xl font-semibold text-foreground tracking-tight">Today's Clinic Activity</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Live in-clinic patient queue, walk-in management, and preventive recall tracking
+              Live in-clinic patient queue, appointments schedule, and preventive recall tracking
             </p>
           </div>
 
@@ -673,6 +849,18 @@ export function TodayPage() {
                 {daySheet.length > 0 && (
                   <Badge variant="outline" className="ml-1 text-[10px] py-0 px-1.5 font-normal">
                     {daySheet.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="appointments" className="flex items-center gap-1.5 px-3.5 text-xs">
+                <Calendar className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                Appointments
+                {appointments.length > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="ml-1 text-[10px] py-0 px-1.5 font-normal border-indigo-600/30 text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40"
+                  >
+                    {appointments.length}
                   </Badge>
                 )}
               </TabsTrigger>
@@ -690,12 +878,13 @@ export function TodayPage() {
               </TabsTrigger>
             </TabsList>
 
-            {activeTab === "in_clinic" ? (
+            {activeTab === "in_clinic" && (
               <Button size="sm" onClick={openWalkInModal} className="shadow-sm h-9">
                 <Plus className="h-4 w-4 mr-1.5" />
                 + Walk-in
               </Button>
-            ) : (
+            )}
+            {activeTab === "recalls" && (
               <Button size="sm" onClick={openAddVisitPatientPicker} className="shadow-sm h-9">
                 <Plus className="h-4 w-4 mr-1.5" />
                 + Add Visit
@@ -829,7 +1018,7 @@ export function TodayPage() {
                         <th className="py-3 px-4 text-right">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border">
+                    <tbody className="divide-y border-border">
                       {daySheet.map((entry) => (
                         <tr key={entry.appointment_id} className="hover:bg-muted/30 transition-colors">
                           <td className="py-3.5 px-4 font-medium text-foreground">
@@ -924,7 +1113,147 @@ export function TodayPage() {
         </TabsContent>
 
         {/* ========================================================================= */}
-        {/* TAB 2: RECALLS (PREVENTIVE CARE QUEUE) */}
+        {/* TAB 2: APPOINTMENTS (BOOKED QUEUE) */}
+        {/* ========================================================================= */}
+        <TabsContent value="appointments" className="mt-2 space-y-6">
+          {appointmentsError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{appointmentsError}</span>
+            </div>
+          )}
+
+          {/* Booked Appointments Table */}
+          <Card>
+            <CardHeader className="pb-3 px-4 pt-4 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-primary" />
+                  Upcoming Booked Appointments
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Scheduled patient appointments sorted chronologically
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={loadAppointmentsData} className="h-8 text-xs">
+                Refresh List
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              {appointmentsLoading ? (
+                <div className="p-6 space-y-3">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ) : appointments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-14 px-4 text-center">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                    <Calendar className="h-6 w-6 text-primary" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground">No upcoming appointments</p>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                    When patients book appointments from recall replies or reception, they will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-y border-border bg-muted/40 text-xs font-medium text-muted-foreground uppercase">
+                      <tr>
+                        <th className="py-3 px-4">Patient Name</th>
+                        <th className="py-3 px-4">Mobile</th>
+                        <th className="py-3 px-4">Scheduled Date & Time</th>
+                        <th className="py-3 px-4">Notes</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {appointments.map((appt) => {
+                        const isToday = isTodayISTDate(appt.scheduled_at);
+                        return (
+                          <tr key={appt.appointment_id} className="hover:bg-muted/30 transition-colors">
+                            <td className="py-3.5 px-4 font-medium text-foreground">
+                              <Link
+                                to={`/app/patients?id=${appt.patient_id}`}
+                                className="hover:underline text-foreground font-medium"
+                              >
+                                {appt.patient_name}
+                              </Link>
+                            </td>
+                            <td className="py-3.5 px-4 text-muted-foreground text-xs font-mono">
+                              {appt.patient_mobile ? (
+                                <a
+                                  href={`tel:${appt.patient_mobile}`}
+                                  className="inline-flex items-center gap-1 hover:text-primary"
+                                >
+                                  <Phone className="h-3 w-3" />
+                                  {appt.patient_mobile}
+                                </a>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-xs font-medium text-foreground">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono">{formatScheduledDateTime(appt.scheduled_at)}</span>
+                                {isToday && (
+                                  <Badge
+                                    variant="outline"
+                                    className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 text-[10px] py-0 px-1.5 font-normal"
+                                  >
+                                    Today
+                                  </Badge>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 text-xs text-muted-foreground max-w-xs truncate">
+                              {appt.notes || "—"}
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handlePatientArrived(appt)}
+                                  disabled={checkingInApptId === appt.appointment_id || noShowApptId === appt.appointment_id}
+                                  className="h-8 px-2.5 text-xs shadow-sm bg-primary text-primary-foreground hover:bg-primary/90"
+                                >
+                                  {checkingInApptId === appt.appointment_id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                                  ) : (
+                                    <UserCheck className="h-3.5 w-3.5 mr-1" />
+                                  )}
+                                  Patient Arrived
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleMarkNoShow(appt)}
+                                  disabled={checkingInApptId === appt.appointment_id || noShowApptId === appt.appointment_id}
+                                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                >
+                                  {noShowApptId === appt.appointment_id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                                  ) : (
+                                    <XCircle className="h-3.5 w-3.5 mr-1" />
+                                  )}
+                                  Mark No-show
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ========================================================================= */}
+        {/* TAB 3: RECALLS (PREVENTIVE CARE QUEUE) */}
         {/* ========================================================================= */}
         <TabsContent value="recalls" className="mt-2 space-y-6">
           {recallsError && (
@@ -1090,10 +1419,10 @@ export function TodayPage() {
                                 <Button
                                   variant="default"
                                   size="sm"
-                                  onClick={() => navigate(`/app/patients/${r.patient_id}/consultation`)}
-                                  className="h-7 px-2.5 text-xs"
+                                  onClick={() => openBookAppointmentModal(r)}
+                                  className="h-7 px-2.5 text-xs shadow-sm"
                                 >
-                                  <Plus className="h-3 w-3 mr-1" />
+                                  <Calendar className="h-3 w-3 mr-1" />
                                   Book Visit
                                 </Button>
                                 <Button
@@ -1384,7 +1713,7 @@ export function TodayPage() {
       </Tabs>
 
       {/* ========================================================================= */}
-      {/* MODAL: + WALK-IN PATIENT (Task 3) */}
+      {/* MODAL: + WALK-IN PATIENT */}
       {/* ========================================================================= */}
       <Dialog open={walkInModalOpen} onOpenChange={setWalkInModalOpen}>
         <form onSubmit={handleConfirmWalkIn}>
@@ -1472,30 +1801,12 @@ export function TodayPage() {
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col gap-2">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                      placeholder="Search patient by name or mobile..."
-                      value={walkInSearch}
-                      onChange={(e) => setWalkInSearch(e.target.value)}
-                      className="pl-8 h-9 text-xs"
-                    />
-                  </div>
-                  <select
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    value={selectedWalkInPatientId}
-                    onChange={(e) => setSelectedWalkInPatientId(e.target.value)}
-                    required
-                  >
-                    <option value="">-- Select Patient --</option>
-                    {filteredWalkInPatients.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.mobile})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <PatientSearchSelect
+                  patients={allPatients}
+                  value={selectedWalkInPatientId}
+                  onChange={(id) => setSelectedWalkInPatientId(id)}
+                  required
+                />
               )}
             </div>
 
@@ -1541,17 +1852,18 @@ export function TodayPage() {
         </form>
       </Dialog>
 
-      {/* MODAL: + ADD VISIT patient picker (Recalls tab) -- retires AddVisitModal (Phase 15A).
-         Only picks a patient; ConsultationPage (navigated to on confirm) creates the visit. */}
+      {/* ========================================================================= */}
+      {/* MODAL: + ADD VISIT PATIENT PICKER */}
+      {/* ========================================================================= */}
       <Dialog open={addVisitPickerOpen} onOpenChange={setAddVisitPickerOpen}>
         <form onSubmit={handleConfirmAddVisitPicker}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plus className="h-5 w-5 text-primary" />
-              Add Visit
+              Select Patient for New Visit
             </DialogTitle>
             <DialogDescription>
-              Select the patient to record a visit for -- the consultation page opens next.
+              Select an existing patient or create a new one to open their clinical consultation form.
             </DialogDescription>
           </DialogHeader>
 
@@ -1628,35 +1940,16 @@ export function TodayPage() {
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col gap-2">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                      placeholder="Search patient by name or mobile..."
-                      value={addVisitPatientSearch}
-                      onChange={(e) => setAddVisitPatientSearch(e.target.value)}
-                      className="pl-8 h-9 text-xs"
-                    />
-                  </div>
-                  <select
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    value={selectedAddVisitPatientId}
-                    onChange={(e) => setSelectedAddVisitPatientId(e.target.value)}
-                    required
-                  >
-                    <option value="">-- Select Patient --</option>
-                    {filteredAddVisitPatients.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.mobile})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <PatientSearchSelect
+                  patients={allPatients}
+                  value={selectedAddVisitPatientId}
+                  onChange={(id) => setSelectedAddVisitPatientId(id)}
+                  required
+                />
               )}
             </div>
 
-            {/* Branch Selector (Owners with multiple branches only) -- new-inline-patient case only */}
-            {isNewAddVisitPatient && profile?.role === "owner" && branches.length > 1 && (
+            {profile?.role === "owner" && branches.length > 1 && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="av-branch" className="text-xs">Branch *</Label>
                 <select
@@ -1686,8 +1979,115 @@ export function TodayPage() {
               Cancel
             </Button>
             <Button type="submit" disabled={submittingAddVisitPicker}>
-              {submittingAddVisitPicker ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {submittingAddVisitPicker ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <ArrowRight className="h-4 w-4 mr-2" />
+              )}
               Continue to Consultation
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL: BOOK APPOINTMENT (FROM RECALL REPLIES) */}
+      {/* ========================================================================= */}
+      <Dialog open={bookApptModalOpen} onOpenChange={setBookApptModalOpen}>
+        <form onSubmit={handleConfirmBookAppointment}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              Book Appointment
+            </DialogTitle>
+            <DialogDescription>
+              Schedule a clinic appointment for{" "}
+              <span className="font-semibold text-foreground">{bookingPatient?.name}</span>
+              {bookingPatient?.mobile ? ` (${bookingPatient.mobile})` : ""}.
+            </DialogDescription>
+          </DialogHeader>
+
+          {bookingError && (
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{bookingError}</span>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-4 py-4 max-h-[65vh] overflow-y-auto px-1">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="bk-date" className="text-xs">Date *</Label>
+                <Input
+                  id="bk-date"
+                  type="date"
+                  min={todayIST()}
+                  value={bookingDate}
+                  onChange={(e) => setBookingDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="bk-time" className="text-xs">Time *</Label>
+                <Input
+                  id="bk-time"
+                  type="time"
+                  value={bookingTime}
+                  onChange={(e) => setBookingTime(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Owner Branch Selector (Required for owners) */}
+            {profile?.role === "owner" && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="bk-branch" className="text-xs">Branch *</Label>
+                <select
+                  id="bk-branch"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  value={bookingBranchId}
+                  onChange={(e) => setBookingBranchId(e.target.value)}
+                  required
+                >
+                  {branches.length === 0 && <option value="">-- No branches found --</option>}
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="bk-notes" className="text-xs">Notes (Optional)</Label>
+              <Input
+                id="bk-notes"
+                placeholder="e.g. Patient requested morning slot for scaling"
+                value={bookingNotes}
+                onChange={(e) => setBookingNotes(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBookApptModalOpen(false)}
+              disabled={submittingBooking}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submittingBooking}>
+              {submittingBooking ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Calendar className="h-4 w-4 mr-2" />
+              )}
+              Confirm Appointment
             </Button>
           </DialogFooter>
         </form>
@@ -1705,6 +2105,7 @@ export function TodayPage() {
           onSuccess={() => {
             loadDaySheetData();
             loadTodayData();
+            loadAppointmentsData();
           }}
         />
       )}

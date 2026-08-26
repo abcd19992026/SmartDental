@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { PatientSearchSelect } from "@/components/clinic/PatientSearchSelect";
 
 type TreatmentTypeRow = Database["public"]["Tables"]["treatment_types"]["Row"];
 type PatientRow = Database["public"]["Tables"]["patients"]["Row"];
@@ -48,7 +49,6 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
 
   // Form Fields
   const [patientId, setPatientId] = useState<string>(initialPatientId || "");
-  const [patientSearch, setPatientSearch] = useState("");
   const [isInlinePatient, setIsInlinePatient] = useState(false);
 
   // Inline Patient Fields
@@ -146,12 +146,6 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
     const computedStr = dt.toISOString().split("T")[0];
     setRecallOverride(computedStr);
   }, [visitDate, recallDays]);
-
-  const filteredPatients = patients.filter((p) => {
-    if (!patientSearch.trim()) return true;
-    const q = patientSearch.toLowerCase();
-    return p.name.toLowerCase().includes(q) || p.mobile.includes(q);
-  });
 
   const hasRxContent = canPrescribe && showRx && !isPrescriptionDraftEmpty(rxDraft);
 
@@ -500,30 +494,12 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
                   )}
                 </div>
               ) : (
-                <div className="flex flex-col gap-2">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                      placeholder="Search patient by name or mobile..."
-                      value={patientSearch}
-                      onChange={(e) => setPatientSearch(e.target.value)}
-                      className="pl-8 h-9 text-xs"
-                    />
-                  </div>
-                  <select
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    value={patientId}
-                    onChange={(e) => setPatientId(e.target.value)}
-                    required
-                  >
-                    <option value="">-- Select Patient --</option>
-                    {filteredPatients.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.mobile})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <PatientSearchSelect
+                  patients={patients}
+                  value={patientId}
+                  onChange={(id) => setPatientId(id)}
+                  required
+                />
               )}
             </div>
 

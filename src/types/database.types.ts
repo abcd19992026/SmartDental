@@ -91,6 +91,11 @@ export type Database = {
         Row: {
           branch_id: string
           checked_in_at: string | null
+          checkin_blood_pressure: string | null
+          checkin_chief_complaint: string | null
+          checkin_past_dental_history: string | null
+          checkin_spo2: string | null
+          checkin_weight: string | null
           clinic_id: string
           created_at: string
           created_by: string | null
@@ -106,6 +111,11 @@ export type Database = {
         Insert: {
           branch_id: string
           checked_in_at?: string | null
+          checkin_blood_pressure?: string | null
+          checkin_chief_complaint?: string | null
+          checkin_past_dental_history?: string | null
+          checkin_spo2?: string | null
+          checkin_weight?: string | null
           clinic_id: string
           created_at?: string
           created_by?: string | null
@@ -121,6 +131,11 @@ export type Database = {
         Update: {
           branch_id?: string
           checked_in_at?: string | null
+          checkin_blood_pressure?: string | null
+          checkin_chief_complaint?: string | null
+          checkin_past_dental_history?: string | null
+          checkin_spo2?: string | null
+          checkin_weight?: string | null
           clinic_id?: string
           created_at?: string
           created_by?: string | null
@@ -1201,6 +1216,27 @@ export type Database = {
       }
     }
     Functions: {
+      check_in_appointment: {
+        Args: {
+          p_appointment_id: string
+          p_blood_pressure?: string
+          p_chief_complaint?: string
+          p_past_dental_history?: string
+          p_spo2?: string
+          p_weight?: string
+        }
+        Returns: string
+      }
+      create_appointment: {
+        Args: {
+          p_branch_id?: string
+          p_notes?: string
+          p_patient_id: string
+          p_recall_id?: string
+          p_scheduled_at: string
+        }
+        Returns: string
+      }
       create_branch: {
         Args: {
           p_address?: string
@@ -1246,6 +1282,18 @@ export type Database = {
           name: string
         }[]
       }
+      get_appointments: {
+        Args: never
+        Returns: {
+          appointment_id: string
+          branch_id: string
+          notes: string
+          patient_id: string
+          patient_mobile: string
+          patient_name: string
+          scheduled_at: string
+        }[]
+      }
       get_clinics_list: {
         Args: never
         Returns: {
@@ -1266,6 +1314,10 @@ export type Database = {
         Returns: undefined
       }
       is_super_admin: { Args: never; Returns: boolean }
+      mark_appointment_no_show: {
+        Args: { p_appointment_id: string }
+        Returns: string
+      }
       prune_activity_log: { Args: never; Returns: undefined }
       prune_message_log: { Args: never; Returns: undefined }
       seed_default_medicines: {

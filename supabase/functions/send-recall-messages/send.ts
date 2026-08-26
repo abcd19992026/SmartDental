@@ -45,10 +45,78 @@ export interface ClinicRunResult {
 
 export type SendOneRecallResult =
   | { ok: true; waMessageId: string }
-  | { ok: false; errorCode: string | null; errorMessage: string };
+  // Required text field (patient/treatment/visit/due-date/clinic name) missing -- no message_log
+  // row was ever inserted, no Graph API call was made. Distinct from the ok:false-with-errorCode
+  // case below so callers don't count this as a real send failure.
+  | { ok: false; skipped: true; reason: string }
+  | { ok: false; skipped: false; errorCode: string | null; errorMessage: string };
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Mirrors formatINR's number formatting (src/lib/utils.ts) exactly -- round to the nearest
+ * integer, en-IN digit grouping -- minus the currency symbol, since the WhatsApp template body
+ * already has a literal ₹ in front of {{4}}/{{5}}/{{6}}. Never returns an empty string: Math.round
+ * of any finite number, including 0, always produces a non-empty "0"+ string. */
+function formatAmountForWhatsapp(value: number): string {
+  return Math.round(value).toLocaleString("en-IN");
+}
+
+interface PatientBilling {
+  total_billed: number;
+  total_paid: number;
+  due: number;
+}
+
+/** Same view the patient detail page's BillingBanner reads (Phase 6A) -- total_billed = SUM of
+ * this patient's visits.net_amount, total_paid = SUM of non-voided patient_payments.amount, due =
+ * total_billed - total_paid. Querying it here rather than reimplementing the SUMs keeps this
+ * function unable to drift from what the clinic sees on screen for the same patient. Returns
+ * zeroes (never null/undefined) for a patient with no visits/payments at all -- the view is
+ * driven from patients, so a row always exists, but this function only ever needs patient_id and
+ * has no independent reason to assume one back regardless. */
+async function fetchPatientBilling(serviceClient: SupabaseClient, patientId: string): Promise<PatientBilling> {
+  const { data } = await serviceClient
+    .from("patient_billing_summary")
+    .select("total_billed, total_paid, due")
+    .eq("patient_id", patientId)
+    .maybeSingle();
+
+  return {
+    total_billed: Number(data?.total_billed ?? 0),
+    total_paid: Number(data?.total_paid ?? 0),
+    due: Number(data?.due ?? 0),
+  };
+}
+
+/** The five text fields every template variant so far has needed (recall_reminder uses all five;
+ * test_recall uses them alongside the three payment fields below). Returns null if any is
+ * missing/empty so the caller can skip this recall entirely rather than send Meta a template with
+ * an empty parameter (error 131008). visits!inner in the cron query already excludes recalls with
+ * no visit at all, but send-recall-now's single-recall lookup does NOT use visits!inner (an owner
+ * can trigger it for any recall id in their clinic) -- this check is what actually protects that
+ * path, since both callers go through this same function. */
+function buildRequiredTextFields(recall: RecallRow, clinicName: string): Record<string, string> | null {
+  const patientName = recall.patients.name?.trim();
+  const treatmentName = recall.visits?.treatment_types?.name?.trim();
+  const visitDateRaw = recall.visits?.visit_date;
+  const dueDateRaw = recall.due_date;
+  const trimmedClinicName = clinicName?.trim();
+
+  if (!patientName || !treatmentName || !visitDateRaw || !dueDateRaw || !trimmedClinicName) {
+    return null;
+  }
+
+  return {
+    patient_name: patientName,
+    treatment_name: treatmentName,
+    // Dates are formatted for display ("13 Aug 2026"), never passed through as raw YYYY-MM-DD
+    // column values -- a patient reading the message should never see a database date format.
+    visit_date: formatDateIST(visitDateRaw),
+    due_date: formatDateIST(dueDateRaw),
+    clinic_name: trimmedClinicName,
+  };
 }
 
 /** Sends one recall's WhatsApp template message and applies every downstream write exactly the
@@ -66,15 +134,28 @@ export async function sendOneRecallMessage(
   accessToken: string,
   monthStart: string,
 ): Promise<SendOneRecallResult> {
-  // Dates are formatted for display ("13 Aug 2026"), never passed through as raw YYYY-MM-DD
-  // column values -- a patient reading the message should never see a database date format.
+  const textFields = buildRequiredTextFields(recall, clinic.name);
+  if (!textFields) {
+    const reason =
+      `Recall ${recall.id}: missing required field(s) for a WhatsApp send ` +
+      `(patient_name/treatment_name/visit_date/due_date/clinic_name) -- skipping, not sending ` +
+      `a template with an empty parameter.`;
+    console.warn(reason);
+    return { ok: false, skipped: true, reason };
+  }
+
+  // Patient-level, matching the patient detail page's billing header exactly (all visits, all
+  // non-voided payments for this patient) -- never per-visit.
+  const billing = await fetchPatientBilling(serviceClient, recall.patient_id);
+
   const fields: Record<string, string> = {
-    patient_name: recall.patients.name,
-    treatment_name: recall.visits?.treatment_types?.name ?? "",
-    visit_date: recall.visits?.visit_date ? formatDateIST(recall.visits.visit_date) : "",
-    due_date: formatDateIST(recall.due_date),
+    ...textFields,
     clinic_phone: clinic.phone ?? "",
-    clinic_name: clinic.name,
+    total_billed: formatAmountForWhatsapp(billing.total_billed),
+    total_paid: formatAmountForWhatsapp(billing.total_paid),
+    // Mirrors the UI's own clamp: BillingBanner shows a literal "₹0" (not a negative number)
+    // whenever due <= 0, rather than the raw signed total_billed - total_paid.
+    amount_due: formatAmountForWhatsapp(Math.max(billing.due, 0)),
   };
   const message = buildTemplateMessage(recall.patients.mobile, template, fields);
 
@@ -94,7 +175,7 @@ export async function sendOneRecallMessage(
 
   if (logInsertError || !logRow) {
     console.error(`Failed to insert message_log row for recall ${recall.id}, skipping send`, logInsertError);
-    return { ok: false, errorCode: null, errorMessage: "Failed to record the send attempt" };
+    return { ok: false, skipped: false, errorCode: null, errorMessage: "Failed to record the send attempt" };
   }
 
   const result = await callGraphApi(clinic.waba_phone_number_id, accessToken, message);
@@ -147,7 +228,7 @@ export async function sendOneRecallMessage(
   }
   await serviceClient.from("recalls").update(updates).eq("id", recall.id);
 
-  return { ok: false, errorCode: result.errorCode, errorMessage: result.errorMessage };
+  return { ok: false, skipped: false, errorCode: result.errorCode, errorMessage: result.errorMessage };
 }
 
 /** Processes every due recall for one clinic: loads the approved default template, enforces the
@@ -254,6 +335,11 @@ export async function processClinic(
     if (result.ok) {
       messagesSentThisMonth++;
       base.sent++;
+    } else if (result.skipped) {
+      // No message_log row, no Graph API call, no daily-cap/quota consumption -- the warning was
+      // already logged inside sendOneRecallMessage. Doesn't count toward daily_message_cap since
+      // nothing was actually attempted against Meta.
+      continue;
     } else {
       base.failed++;
     }

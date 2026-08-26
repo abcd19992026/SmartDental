@@ -253,6 +253,7 @@ export function PrescriptionPrintPage() {
                   style={{
                     fontFamily: "'Georgia', 'Times New Roman', serif",
                     fontWeight: 900,
+                    textTransform: "uppercase",
                   }}
                 >
                   {clinic.name}
