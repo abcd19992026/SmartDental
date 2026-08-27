@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
   const { data: recall, error: recallError } = await serviceClient
     .from("recalls")
     .select(
-      `id, clinic_id, patient_id, due_date, attempt_count, last_attempt_at,
+      `id, clinic_id, patient_id, due_date, due_time, status, attempt_count, last_stage_sent, last_attempt_at,
        patients!inner(name, mobile, is_active, do_not_disturb),
        visits(visit_date, treatment_types(name))`,
     )
@@ -125,13 +125,14 @@ Deno.serve(async (req) => {
     return json({ error: "This clinic has reached its monthly message quota" }, 400, cors);
   }
 
-  // Deliberately bypasses two things the cron loop enforces and this doesn't: the due_date filter
+  // Deliberately bypasses two things the cron loop enforces and this doesn't: the due_date window
   // (the whole point of this button -- send this specific recall right now, whatever its due_date
-  // is) and the same-day idempotency guard (that guard exists to stop the hourly cron from
-  // re-sending a recall it already reached earlier the same day; it has no meaning for a single
-  // explicit click). Everything downstream of the actual API call -- message_log, recalls'
-  // status/attempt_count/next_retry_date ladder, clinic_usage -- goes through sendOneRecallMessage,
-  // the exact function the cron path uses, so none of that can drift between the two triggers.
+  // is) and the ladder's stage claim (passing stage: null tells sendOneRecallMessage this is an
+  // unconditional manual send -- it never reads/advances last_stage_sent, so a click here can
+  // never be blocked by, or interfere with, wherever the automatic ladder currently stands).
+  // Everything else -- message_log, recalls' status/attempt_count/last_attempt_at, clinic_usage --
+  // goes through sendOneRecallMessage, the exact function the cron path uses, so none of that can
+  // drift between the two triggers.
   const clinicForSend: ClinicForSend = {
     id: clinic.id,
     name: clinic.name,
@@ -143,7 +144,7 @@ Deno.serve(async (req) => {
     clinicForSend,
     template,
     recall as unknown as RecallRow,
-    dateStr,
+    null,
     accessToken,
     monthStart,
   );

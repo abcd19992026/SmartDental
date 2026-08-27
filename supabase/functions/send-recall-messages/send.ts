@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { addDays, formatDateIST, istDateOf } from "../_shared/ist-time.ts";
+import { addDays, formatDateIST, formatTimeIST12h } from "../_shared/ist-time.ts";
 import { buildTemplateMessage, callGraphApi, type WhatsappTemplate } from "../_shared/whatsapp-graph-api.ts";
 import { incrementMessagesSent } from "../_shared/clinic-usage.ts";
+import { determineStageToSend, type LadderStage } from "./ladder.ts";
 
 /** Small gap between consecutive Graph API calls so a clinic with many due recalls doesn't fire
  * a burst that trips Meta's rate limiting -- a burst-induced 4xx would look identical to a real
@@ -29,8 +30,13 @@ export interface RecallRow {
   id: string;
   patient_id: string;
   due_date: string;
+  due_time: string | null;
+  status: string;
   attempt_count: number;
-  last_attempt_at: string | null;
+  /** 21A-1's ladder progress marker: null (nothing sent yet against the current due_date/
+   * due_time), or 1/2/3 (the highest stage actually sent). The DB-level reset trigger nulls this
+   * whenever due_date/due_time changes, so a reschedule always re-enters the ladder from stage 1. */
+  last_stage_sent: number | null;
   patients: { name: string; mobile: string };
   visits: { visit_date: string; treatment_types: { name: string } | null } | null;
 }
@@ -45,9 +51,11 @@ export interface ClinicRunResult {
 
 export type SendOneRecallResult =
   | { ok: true; waMessageId: string }
-  // Required text field (patient/treatment/visit/due-date/clinic name) missing -- no message_log
-  // row was ever inserted, no Graph API call was made. Distinct from the ok:false-with-errorCode
-  // case below so callers don't count this as a real send failure.
+  // Required text field (patient/treatment/visit/due-date/clinic name) missing, OR the atomic
+  // claim below found this stage no longer eligible (status changed, or another invocation
+  // already claimed it) -- no message_log row was ever inserted, no Graph API call was made.
+  // Distinct from the ok:false-with-errorCode case so callers don't count this as a real send
+  // failure.
   | { ok: false; skipped: true; reason: string }
   | { ok: false; skipped: false; errorCode: string | null; errorMessage: string };
 
@@ -90,6 +98,22 @@ async function fetchPatientBilling(serviceClient: SupabaseClient, patientId: str
   };
 }
 
+/** {{4}}'s text, in the exact shape 21A-2 specifies per stage -- the only part of the template's
+ * fixed five parameters that varies by stage, so a stage-1 "tomorrow" reminder and a same-day
+ * stage-2 reminder never read identically to the patient even though both can arrive close
+ * together. due_time is guaranteed non-null for stage 2 -- determineStageToSend() never returns 2
+ * otherwise. */
+function buildDueDateText(stage: LadderStage, dueDateRaw: string, dueTimeRaw: string | null): string {
+  const dateText = formatDateIST(dueDateRaw);
+  if (stage === 1) {
+    return dueTimeRaw ? `${dateText} (tomorrow, ${formatTimeIST12h(dueTimeRaw)})` : `${dateText} (tomorrow)`;
+  }
+  if (stage === 2) {
+    return `today, ${formatTimeIST12h(dueTimeRaw!)}`;
+  }
+  return dateText; // stage 3
+}
+
 /** The five text fields every template variant so far has needed (recall_reminder uses all five;
  * test_recall uses them alongside the three payment fields below). Returns null if any is
  * missing/empty so the caller can skip this recall entirely rather than send Meta a template with
@@ -97,7 +121,7 @@ async function fetchPatientBilling(serviceClient: SupabaseClient, patientId: str
  * no visit at all, but send-recall-now's single-recall lookup does NOT use visits!inner (an owner
  * can trigger it for any recall id in their clinic) -- this check is what actually protects that
  * path, since both callers go through this same function. */
-function buildRequiredTextFields(recall: RecallRow, clinicName: string): Record<string, string> | null {
+function buildRequiredTextFields(recall: RecallRow, clinicName: string, stage: LadderStage): Record<string, string> | null {
   const patientName = recall.patients.name?.trim();
   const treatmentName = recall.visits?.treatment_types?.name?.trim();
   const visitDateRaw = recall.visits?.visit_date;
@@ -114,34 +138,75 @@ function buildRequiredTextFields(recall: RecallRow, clinicName: string): Record<
     // Dates are formatted for display ("13 Aug 2026"), never passed through as raw YYYY-MM-DD
     // column values -- a patient reading the message should never see a database date format.
     visit_date: formatDateIST(visitDateRaw),
-    due_date: formatDateIST(dueDateRaw),
+    due_date: buildDueDateText(stage, dueDateRaw, recall.due_time),
     clinic_name: trimmedClinicName,
   };
 }
 
-/** Sends one recall's WhatsApp template message and applies every downstream write exactly the
- * way this has always worked: a message_log row (queued -> sent/failed), the recall's
- * status/attempt_count/last_attempt_at/next_retry_date follow-up ladder, and clinic_usage on
- * success. Shared by the batch cron loop (processClinic below) and the manual send-recall-now
- * endpoint, so the two paths can never drift from each other -- whichever one calls this is the
- * only place a distinction between "cron" and "manual" exists at all. */
+/** Sends one recall's WhatsApp template message for a specific ladder stage, and applies every
+ * downstream write exactly the way this has always worked: a message_log row (queued ->
+ * sent/failed), the recall's status/attempt_count/last_attempt_at, and clinic_usage on success.
+ * Shared by the batch cron loop (processClinic below) and the manual send-recall-now endpoint
+ * (which passes stage: null -- see below), so the two paths can never drift from each other on
+ * everything except the one thing that's genuinely different between them: the cron path's
+ * ladder-stage claim. */
 export async function sendOneRecallMessage(
   serviceClient: SupabaseClient,
   clinic: ClinicForSend,
   template: WhatsappTemplate,
   recall: RecallRow,
-  dateStr: string,
+  /** The ladder stage this send represents, or `null` for an unconditional manual send
+   * (send-recall-now's "Send Now" button). A manual send deliberately bypasses the ladder
+   * entirely -- same as before this rewrite -- so it never claims/advances last_stage_sent and
+   * is never blocked by it (an owner must always be able to message a patient on demand,
+   * regardless of where the automatic ladder currently stands). {{4}}'s text uses stage 3's
+   * plain-date shape in that case, since a manual click has no "tomorrow"/"today" relationship
+   * to due_date to assert -- it could happen on any day. */
+  stage: LadderStage | null,
   accessToken: string,
   monthStart: string,
 ): Promise<SendOneRecallResult> {
-  const textFields = buildRequiredTextFields(recall, clinic.name);
+  const textFields = buildRequiredTextFields(recall, clinic.name, stage ?? 3);
   if (!textFields) {
     const reason =
       `Recall ${recall.id}: missing required field(s) for a WhatsApp send ` +
-      `(patient_name/treatment_name/visit_date/due_date/clinic_name) -- skipping, not sending ` +
-      `a template with an empty parameter.`;
+      `(patient_name/treatment_name/visit_date/due_date/clinic_name) -- skipping${stage !== null ? ` stage ${stage}` : ""}, ` +
+      `not sending a template with an empty parameter.`;
     console.warn(reason);
     return { ok: false, skipped: true, reason };
+  }
+
+  // Atomic claim: re-checks status AND ladder progress at the database level, immediately before
+  // sending -- not just against the (possibly several-minutes-stale) snapshot the batch query
+  // fetched. Whichever concurrent invocation's UPDATE actually matches wins the right to send
+  // this stage; the other sees 0 rows and aborts without ever calling the Graph API or writing
+  // message_log. This is what makes two overlapping cron runs safe (task 11g), and it's what
+  // "status re-checked immediately before sending" (task 6) actually means at the DB level.
+  // Skipped entirely for a manual send (stage === null) -- see the stage param's doc above.
+  if (stage !== null) {
+    const { data: claimed, error: claimError } = await serviceClient
+      .from("recalls")
+      .update({ last_stage_sent: stage })
+      .eq("id", recall.id)
+      .in("status", ["pending", "sent"])
+      .or(`last_stage_sent.is.null,last_stage_sent.lt.${stage}`)
+      .select("id")
+      .maybeSingle();
+
+    if (claimError) {
+      console.error(`Failed to claim recall ${recall.id} for stage ${stage}`, claimError);
+      return { ok: false, skipped: true, reason: `Claim failed: ${claimError.message}` };
+    }
+    if (!claimed) {
+      // Status moved off pending/sent (contacted/booked/declined/completed/paused), or another
+      // invocation already claimed this stage since the batch query ran. Not an error --
+      // correctly nothing left to do.
+      return {
+        ok: false,
+        skipped: true,
+        reason: `Recall ${recall.id}: no longer eligible for stage ${stage} at send time`,
+      };
+    }
   }
 
   // Patient-level, matching the patient detail page's billing header exactly (all visits, all
@@ -175,6 +240,15 @@ export async function sendOneRecallMessage(
 
   if (logInsertError || !logRow) {
     console.error(`Failed to insert message_log row for recall ${recall.id}, skipping send`, logInsertError);
+    // Nothing was actually sent -- release the claim so this stage remains retryable on a later
+    // tick within its own window, per task 9. No claim exists at all for a manual send.
+    if (stage !== null) {
+      await serviceClient
+        .from("recalls")
+        .update({ last_stage_sent: stage === 1 ? null : ((stage - 1) as LadderStage) })
+        .eq("id", recall.id)
+        .eq("last_stage_sent", stage);
+    }
     return { ok: false, skipped: false, errorCode: null, errorMessage: "Failed to record the send attempt" };
   }
 
@@ -188,22 +262,12 @@ export async function sendOneRecallMessage(
       .update({ status: "sent", wa_message_id: result.waMessageId, sent_at: nowIso })
       .eq("id", logRow.id);
 
-    // Follow-up ladder (day 0 / +3 / +10), driven entirely by next_retry_date rather than a
-    // separate scheduler: after the 1st successful send, come back in 3 days; after the 2nd,
-    // come back in 7 more days (3 + 7 = 10 from day 0, assuming each reminder fires on
-    // schedule); after the 3rd, next_retry_date is cleared so the recall stops being selected
-    // and sits in 'sent' for manual follow-up.
-    const nextRetryDate =
-      newAttemptCount === 1 ? addDays(dateStr, 3) : newAttemptCount === 2 ? addDays(dateStr, 7) : null;
-
+    // last_stage_sent is already set by the claim above -- attempt_count/last_attempt_at stay
+    // purely historical/observability fields, same as before this rewrite (attempt_count is read
+    // by TodayPage's monthly stats; the ladder itself never reads either of them anymore).
     await serviceClient
       .from("recalls")
-      .update({
-        status: "sent",
-        attempt_count: newAttemptCount,
-        last_attempt_at: nowIso,
-        next_retry_date: nextRetryDate,
-      })
+      .update({ status: "sent", attempt_count: newAttemptCount, last_attempt_at: nowIso })
       .eq("id", recall.id);
 
     await incrementMessagesSent(serviceClient, clinic.id, monthStart);
@@ -215,30 +279,39 @@ export async function sendOneRecallMessage(
     .update({ status: "failed", error_code: result.errorCode, error_message: result.errorMessage })
     .eq("id", logRow.id);
 
-  const updates: Record<string, unknown> = {
+  // A failed send must NOT mark its stage as sent -- release the claim (guarded so we only revert
+  // what we ourselves set) so a later cron tick can retry it, as long as we're still inside this
+  // stage's own day/window per determineStageToSend. No claim exists at all for a manual send.
+  // status goes back to 'pending' rather than a terminal 'failed': under the new ladder, each
+  // stage's own calendar-day boundary is what ends retries, not a 3-strikes counter (there is no
+  // longer a +3/+10 tier to fall back to).
+  const revertUpdate: Record<string, unknown> = {
+    status: "pending",
     attempt_count: newAttemptCount,
     last_attempt_at: nowIso,
   };
-  if (newAttemptCount >= 3) {
-    updates.status = "failed";
-    updates.next_retry_date = null;
-  } else {
-    updates.status = "pending";
-    updates.next_retry_date = addDays(dateStr, 1);
+  let revertQuery = serviceClient.from("recalls").update(revertUpdate).eq("id", recall.id);
+  if (stage !== null) {
+    revertUpdate.last_stage_sent = stage === 1 ? null : ((stage - 1) as LadderStage);
+    revertQuery = revertQuery.eq("last_stage_sent", stage);
   }
-  await serviceClient.from("recalls").update(updates).eq("id", recall.id);
+  await revertQuery;
 
   return { ok: false, skipped: false, errorCode: result.errorCode, errorMessage: result.errorMessage };
 }
 
-/** Processes every due recall for one clinic: loads the approved default template, enforces the
- * monthly quota and daily cap, sends each recall's message, and logs every outcome. Clinic-level
- * eligibility (whatsapp_enabled, is_active, plan_expires_on, send_time hour, send window) is
- * already filtered by the caller -- this only handles what happens once a clinic is selected. */
+/** Processes every candidate recall for one clinic: loads the approved default template,
+ * enforces the monthly quota and daily cap, decides each recall's due ladder stage (if any), and
+ * sends/logs the outcome. Clinic-level eligibility (whatsapp_enabled, is_active, plan_expires_on)
+ * is already filtered by the caller -- this only handles what happens once a clinic is selected.
+ * istHour/clinicSendHour are passed in rather than recomputed here so a single getIstNow() call
+ * per invocation stays the one source of truth for "now" across every clinic processed. */
 export async function processClinic(
   serviceClient: SupabaseClient,
   clinic: Clinic,
   dateStr: string,
+  istHour: number,
+  clinicSendHour: number,
   accessToken: string,
 ): Promise<ClinicRunResult> {
   const base: ClinicRunResult = { clinic_id: clinic.id, clinic_name: clinic.name, sent: 0, failed: 0 };
@@ -279,35 +352,41 @@ export async function processClinic(
     return { ...base, skipped_reason: "monthly_quota_reached" };
   }
 
-  // Two independent reasons a recall is due today:
-  //  1. status = 'pending' and due_date has arrived (first attempt, or retry after a failure --
-  //     the idempotency guard below is what actually prevents a same-day double-send, not this
-  //     filter, since a failed attempt leaves due_date unchanged and in the past).
-  //  2. status = 'sent' and next_retry_date has arrived (the day+3 / day+10 follow-up ladder for
-  //     a recall that was already messaged once but hasn't been marked contacted/booked/etc).
+  // Selection window: due_date within one day either side of today (IST). Stage 1 fires the day
+  // BEFORE due_date, stage 3 the day AFTER -- a plain "due_date <= today" filter (the old query)
+  // would miss stage 1 entirely. status stays in ('pending','sent') exactly as before; which of
+  // the (up to 3) stages is actually due for each row is decided per-recall below, not by this
+  // query -- next_retry_date is no longer read or written anywhere in this function.
   // visits!inner (not the default left-embed): a recall with a null visit_id must never be
   // selected here at all, regardless of how it went null. Deliberately defensive -- visit
   // deletion is the only known path today, but this holds even if a future path nulls it too.
   // Without this, sendOneRecallMessage would send Meta a template with empty {{2}}/{{3}} (Meta
-  // rejects it with 131008), and the recall would sit retrying that same guaranteed failure for
-  // up to 3 attempts before finally landing in status='failed'.
+  // rejects it with 131008), and the recall would sit retrying that same guaranteed failure.
+  const windowStart = addDays(dateStr, -1);
+  const windowEnd = addDays(dateStr, 1);
+
   const { data: recalls, error: recallsError } = await serviceClient
     .from("recalls")
     .select(
-      `id, patient_id, due_date, attempt_count, last_attempt_at,
+      `id, patient_id, due_date, due_time, status, attempt_count, last_stage_sent,
        patients!inner(name, mobile, is_active, do_not_disturb),
        visits!inner(visit_date, treatment_types(name))`,
     )
     .eq("clinic_id", clinic.id)
     .eq("patients.is_active", true)
     .eq("patients.do_not_disturb", false)
-    .or(`and(status.eq.pending,due_date.lte.${dateStr}),and(status.eq.sent,next_retry_date.lte.${dateStr})`)
+    .in("status", ["pending", "sent"])
+    .gte("due_date", windowStart)
+    .lte("due_date", windowEnd)
+    .or("last_stage_sent.is.null,last_stage_sent.lt.3")
     .order("due_date", { ascending: true });
 
   if (recallsError) {
-    console.error(`Failed to load due recalls for clinic ${clinic.id}`, recallsError);
+    console.error(`Failed to load candidate recalls for clinic ${clinic.id}`, recallsError);
     return { ...base, skipped_reason: "recall_query_failed" };
   }
+
+  const nowInstant = new Date();
 
   for (const recall of (recalls ?? []) as unknown as RecallRow[]) {
     // daily_message_cap counts every attempt (sent + failed), unlike monthly_message_quota
@@ -324,14 +403,21 @@ export async function processClinic(
       break;
     }
 
-    // Idempotency guard: never send the same recall twice on the same IST calendar date, no
-    // matter how many times the cron fires or this function is retried.
-    const lastAttemptDateStr = recall.last_attempt_at ? istDateOf(new Date(recall.last_attempt_at)) : null;
-    if (lastAttemptDateStr === dateStr) {
+    const stage = determineStageToSend({
+      dueDate: recall.due_date,
+      dueTime: recall.due_time,
+      lastStageSent: recall.last_stage_sent,
+      todayStr: dateStr,
+      istHour,
+      nowInstant,
+      clinicSendHour,
+    });
+
+    if (stage === null) {
       continue;
     }
 
-    const result = await sendOneRecallMessage(serviceClient, clinicForSend, template, recall, dateStr, accessToken, monthStart);
+    const result = await sendOneRecallMessage(serviceClient, clinicForSend, template, recall, stage, accessToken, monthStart);
     if (result.ok) {
       messagesSentThisMonth++;
       base.sent++;

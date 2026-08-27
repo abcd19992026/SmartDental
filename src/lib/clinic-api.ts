@@ -48,12 +48,17 @@ export interface CreateVisitWithRecallInput {
    * this column instead of creating a second visit. Omit only for callers that accept the
    * (rare, pre-S1) risk of a double-submit duplicating a visit. */
   client_request_id?: string | null;
+  /** Time of day the patient is expected at for the recall, e.g. "14:30". Optional -- omit or
+   * pass null for "no specific time known" (the recall reminder ladder, built in 21A-2, treats
+   * that as skipping its time-of-day-dependent stage). */
+  recall_due_time?: string | null;
 }
 
 export interface CreateVisitWithRecallOutput {
   visit_id: string;
   recall_id: string;
   due_date: string;
+  due_time: string | null;
 }
 
 export async function createVisitWithRecall(
@@ -70,12 +75,53 @@ export async function createVisitWithRecall(
     p_discount_percent: input.discount_percent ?? 0,
     p_teeth: input.teeth ?? null,
     p_client_request_id: input.client_request_id ?? null,
+    p_recall_due_time: input.recall_due_time ?? null,
   });
   if (error && (error as { code?: string }).code === "23505") {
     return { ok: false, error: "This visit was already saved -- refresh to see it." };
   }
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: data as unknown as CreateVisitWithRecallOutput };
+}
+
+// ---------------------------------------------------------------------------
+// recall schedule updates (reschedule / snooze paths)
+// ---------------------------------------------------------------------------
+
+export interface UpdateRecallScheduleInput {
+  due_date: string;
+  /** Time the patient is expected at, e.g. "14:30". Omit to leave the existing value unchanged;
+   * pass null to clear an existing time. */
+  due_time?: string | null;
+}
+
+export interface UpdateRecallScheduleOutput {
+  id: string;
+  due_date: string;
+  due_time: string | null;
+}
+
+/** Reschedules a recall's due_date/due_time under the caller's own RLS (recalls_update already
+ * scopes this to the caller's own clinic/branch, same as every other direct recall update in
+ * this codebase) -- a due_date/due_time change here resets the recall's ladder progress via the
+ * DB-level trg_reset_recall_ladder_stage trigger, so a rescheduled recall gets its reminders
+ * again regardless of which call site performs the update. */
+export async function updateRecallSchedule(
+  recallId: string,
+  input: UpdateRecallScheduleInput,
+): Promise<ApiResult<UpdateRecallScheduleOutput>> {
+  const payload: Database["public"]["Tables"]["recalls"]["Update"] = { due_date: input.due_date };
+  if (input.due_time !== undefined) {
+    payload.due_time = input.due_time;
+  }
+  const { data, error } = await supabase
+    .from("recalls")
+    .update(payload)
+    .eq("id", recallId)
+    .select("id, due_date, due_time")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data };
 }
 
 // ---------------------------------------------------------------------------

@@ -66,3 +66,27 @@ export function formatDateIST(dateStr: string): string {
     timeZone: IST_TIME_ZONE,
   });
 }
+
+/** Combines an IST calendar date (YYYY-MM-DD) and an IST wall-clock time (`HH:MM` or `HH:MM:SS`,
+ * as Postgres's `time` type round-trips through supabase-js) into a real instant, via an explicit
+ * +05:30 offset -- never relies on the server's own local timezone. `timeStr` is padded/defaulted
+ * so a bare "HH:MM" (no seconds) still parses. Used by the recall reminder ladder (21A-2) to
+ * compare a recall's due_date/due_time against `now()` as real instants, not string/date-only
+ * comparisons -- necessary once a stage's target is a specific time of day, not just a day. */
+export function combineIstInstant(dateStr: string, timeStr: string): Date {
+  const [hh = "00", mm = "00", ss = "00"] = timeStr.split(":");
+  return new Date(`${dateStr}T${hh.padStart(2, "0")}:${mm.padStart(2, "0")}:${ss.padStart(2, "0")}+05:30`);
+}
+
+/** Formats an IST wall-clock time ("HH:MM" or "HH:MM:SS") as 12-hour with AM/PM, e.g. "14:30" ->
+ * "2:30 PM" -- for display inside outbound WhatsApp template bodies (21A-2's stage 1/2 due-date
+ * parameter). due_time has no timezone component of its own (it's already IST wall-clock, same as
+ * every other time concept in this codebase), so this is pure string/arithmetic formatting, no
+ * Date/timezone conversion needed. */
+export function formatTimeIST12h(timeStr: string): string {
+  const [hStr, mStr = "00"] = timeStr.split(":");
+  const h24 = parseInt(hStr, 10);
+  const period = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${mStr.padStart(2, "0")} ${period}`;
+}

@@ -37,9 +37,10 @@ Deno.serve(async (req) => {
 
   const { hour, dateStr } = getIstNow();
 
-  // Hard send-window guard, independent of any clinic's configured send_time: never send before
-  // 9 AM or after 8 PM IST. A misconfigured send_time must be skipped, not honoured.
-  if (hour < 9 || hour >= 20) {
+  // 21A-2: widened from 09:00-20:00 to 07:00-20:00 IST -- stage 2's earliest possible clamp
+  // target is 07:00 (a patient due at 08:00 must still get their reminder), so the window has to
+  // open early enough to reach it. One window, applies to every stage.
+  if (hour < 7 || hour >= 20) {
     console.log(`Outside send window (IST hour ${hour}); nothing sent`);
     return json({ ist_hour: hour, ist_date: dateStr, message: "Outside send window", results: [] }, 200);
   }
@@ -56,17 +57,21 @@ Deno.serve(async (req) => {
     return json({ error: clinicsError.message }, 500);
   }
 
-  // The cron fires hourly; each clinic is only processed in the hour matching its own
-  // send_time -- this is what makes per-clinic send times work without one job per clinic.
-  const dueClinics = (clinics ?? []).filter((clinic) => {
-    const sendHour = parseInt(String(clinic.send_time).split(":")[0], 10);
-    return sendHour === hour;
-  });
-
+  // 21A-2: every eligible clinic is processed on every tick inside the window now, not just the
+  // one hour matching its own send_time. That per-hour filter used to be how each clinic got
+  // processed exactly once a day; under the new ladder it would also silently gate stage 2 (which
+  // fires at an arbitrary per-recall instant -- due_time minus 2 hours -- with no relationship to
+  // send_time at all) and it would break the catch-up guarantee (a missed tick would mean waiting
+  // a full day, not "next tick this same day"). send_time still matters -- it's just now read
+  // per-recall inside processClinic, to gate stages 1 ("day_before") and 3 ("follow_up") only.
+  // Idempotency (never sending the same stage twice) is enforced downstream by the atomic
+  // last_stage_sent claim in sendOneRecallMessage, so re-scanning an already-sent recall on every
+  // tick is safe, just a cheap extra query.
   const results = [];
-  for (const clinic of dueClinics) {
+  for (const clinic of clinics ?? []) {
+    const clinicSendHour = parseInt(String(clinic.send_time).split(":")[0], 10);
     try {
-      results.push(await processClinic(serviceClient, clinic, dateStr, accessToken));
+      results.push(await processClinic(serviceClient, clinic, dateStr, hour, clinicSendHour, accessToken));
     } catch (err) {
       console.error(`Unhandled error processing clinic ${clinic.id}`, err);
       results.push({ clinic_id: clinic.id, clinic_name: clinic.name, sent: 0, failed: 0, skipped_reason: "unhandled_error" });

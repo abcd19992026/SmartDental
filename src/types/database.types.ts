@@ -926,8 +926,10 @@ export type Database = {
           clinic_id: string
           created_at: string
           due_date: string
+          due_time: string | null
           id: string
           last_attempt_at: string | null
+          last_stage_sent: number | null
           next_retry_date: string | null
           notes: string | null
           patient_id: string
@@ -943,8 +945,10 @@ export type Database = {
           clinic_id: string
           created_at?: string
           due_date: string
+          due_time?: string | null
           id?: string
           last_attempt_at?: string | null
+          last_stage_sent?: number | null
           next_retry_date?: string | null
           notes?: string | null
           patient_id: string
@@ -960,8 +964,10 @@ export type Database = {
           clinic_id?: string
           created_at?: string
           due_date?: string
+          due_time?: string | null
           id?: string
           last_attempt_at?: string | null
+          last_stage_sent?: number | null
           next_retry_date?: string | null
           notes?: string | null
           patient_id?: string
