@@ -102,8 +102,17 @@ async function fetchPatientBilling(serviceClient: SupabaseClient, patientId: str
  * fixed five parameters that varies by stage, so a stage-1 "tomorrow" reminder and a same-day
  * stage-2 reminder never read identically to the patient even though both can arrive close
  * together. due_time is guaranteed non-null for stage 2 -- determineStageToSend() never returns 2
- * otherwise. */
-function buildDueDateText(stage: LadderStage, dueDateRaw: string, dueTimeRaw: string | null): string {
+ * otherwise.
+ *
+ * `stage === null` is an unconditional manual "Send Now" (send-recall-now): it has no
+ * tomorrow/today/passed relationship to due_date to assert -- an owner can trigger it on any day,
+ * for a past OR future due_date -- so it keeps the plain formatted date, exactly as before. Only
+ * the automatic stage-3 follow-up, which by construction always fires the day AFTER due_date,
+ * gets the "already passed" phrasing: the approved template body (unchangeable here) reads
+ * "...your next check-up is recommended on {{4}}.", and a bare past date in that slot reads as if
+ * we're recommending a day that is already gone. The parenthetical stays on one line with no
+ * tabs and no run of 4+ spaces, well under Meta's 1024-char parameter limit. */
+function buildDueDateText(stage: LadderStage | null, dueDateRaw: string, dueTimeRaw: string | null): string {
   const dateText = formatDateIST(dueDateRaw);
   if (stage === 1) {
     return dueTimeRaw ? `${dateText} (tomorrow, ${formatTimeIST12h(dueTimeRaw)})` : `${dateText} (tomorrow)`;
@@ -111,7 +120,10 @@ function buildDueDateText(stage: LadderStage, dueDateRaw: string, dueTimeRaw: st
   if (stage === 2) {
     return `today, ${formatTimeIST12h(dueTimeRaw!)}`;
   }
-  return dateText; // stage 3
+  if (stage === 3) {
+    return `${dateText} (already overdue - please book a new appointment)`;
+  }
+  return dateText; // stage === null: manual send -- plain date, unchanged
 }
 
 /** The five text fields every template variant so far has needed (recall_reminder uses all five;
@@ -121,7 +133,7 @@ function buildDueDateText(stage: LadderStage, dueDateRaw: string, dueTimeRaw: st
  * no visit at all, but send-recall-now's single-recall lookup does NOT use visits!inner (an owner
  * can trigger it for any recall id in their clinic) -- this check is what actually protects that
  * path, since both callers go through this same function. */
-function buildRequiredTextFields(recall: RecallRow, clinicName: string, stage: LadderStage): Record<string, string> | null {
+function buildRequiredTextFields(recall: RecallRow, clinicName: string, stage: LadderStage | null): Record<string, string> | null {
   const patientName = recall.patients.name?.trim();
   const treatmentName = recall.visits?.treatment_types?.name?.trim();
   const visitDateRaw = recall.visits?.visit_date;
@@ -159,14 +171,17 @@ export async function sendOneRecallMessage(
    * (send-recall-now's "Send Now" button). A manual send deliberately bypasses the ladder
    * entirely -- same as before this rewrite -- so it never claims/advances last_stage_sent and
    * is never blocked by it (an owner must always be able to message a patient on demand,
-   * regardless of where the automatic ladder currently stands). {{4}}'s text uses stage 3's
-   * plain-date shape in that case, since a manual click has no "tomorrow"/"today" relationship
-   * to due_date to assert -- it could happen on any day. */
+   * regardless of where the automatic ladder currently stands). {{4}}'s text uses the plain
+   * formatted date in that case (buildDueDateText's `stage === null` branch), since a manual
+   * click has no "tomorrow"/"today"/"already passed" relationship to due_date to assert -- it
+   * could happen on any day, for a past or future due_date. */
   stage: LadderStage | null,
   accessToken: string,
   monthStart: string,
 ): Promise<SendOneRecallResult> {
-  const textFields = buildRequiredTextFields(recall, clinic.name, stage ?? 3);
+  // Pass `stage` straight through (not `stage ?? 3`): a manual send must stay on the plain-date
+  // shape, only the real automatic stage-3 follow-up gets the "already overdue" phrasing.
+  const textFields = buildRequiredTextFields(recall, clinic.name, stage);
   if (!textFields) {
     const reason =
       `Recall ${recall.id}: missing required field(s) for a WhatsApp send ` +
