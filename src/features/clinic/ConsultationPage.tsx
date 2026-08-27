@@ -19,6 +19,7 @@ import {
   Stethoscope,
   Trash2,
   User,
+  X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
@@ -384,6 +385,7 @@ export function ConsultationPage() {
   const [discountPercent, setDiscountPercent] = useState("");
   const [visitNotes, setVisitNotes] = useState("");
   const [recallOverride, setRecallOverride] = useState("");
+  const [recallTimeOverride, setRecallTimeOverride] = useState("");
 
   const [rxDraft, setRxDraft] = useState<PrescriptionDraft>(emptyPrescriptionDraft(""));
 
@@ -429,6 +431,7 @@ export function ConsultationPage() {
     if (isExistingVisitMode) return;
     if (!visitDate || !recallDays) {
       setRecallOverride("");
+      setRecallTimeOverride("");
       return;
     }
     const dt = new Date(`${visitDate}T00:00:00+05:30`);
@@ -627,6 +630,7 @@ export function ConsultationPage() {
       amount: parsedAmount,
       discount_percent: parsedDiscount,
       recall_date_override: recallOverride || null,
+      recall_due_time: recallOverride && recallTimeOverride ? recallTimeOverride.trim() : null,
       client_request_id: clientRequestId,
     });
 
@@ -752,7 +756,7 @@ export function ConsultationPage() {
   const netAmt = parsedDisc > 0 ? Math.round(parsedAmt * (1 - parsedDisc / 100)) : parsedAmt;
 
   return (
-    <div className="flex flex-col gap-6 max-w-7xl mx-auto pb-6">
+    <div className="flex flex-col gap-6 max-w-7xl mx-auto pb-20 sm:pb-24">
       {/* Top Header & Breadcrumb */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
         <div className="flex items-center gap-3">
@@ -1205,7 +1209,7 @@ export function ConsultationPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Label htmlFor="c-recall" className="text-xs shrink-0 font-medium">
                         Next Recall Date{recallDays ? ` (${recallDays}d default)` : ""}:
                       </Label>
@@ -1213,9 +1217,34 @@ export function ConsultationPage() {
                         id="c-recall"
                         type="date"
                         value={recallOverride}
-                        onChange={(e) => setRecallOverride(e.target.value)}
-                        className="h-8 w-40 text-xs"
+                        onChange={(e) => {
+                          setRecallOverride(e.target.value);
+                          if (!e.target.value) setRecallTimeOverride("");
+                        }}
+                        className="h-8 w-36 text-xs"
                       />
+                      <div className="flex items-center gap-1">
+                        <Input
+                          id="c-recall-time"
+                          type="time"
+                          aria-label="Recall Due Time (optional)"
+                          title="Optional reminder time. When set, sends reminder 2 hours before."
+                          value={recallTimeOverride}
+                          onChange={(e) => setRecallTimeOverride(e.target.value)}
+                          disabled={!recallOverride}
+                          className="h-8 w-28 text-xs disabled:opacity-50"
+                        />
+                        {recallTimeOverride && (
+                          <button
+                            type="button"
+                            title="Clear reminder time"
+                            onClick={() => setRecallTimeOverride("")}
+                            className="text-xs text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex flex-col gap-1.5">
@@ -1449,31 +1478,33 @@ export function ConsultationPage() {
               )}
             </Card>
           )}
+          </div>
         </div>
-      </div>
 
-      {/* STICKY BOTTOM ACTION BAR */}
-      <div className="sticky bottom-0 bg-background/95 backdrop-blur border-t border-border p-3 sm:p-4 z-20 flex items-center justify-between gap-3 shadow-lg rounded-t-lg -mx-2 sm:mx-0">
-        <Button type="button" variant="outline" onClick={goToPatientProfile} disabled={submitting}>
-          Cancel
-        </Button>
-        <div className="flex items-center gap-2">
-          {canPrescribe && (
-            <Button type="button" variant="outline" onClick={handleSaveAndPrint} disabled={submitting}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Printer className="h-4 w-4 mr-2" />}
-              Save & Print
-            </Button>
-          )}
-          {!isExistingVisitMode && (
-            <Button type="button" variant="outline" onClick={handleSaveAndPayment} disabled={submitting}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CreditCard className="h-4 w-4 mr-2" />}
-              Save & Payment
-            </Button>
-          )}
-          <Button type="button" onClick={handleSave} disabled={submitting}>
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            {saveLabel}
+      {/* FIXED BOTTOM ACTION BAR */}
+      <div className="fixed bottom-0 left-0 right-0 md:left-60 bg-card/95 backdrop-blur border-t border-border py-2.5 px-4 sm:px-6 z-30 shadow-lg">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+          <Button type="button" variant="outline" size="sm" onClick={goToPatientProfile} disabled={submitting}>
+            Cancel
           </Button>
+          <div className="flex items-center gap-2">
+            {canPrescribe && (
+              <Button type="button" variant="outline" size="sm" onClick={handleSaveAndPrint} disabled={submitting}>
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Printer className="h-4 w-4 mr-1.5" />}
+                Save & Print
+              </Button>
+            )}
+            {!isExistingVisitMode && (
+              <Button type="button" variant="outline" size="sm" onClick={handleSaveAndPayment} disabled={submitting}>
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CreditCard className="h-4 w-4 mr-1.5" />}
+                Save & Payment
+              </Button>
+            )}
+            <Button type="button" size="sm" onClick={handleSave} disabled={submitting} className="shadow-sm">
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+              {saveLabel}
+            </Button>
+          </div>
         </div>
       </div>
 

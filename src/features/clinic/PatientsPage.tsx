@@ -95,7 +95,7 @@ export function PatientsPage() {
   // Add / Edit Patient Panel
   const [patientModalOpen, setPatientModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<PatientRow | null>(null);
-  const [addToTodayQueue, setAddToTodayQueue] = useState(false);
+  const [addToTodayQueue, setAddToTodayQueue] = useState(true);
   const [patientForm, setPatientForm] = useState<{
     name: string;
     mobile: string;
@@ -226,7 +226,7 @@ export function PatientsPage() {
     setEditingPatient(null);
     setDuplicateMatchId(null);
     setDuplicateError(null);
-    setAddToTodayQueue(false);
+    setAddToTodayQueue(true);
     setPatientForm({
       name: "",
       mobile: "",

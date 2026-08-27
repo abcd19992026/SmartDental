@@ -6,6 +6,7 @@ import {
   Phone,
   Send,
   Clock,
+  X,
   XCircle,
   AlertCircle,
   BarChart2,
@@ -30,6 +31,7 @@ import {
   updateAppointmentStatus,
   checkInAppointment,
   createPatient,
+  updateRecallSchedule,
   DEFAULT_MEDICAL_HISTORY,
   type DaySheetEntry,
 } from "@/lib/clinic-api";
@@ -112,6 +114,21 @@ function isTodayISTDate(isoString: string): boolean {
     return apptDate === todayIST();
   } catch {
     return false;
+  }
+}
+
+function formatRecallTime(timeStr: string | null | undefined): string {
+  if (!timeStr) return "";
+  try {
+    const [h, m] = timeStr.split(":");
+    if (h === undefined || m === undefined) return timeStr;
+    const hour = parseInt(h, 10);
+    const minute = parseInt(m, 10);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    const h12 = hour % 12 || 12;
+    return `${h12}:${minute.toString().padStart(2, "0")} ${ampm}`;
+  } catch {
+    return timeStr;
   }
 }
 
@@ -202,6 +219,7 @@ export function TodayPage() {
 
   // Owner-only manual "Send Now" trigger
   const [sendingNowId, setSendingNowId] = useState<string | null>(null);
+  const [updatingRecallTimeId, setUpdatingRecallTimeId] = useState<string | null>(null);
 
   useEffect(() => {
     loadTodayData();
@@ -769,6 +787,34 @@ export function TodayPage() {
     loadTodayData();
   }
 
+  async function handleUpdateRecallTime(r: JoinedRecall, newTimeStr: string) {
+    const due_time = newTimeStr ? newTimeStr.trim() : null;
+    const currentTime = r.due_time ? r.due_time.substring(0, 5) : null;
+    const targetTime = due_time ? due_time.substring(0, 5) : null;
+    if (currentTime === targetTime) return;
+
+    setUpdatingRecallTimeId(r.id);
+    const res = await updateRecallSchedule(r.id, {
+      due_date: r.due_date,
+      due_time,
+    });
+    setUpdatingRecallTimeId(null);
+
+    if (!res.ok) {
+      toastError(res.error, "Update Failed");
+      return;
+    }
+
+    setRecalls((prev) =>
+      prev.map((item) => (item.id === r.id ? { ...item, due_time: res.data.due_time } : item)),
+    );
+    success(
+      due_time
+        ? `Recall reminder time set to ${formatRecallTime(due_time)}.`
+        : "Recall reminder time cleared.",
+    );
+  }
+
   // Filter Logic for Recalls
   const filteredRecalls = recalls.filter((r) => {
     if (profile?.role === "owner" && selectedBranchId !== "all") {
@@ -917,18 +963,20 @@ export function TodayPage() {
               </TabsTrigger>
             </TabsList>
 
-            {activeTab === "in_clinic" && (
-              <Button size="sm" onClick={openWalkInModal} className="shadow-sm h-9">
-                <Plus className="h-4 w-4 mr-1.5" />
-                + Walk-in
-              </Button>
-            )}
-            {activeTab === "recalls" && (
-              <Button size="sm" onClick={openAddVisitPatientPicker} className="shadow-sm h-9">
-                <Plus className="h-4 w-4 mr-1.5" />
-                + Add Visit
-              </Button>
-            )}
+            <div className="w-[108px] flex justify-end shrink-0">
+              {activeTab === "in_clinic" && (
+                <Button size="sm" onClick={openWalkInModal} className="shadow-sm h-9 whitespace-nowrap">
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  + Walk-in
+                </Button>
+              )}
+              {activeTab === "recalls" && (
+                <Button size="sm" onClick={openAddVisitPatientPicker} className="shadow-sm h-9 whitespace-nowrap">
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  + Add Visit
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1627,18 +1675,50 @@ export function TodayPage() {
                             <td className="py-3 px-4 text-muted-foreground">
                               {r.visit?.treatment_type?.name || "General Checkup"}
                             </td>
-                            <td className="py-3 px-4 text-foreground font-medium">
-                              {formatDateIST(r.due_date)}
-                              {days < 0 && (
-                                <span className="ml-1.5 text-xs text-destructive font-normal">
-                                  ({Math.abs(days)}d overdue)
-                                </span>
-                              )}
-                              {days === 0 && (
-                                <span className="ml-1.5 text-xs text-amber-700 dark:text-amber-400 font-normal">
-                                  (Today)
-                                </span>
-                              )}
+                            <td className="py-3 px-4">
+                              <div className="flex flex-col gap-1 min-w-[135px]">
+                                <div className="text-foreground font-medium text-xs flex items-center gap-1.5 flex-wrap">
+                                  <span>{formatDateIST(r.due_date)}</span>
+                                  {days < 0 && (
+                                    <span className="text-[11px] text-destructive font-normal">
+                                      ({Math.abs(days)}d overdue)
+                                    </span>
+                                  )}
+                                  {days === 0 && (
+                                    <span className="text-[11px] text-amber-700 dark:text-amber-400 font-normal">
+                                      (Today)
+                                    </span>
+                                  )}
+                                </div>
+                                {r.status !== "booked" && r.status !== "completed" && r.status !== "declined" && r.status !== "cancelled" ? (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="time"
+                                      aria-label="Recall due time (optional)"
+                                      title="Optional reminder time. When set, sends reminder 2 hours before."
+                                      value={r.due_time ? r.due_time.substring(0, 5) : ""}
+                                      onChange={(e) => handleUpdateRecallTime(r, e.target.value)}
+                                      disabled={updatingRecallTimeId === r.id}
+                                      className="h-6 w-24 rounded border border-input bg-background px-1.5 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                                    />
+                                    {r.due_time && (
+                                      <button
+                                        type="button"
+                                        title="Clear reminder time"
+                                        onClick={() => handleUpdateRecallTime(r, "")}
+                                        disabled={updatingRecallTimeId === r.id}
+                                        className="text-muted-foreground hover:text-destructive p-0.5 rounded transition-colors disabled:opacity-50"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : r.due_time ? (
+                                  <span className="text-[11px] text-muted-foreground font-normal">
+                                    {formatRecallTime(r.due_time)}
+                                  </span>
+                                ) : null}
+                              </div>
                             </td>
                             <td className="py-3 px-4">
                               <Badge
