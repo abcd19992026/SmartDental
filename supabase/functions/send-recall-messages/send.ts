@@ -285,14 +285,19 @@ export async function sendOneRecallMessage(
   // status goes back to 'pending' rather than a terminal 'failed': under the new ladder, each
   // stage's own calendar-day boundary is what ends retries, not a 3-strikes counter (there is no
   // longer a +3/+10 tier to fall back to).
+  //
+  // The full payload is built BEFORE .update() is called, and never touched afterward -- mutating
+  // it after handing it to .update() only happened to work because postgrest-js keeps a reference
+  // and serialises at await time, which is incidental, not contractual. Only the WHERE-clause
+  // chaining (.eq below) happens after the builder call, which is the normal, required shape.
   const revertUpdate: Record<string, unknown> = {
     status: "pending",
     attempt_count: newAttemptCount,
     last_attempt_at: nowIso,
+    ...(stage !== null ? { last_stage_sent: stage === 1 ? null : ((stage - 1) as LadderStage) } : {}),
   };
   let revertQuery = serviceClient.from("recalls").update(revertUpdate).eq("id", recall.id);
   if (stage !== null) {
-    revertUpdate.last_stage_sent = stage === 1 ? null : ((stage - 1) as LadderStage);
     revertQuery = revertQuery.eq("last_stage_sent", stage);
   }
   await revertQuery;
