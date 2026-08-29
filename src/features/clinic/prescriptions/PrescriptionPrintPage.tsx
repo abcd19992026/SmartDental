@@ -366,14 +366,14 @@ export function PrescriptionPrintPage() {
                   {prescription.blood_pressure && (
                     <span>
                       <span className="font-semibold">BP : </span>
-                      <span className="font-bold text-black">{prescription.blood_pressure}</span>
+                      <span className="text-black">{prescription.blood_pressure}</span>
                     </span>
                   )}
                   {prescription.blood_pressure && prescription.spo2 && <span> · </span>}
                   {prescription.spo2 && (
                     <span>
                       <span className="font-semibold">SpO2 : </span>
-                      <span className="font-bold text-black">{prescription.spo2}</span>
+                      <span className="text-black">{prescription.spo2}</span>
                     </span>
                   )}
                 </div>
