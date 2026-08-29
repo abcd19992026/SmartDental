@@ -1,12 +1,26 @@
 import { useState, useEffect, type FormEvent } from "react";
-import { AlertCircle, CreditCard, Loader2 } from "lucide-react";
-import { insertPayment, isAlreadySavedError, type InsertPaymentInput } from "@/lib/clinic-api";
+import { AlertCircle, CreditCard, Loader2, Printer } from "lucide-react";
+import {
+  insertPayment,
+  isAlreadySavedError,
+  fetchClinicLetterheadData,
+  type InsertPaymentInput,
+  type ClinicLetterheadData,
+} from "@/lib/clinic-api";
+import { supabase } from "@/lib/supabase";
 import { todayIST } from "@/lib/dates";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { printPaymentReceipt } from "./printPaymentReceipt";
 
 interface AddPaymentModalProps {
   open: boolean;
@@ -36,13 +50,26 @@ export function AddPaymentModal({
   const [paidOn, setPaidOn] = useState(todayIST());
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [submitAction, setSubmitAction] = useState<"record" | "print" | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Cached clinic & patient data for instant receipt printing
+  const [clinicData, setClinicData] = useState<ClinicLetterheadData | null>(null);
+  const [patientData, setPatientData] = useState<{
+    id: string;
+    name: string;
+    mobile?: string | null;
+    address?: string | null;
+    age?: number | string | null;
+    gender?: string | null;
+  } | null>(null);
+
   // Generated once per form opening, held for the lifetime of this form instance, sent
   // unchanged on every submit attempt -- a retry after a slow/failed response must collide with
   // the same value, not generate a fresh one, or double-submit protection does nothing.
   const [clientRequestId, setClientRequestId] = useState("");
 
-  // Reset on open
+  // Reset on open & prefetch clinic/patient details for instant receipt printing
   useEffect(() => {
     if (open) {
       setAmount("");
@@ -50,12 +77,35 @@ export function AddPaymentModal({
       setPaidOn(todayIST());
       setNotes("");
       setErrorMsg(null);
+      setSubmitAction(null);
       setClientRequestId(crypto.randomUUID());
-    }
-  }, [open]);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+      // Fetch clinic letterhead & contact info
+      if (clinicId) {
+        fetchClinicLetterheadData(clinicId).then((res) => {
+          if (res.ok && res.data) {
+            setClinicData(res.data);
+          }
+        });
+      }
+
+      // Fetch patient details
+      if (patientId) {
+        supabase
+          .from("patients")
+          .select("id, name, mobile, address, age, gender")
+          .eq("id", patientId)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data) {
+              setPatientData(data);
+            }
+          });
+      }
+    }
+  }, [open, clinicId, patientId]);
+
+  async function executeSubmit(shouldPrint: boolean) {
     setErrorMsg(null);
 
     const parsedAmount = parseFloat(amount);
@@ -76,6 +126,7 @@ export function AddPaymentModal({
     }
 
     setSubmitting(true);
+    setSubmitAction(shouldPrint ? "print" : "record");
 
     const input: InsertPaymentInput = {
       patient_id: patientId,
@@ -90,30 +141,81 @@ export function AddPaymentModal({
 
     const res = await insertPayment(input);
 
-    if (!res.ok && isAlreadySavedError(res.error)) {
-      // A retry collided with this same form instance's earlier successful submit -- the row
-      // exists, which is what the user wanted. Treat it as success, not an error.
-      toastSuccess("Payment recorded successfully.");
+    const isCollidedSuccess = !res.ok && isAlreadySavedError(res.error);
+    const isDirectSuccess = res.ok && res.data && res.data.id;
+
+    if (!isCollidedSuccess && !isDirectSuccess) {
+      // Row was not affected or write was blocked/failed
+      const failureReason =
+        !res.ok && res.error
+          ? res.error
+          : "Payment could not be recorded. No changes were saved.";
+      setErrorMsg(failureReason);
       setSubmitting(false);
-      onOpenChange(false);
-      if (onSuccess) onSuccess();
+      setSubmitAction(null);
       return;
     }
 
-    if (!res.ok || !res.data || !res.data.id) {
-      // Row was not affected or write was blocked/failed
-      const failureReason = (!res.ok && res.error) ? res.error : "Payment could not be recorded. No changes were saved.";
-      setErrorMsg(failureReason);
-      setSubmitting(false);
-      return;
+    // If "Record & Print" was clicked, trigger native browser receipt print dialog
+    if (shouldPrint) {
+      let currentClinic = clinicData;
+      let currentPatient = patientData;
+
+      if (!currentClinic && clinicId) {
+        const cRes = await fetchClinicLetterheadData(clinicId);
+        if (cRes.ok && cRes.data) currentClinic = cRes.data;
+      }
+
+      if (!currentPatient && patientId) {
+        const { data: pData } = await supabase
+          .from("patients")
+          .select("id, name, mobile, address, age, gender")
+          .eq("id", patientId)
+          .maybeSingle();
+        if (pData) currentPatient = pData;
+      }
+
+      const receiptRecordId = res.ok && res.data?.id ? res.data.id : undefined;
+
+      printPaymentReceipt({
+        receiptNo: receiptRecordId
+          ? `RCP-${receiptRecordId.slice(0, 8).toUpperCase()}`
+          : undefined,
+        amount: parsedAmount,
+        mode,
+        paidOn,
+        notes: notes.trim() || null,
+        patient: {
+          id: patientId,
+          name: patientName || currentPatient?.name || "Patient",
+          mobile: currentPatient?.mobile,
+          age: currentPatient?.age,
+          gender: currentPatient?.gender,
+          address: currentPatient?.address,
+        },
+        clinic: {
+          name: currentClinic?.name || "Dental Clinic",
+          phone: currentClinic?.phone,
+          email: currentClinic?.email,
+          address: currentClinic?.address,
+          logo_url: currentClinic?.logo_url,
+          letterhead: currentClinic?.letterhead,
+        },
+      });
     }
 
     toastSuccess("Payment recorded successfully.");
     setSubmitting(false);
+    setSubmitAction(null);
     onOpenChange(false);
     if (onSuccess) {
       onSuccess();
     }
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    executeSubmit(false);
   }
 
   return (
@@ -197,12 +299,41 @@ export function AddPaymentModal({
           </div>
         </div>
 
-        <DialogFooter className="border-t border-border pt-3">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+        <DialogFooter className="border-t border-border pt-3 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={submitting}
+          >
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting}>
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+          <Button
+            type="button"
+            disabled={submitting}
+            onClick={(e) => {
+              e.preventDefault();
+              executeSubmit(true);
+            }}
+          >
+            {submitting && submitAction === "print" ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+            ) : (
+              <Printer className="h-4 w-4 mr-1.5" />
+            )}
+            Record & Print
+          </Button>
+          <Button
+            type="button"
+            disabled={submitting}
+            onClick={(e) => {
+              e.preventDefault();
+              executeSubmit(false);
+            }}
+          >
+            {submitting && submitAction === "record" ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+            ) : null}
             Record Payment
           </Button>
         </DialogFooter>

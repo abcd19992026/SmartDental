@@ -509,7 +509,7 @@ export function PrescriptionPrintPage() {
           </div>
 
           {clinic.show_branding && (
-            <div className="text-center text-[10px] text-gray-600 pb-2">
+            <div className="text-center text-[10px] text-gray-900 pb-2 ">
               Powered by SmartDentist{clinic.branding_domain ? ` · ${clinic.branding_domain}` : ""}
             </div>
           )}
