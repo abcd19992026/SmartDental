@@ -3,9 +3,7 @@ import { AlertCircle, CreditCard, Loader2, Printer } from "lucide-react";
 import {
   insertPayment,
   isAlreadySavedError,
-  fetchClinicLetterheadData,
   type InsertPaymentInput,
-  type ClinicLetterheadData,
 } from "@/lib/clinic-api";
 import { supabase } from "@/lib/supabase";
 import { todayIST } from "@/lib/dates";
@@ -20,7 +18,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { printPaymentReceipt } from "./printPaymentReceipt";
 
 interface AddPaymentModalProps {
   open: boolean;
@@ -43,7 +40,7 @@ export function AddPaymentModal({
   branchId,
   onSuccess,
 }: AddPaymentModalProps) {
-  const { success: toastSuccess } = useToast();
+  const { success: toastSuccess, toast } = useToast();
 
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState<PaymentMode>("cash");
@@ -53,23 +50,12 @@ export function AddPaymentModal({
   const [submitAction, setSubmitAction] = useState<"record" | "print" | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Cached clinic & patient data for instant receipt printing
-  const [clinicData, setClinicData] = useState<ClinicLetterheadData | null>(null);
-  const [patientData, setPatientData] = useState<{
-    id: string;
-    name: string;
-    mobile?: string | null;
-    address?: string | null;
-    age?: number | string | null;
-    gender?: string | null;
-  } | null>(null);
-
   // Generated once per form opening, held for the lifetime of this form instance, sent
   // unchanged on every submit attempt -- a retry after a slow/failed response must collide with
   // the same value, not generate a fresh one, or double-submit protection does nothing.
   const [clientRequestId, setClientRequestId] = useState("");
 
-  // Reset on open & prefetch clinic/patient details for instant receipt printing
+  // Reset on open
   useEffect(() => {
     if (open) {
       setAmount("");
@@ -79,31 +65,8 @@ export function AddPaymentModal({
       setErrorMsg(null);
       setSubmitAction(null);
       setClientRequestId(crypto.randomUUID());
-
-      // Fetch clinic letterhead & contact info
-      if (clinicId) {
-        fetchClinicLetterheadData(clinicId).then((res) => {
-          if (res.ok && res.data) {
-            setClinicData(res.data);
-          }
-        });
-      }
-
-      // Fetch patient details
-      if (patientId) {
-        supabase
-          .from("patients")
-          .select("id, name, mobile, address, age, gender")
-          .eq("id", patientId)
-          .maybeSingle()
-          .then(({ data }) => {
-            if (data) {
-              setPatientData(data);
-            }
-          });
-      }
     }
-  }, [open, clinicId, patientId]);
+  }, [open]);
 
   async function executeSubmit(shouldPrint: boolean) {
     setErrorMsg(null);
@@ -124,6 +87,11 @@ export function AddPaymentModal({
       setErrorMsg("Missing clinic, branch, or patient information.");
       return;
     }
+
+    // Opened synchronously, before any await below -- a window.open() call after an await falls
+    // outside this click's user-gesture window and gets silently popup-blocked in most browsers
+    // (same reasoning as AddVisitModal's handleSaveAndPrint).
+    const win = shouldPrint ? window.open("", "_blank") : null;
 
     setSubmitting(true);
     setSubmitAction(shouldPrint ? "print" : "record");
@@ -151,57 +119,36 @@ export function AddPaymentModal({
           ? res.error
           : "Payment could not be recorded. No changes were saved.";
       setErrorMsg(failureReason);
+      win?.close();
       setSubmitting(false);
       setSubmitAction(null);
       return;
     }
 
-    // If "Record & Print" was clicked, trigger native browser receipt print dialog
+    // If "Record & Print" was clicked, open the patient's most recent prescription in the tab
+    // opened above -- the payment itself is already recorded successfully at this point
+    // regardless of what happens next, so a missing prescription is never treated as an error.
     if (shouldPrint) {
-      let currentClinic = clinicData;
-      let currentPatient = patientData;
+      const { data: latestRx } = await supabase
+        .from("prescriptions")
+        .select("id")
+        .eq("patient_id", patientId)
+        .order("prescribed_on", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (!currentClinic && clinicId) {
-        const cRes = await fetchClinicLetterheadData(clinicId);
-        if (cRes.ok && cRes.data) currentClinic = cRes.data;
+      if (latestRx) {
+        if (win) {
+          win.location.href = `/app/prescriptions/${latestRx.id}/print?print=1`;
+        }
+      } else {
+        win?.close();
+        toast({
+          description: "This patient has no prescription yet -- nothing to print.",
+          type: "info",
+        });
       }
-
-      if (!currentPatient && patientId) {
-        const { data: pData } = await supabase
-          .from("patients")
-          .select("id, name, mobile, address, age, gender")
-          .eq("id", patientId)
-          .maybeSingle();
-        if (pData) currentPatient = pData;
-      }
-
-      const receiptRecordId = res.ok && res.data?.id ? res.data.id : undefined;
-
-      printPaymentReceipt({
-        receiptNo: receiptRecordId
-          ? `RCP-${receiptRecordId.slice(0, 8).toUpperCase()}`
-          : undefined,
-        amount: parsedAmount,
-        mode,
-        paidOn,
-        notes: notes.trim() || null,
-        patient: {
-          id: patientId,
-          name: patientName || currentPatient?.name || "Patient",
-          mobile: currentPatient?.mobile,
-          age: currentPatient?.age,
-          gender: currentPatient?.gender,
-          address: currentPatient?.address,
-        },
-        clinic: {
-          name: currentClinic?.name || "Dental Clinic",
-          phone: currentClinic?.phone,
-          email: currentClinic?.email,
-          address: currentClinic?.address,
-          logo_url: currentClinic?.logo_url,
-          letterhead: currentClinic?.letterhead,
-        },
-      });
     }
 
     toastSuccess("Payment recorded successfully.");
