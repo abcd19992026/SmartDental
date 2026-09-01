@@ -599,6 +599,7 @@ export type Database = {
           clinic_id: string
           created_at: string
           created_by: string | null
+          dentition_type: string
           do_not_disturb: boolean
           gender: string | null
           height: string | null
@@ -619,6 +620,7 @@ export type Database = {
           clinic_id: string
           created_at?: string
           created_by?: string | null
+          dentition_type?: string
           do_not_disturb?: boolean
           gender?: string | null
           height?: string | null
@@ -639,6 +641,7 @@ export type Database = {
           clinic_id?: string
           created_at?: string
           created_by?: string | null
+          dentition_type?: string
           do_not_disturb?: boolean
           gender?: string | null
           height?: string | null

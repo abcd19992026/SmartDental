@@ -1285,7 +1285,11 @@ export function ConsultationPage() {
                 {/* Tooth Chart */}
                 <div className="flex flex-col gap-1.5 pt-1">
                   <Label className="text-xs font-medium text-foreground">Interactive Dental Chart (Teeth Selection)</Label>
-                  <ToothChart value={selectedTeeth} onChange={setSelectedTeeth} />
+                  <ToothChart
+                    value={selectedTeeth}
+                    onChange={setSelectedTeeth}
+                    dentitionType={(patient?.dentition_type as "adult" | "child") ?? "adult"}
+                  />
                 </div>
 
                 <div className="flex flex-col gap-1.5">

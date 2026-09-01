@@ -14,6 +14,7 @@ import {
   User,
   Pause,
   Play,
+  Activity,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
@@ -94,8 +95,16 @@ export function PatientsPage() {
 
   // Add / Edit Patient Panel
   const [patientModalOpen, setPatientModalOpen] = useState(false);
+  const [patientModalStep, setPatientModalStep] = useState<1 | 2>(1);
   const [editingPatient, setEditingPatient] = useState<PatientRow | null>(null);
   const [addToTodayQueue, setAddToTodayQueue] = useState(true);
+
+  // Per-visit check-in vitals for new patient queue entry
+  const [queueWeight, setQueueWeight] = useState("");
+  const [queueBloodPressure, setQueueBloodPressure] = useState("");
+  const [queueSpo2, setQueueSpo2] = useState("");
+  const [queueChiefComplaint, setQueueChiefComplaint] = useState("");
+  const [queuePastDentalHistory, setQueuePastDentalHistory] = useState("");
   const [patientForm, setPatientForm] = useState<{
     name: string;
     mobile: string;
@@ -107,6 +116,7 @@ export function PatientsPage() {
     branch_id: string;
     occupation: string;
     height: string;
+    dentition_type: "adult" | "child";
     medical_history: MedicalHistory;
   }>({
     name: "",
@@ -119,6 +129,7 @@ export function PatientsPage() {
     branch_id: "",
     occupation: "",
     height: "",
+    dentition_type: "adult",
     medical_history: { ...DEFAULT_MEDICAL_HISTORY },
   });
 
@@ -227,6 +238,12 @@ export function PatientsPage() {
     setDuplicateMatchId(null);
     setDuplicateError(null);
     setAddToTodayQueue(true);
+    setPatientModalStep(1);
+    setQueueWeight("");
+    setQueueBloodPressure("");
+    setQueueSpo2("");
+    setQueueChiefComplaint("");
+    setQueuePastDentalHistory("");
     setPatientForm({
       name: "",
       mobile: "",
@@ -238,6 +255,7 @@ export function PatientsPage() {
       branch_id: profile?.branch_id || (branches[0]?.id ?? ""),
       occupation: "",
       height: "",
+      dentition_type: "adult",
       medical_history: { ...DEFAULT_MEDICAL_HISTORY },
     });
     setPatientModalOpen(true);
@@ -248,6 +266,12 @@ export function PatientsPage() {
     setEditingPatient(p);
     setDuplicateMatchId(null);
     setDuplicateError(null);
+    setPatientModalStep(1);
+    setQueueWeight("");
+    setQueueBloodPressure("");
+    setQueueSpo2("");
+    setQueueChiefComplaint("");
+    setQueuePastDentalHistory("");
     const pMedHistory =
       p.medical_history && typeof p.medical_history === "object"
         ? (p.medical_history as unknown as Partial<MedicalHistory>)
@@ -264,12 +288,30 @@ export function PatientsPage() {
       branch_id: p.branch_id,
       occupation: p.occupation || "",
       height: p.height || "",
+      dentition_type: (p.dentition_type as "adult" | "child") || "adult",
       medical_history: {
         ...DEFAULT_MEDICAL_HISTORY,
         ...(pMedHistory || {}),
       },
     });
     setPatientModalOpen(true);
+  }
+
+  // Advance from Step 1 to Step 2 in Add Patient Modal
+  function handleNextStep() {
+    if (!patientForm.name.trim()) {
+      toastError("Patient name is required.", "Validation Error");
+      return;
+    }
+    if (!/^\d{10}$/.test(patientForm.mobile.trim())) {
+      toastError("Mobile number must be exactly 10 digits.", "Validation Error");
+      return;
+    }
+    if (!patientForm.branch_id) {
+      toastError("Please select a branch.", "Validation Error");
+      return;
+    }
+    setPatientModalStep(2);
   }
 
   // Save Patient
@@ -331,6 +373,7 @@ export function PatientsPage() {
       const clinicalRes = await updatePatientClinicalProfile(editingPatient.id, {
         occupation: patientForm.occupation.trim() || null,
         height: patientForm.height.trim() || null,
+        dentition_type: patientForm.dentition_type,
         medical_history: sanitizedMedicalHistory,
       });
 
@@ -355,8 +398,14 @@ export function PatientsPage() {
         notes: patientForm.notes.trim() || null,
         occupation: patientForm.occupation.trim() || null,
         height: patientForm.height.trim() || null,
+        dentition_type: patientForm.dentition_type,
         medical_history: sanitizedMedicalHistory,
         addToTodayQueue,
+        weight: addToTodayQueue ? queueWeight.trim() || null : null,
+        blood_pressure: addToTodayQueue ? queueBloodPressure.trim() || null : null,
+        spo2: addToTodayQueue ? queueSpo2.trim() || null : null,
+        chief_complaint: addToTodayQueue ? queueChiefComplaint.trim() || null : null,
+        past_dental_history: addToTodayQueue ? queuePastDentalHistory.trim() || null : null,
       });
 
       if (!result.ok) {
@@ -572,6 +621,10 @@ export function PatientsPage() {
                   <div>
                     <span className="text-xs text-muted-foreground block">Height</span>
                     <span className="text-foreground">{selectedPatient.height || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Tooth Chart Type</span>
+                    <span className="text-foreground capitalize">{selectedPatient.dentition_type || "adult"}</span>
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground block">Medical Conditions</span>
@@ -996,8 +1049,34 @@ export function PatientsPage() {
       <Dialog open={patientModalOpen} onOpenChange={setPatientModalOpen}>
         <form onSubmit={handleSavePatient}>
           <DialogHeader>
-            <DialogTitle>{editingPatient ? "Edit Patient Record" : "Add New Patient"}</DialogTitle>
-            <DialogDescription>Patient personal information and contact details</DialogDescription>
+            <DialogTitle>
+              {editingPatient
+                ? "Edit Patient Record"
+                : `Add New Patient — Step ${patientModalStep} of 2`}
+            </DialogTitle>
+            <DialogDescription>
+              {editingPatient
+                ? "Patient personal information and contact details"
+                : patientModalStep === 1
+                ? "Step 1 of 2: Personal Information & Contact Details"
+                : "Step 2 of 2: Medical History & Clinical Profile"}
+            </DialogDescription>
+            {!editingPatient && (
+              <div className="flex items-center gap-2 pt-1.5">
+                <div
+                  className={cn(
+                    "flex-1 h-1.5 rounded-full transition-colors",
+                    patientModalStep >= 1 ? "bg-primary" : "bg-muted"
+                  )}
+                />
+                <div
+                  className={cn(
+                    "flex-1 h-1.5 rounded-full transition-colors",
+                    patientModalStep >= 2 ? "bg-primary" : "bg-muted"
+                  )}
+                />
+              </div>
+            )}
           </DialogHeader>
 
           {/* Friendly Duplicate Mobile Prompt */}
@@ -1025,252 +1104,379 @@ export function PatientsPage() {
           )}
 
           <div className="flex flex-col gap-4 py-4 max-h-[60vh] overflow-y-auto px-1">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="p-name">Full Name *</Label>
-              <Input
-                id="p-name"
-                required
-                placeholder="e.g. Ramesh Patel"
-                value={patientForm.name}
-                onChange={(e) => setPatientForm({ ...patientForm, name: e.target.value })}
-              />
-            </div>
+            {/* STEP 1: Personal Information (or always visible in Edit mode) */}
+            {(editingPatient || patientModalStep === 1) && (
+              <>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="p-name">Full Name *</Label>
+                  <Input
+                    id="p-name"
+                    required
+                    placeholder="e.g. Ramesh Patel"
+                    value={patientForm.name}
+                    onChange={(e) => setPatientForm({ ...patientForm, name: e.target.value })}
+                  />
+                </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="p-mob">Mobile (10 digits) *</Label>
-                <Input
-                  id="p-mob"
-                  required
-                  maxLength={10}
-                  placeholder="e.g. 9876543210"
-                  value={patientForm.mobile}
-                  onChange={(e) => setPatientForm({ ...patientForm, mobile: e.target.value.replace(/\D/g, "") })}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="p-alt">Alt Mobile</Label>
-                <Input
-                  id="p-alt"
-                  placeholder="Optional secondary mobile"
-                  value={patientForm.alt_mobile}
-                  onChange={(e) => setPatientForm({ ...patientForm, alt_mobile: e.target.value.replace(/\D/g, "") })}
-                />
-              </div>
-            </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="p-mob">Mobile (10 digits) *</Label>
+                    <Input
+                      id="p-mob"
+                      required
+                      maxLength={10}
+                      placeholder="e.g. 9876543210"
+                      value={patientForm.mobile}
+                      onChange={(e) => setPatientForm({ ...patientForm, mobile: e.target.value.replace(/\D/g, "") })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="p-alt">Alt Mobile</Label>
+                    <Input
+                      id="p-alt"
+                      placeholder="Optional secondary mobile"
+                      value={patientForm.alt_mobile}
+                      onChange={(e) => setPatientForm({ ...patientForm, alt_mobile: e.target.value.replace(/\D/g, "") })}
+                    />
+                  </div>
+                </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="p-age">Age</Label>
-                <Input
-                  id="p-age"
-                  type="number"
-                  placeholder="e.g. 35"
-                  value={patientForm.age}
-                  onChange={(e) => setPatientForm({ ...patientForm, age: e.target.value })}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="p-gender">Gender</Label>
-                <select
-                  id="p-gender"
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                  value={patientForm.gender}
-                  onChange={(e) => setPatientForm({ ...patientForm, gender: e.target.value })}
-                >
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-            </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="p-age">Age</Label>
+                    <Input
+                      id="p-age"
+                      type="number"
+                      placeholder="e.g. 35"
+                      value={patientForm.age}
+                      onChange={(e) => setPatientForm({ ...patientForm, age: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="p-gender">Gender</Label>
+                    <select
+                      id="p-gender"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      value={patientForm.gender}
+                      onChange={(e) => setPatientForm({ ...patientForm, gender: e.target.value })}
+                    >
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                </div>
 
-            {profile?.role === "owner" && branches.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="p-branch">Branch *</Label>
-                <select
-                  id="p-branch"
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                  value={patientForm.branch_id}
-                  onChange={(e) => setPatientForm({ ...patientForm, branch_id: e.target.value })}
-                  required
-                >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                {profile?.role === "owner" && branches.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="p-branch">Branch *</Label>
+                    <select
+                      id="p-branch"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      value={patientForm.branch_id}
+                      onChange={(e) => setPatientForm({ ...patientForm, branch_id: e.target.value })}
+                      required
+                    >
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="p-addr">Address</Label>
+                  <Input
+                    id="p-addr"
+                    placeholder="Residential address"
+                    value={patientForm.address}
+                    onChange={(e) => setPatientForm({ ...patientForm, address: e.target.value })}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="p-notes">Notes</Label>
+                  <Input
+                    id="p-notes"
+                    placeholder="General patient notes or preferences"
+                    value={patientForm.notes}
+                    onChange={(e) => setPatientForm({ ...patientForm, notes: e.target.value })}
+                  />
+                </div>
+              </>
             )}
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="p-addr">Address</Label>
-              <Input
-                id="p-addr"
-                placeholder="Residential address"
-                value={patientForm.address}
-                onChange={(e) => setPatientForm({ ...patientForm, address: e.target.value })}
-              />
-            </div>
+            {/* STEP 2: Medical & Clinical (or visible in Edit mode) */}
+            {(editingPatient || patientModalStep === 2) && (
+              <>
+                <div className={cn("space-y-4", editingPatient ? "border-t border-border pt-4 mt-2" : "")}>
+                  <div className="flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-semibold text-foreground">Medical & Clinical</h3>
+                  </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="p-notes">Notes</Label>
-              <Input
-                id="p-notes"
-                placeholder="Medical conditions or preferences"
-                value={patientForm.notes}
-                onChange={(e) => setPatientForm({ ...patientForm, notes: e.target.value })}
-              />
-            </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="p-occupation">Occupation</Label>
+                      <Input
+                        id="p-occupation"
+                        placeholder="e.g. Software Engineer, Teacher"
+                        value={patientForm.occupation}
+                        onChange={(e) => setPatientForm({ ...patientForm, occupation: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="p-height">Height</Label>
+                      <Input
+                        id="p-height"
+                        placeholder="e.g. 5ft 6in"
+                        value={patientForm.height}
+                        onChange={(e) => setPatientForm({ ...patientForm, height: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="p-dentition">Tooth Chart Type</Label>
+                      <select
+                        id="p-dentition"
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        value={patientForm.dentition_type}
+                        onChange={(e) =>
+                          setPatientForm({
+                            ...patientForm,
+                            dentition_type: e.target.value as "adult" | "child",
+                          })
+                        }
+                      >
+                        <option value="adult">Adult</option>
+                        <option value="child">Child</option>
+                      </select>
+                    </div>
+                  </div>
 
-            {/* Medical & Clinical Section */}
-            <div className="border-t border-border pt-4 mt-2 space-y-4">
-              <div className="flex items-center gap-2">
-                <Stethoscope className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold text-foreground">Medical & Clinical</h3>
-              </div>
+                  <div className="flex flex-col gap-2">
+                    <Label className="text-xs font-medium text-foreground">Medical History</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {MEDICAL_HISTORY_TOGGLES.map(({ key, label }) => {
+                        const active = !!patientForm.medical_history[key];
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() =>
+                              setPatientForm((prev) => ({
+                                ...prev,
+                                medical_history: {
+                                  ...prev.medical_history,
+                                  [key]: !prev.medical_history[key],
+                                },
+                              }))
+                            }
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none",
+                              active
+                                ? key === "allergies"
+                                  ? "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400 font-semibold ring-1 ring-red-500/30"
+                                  : "border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary/30"
+                                : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "h-1.5 w-1.5 rounded-full",
+                                active
+                                  ? key === "allergies"
+                                    ? "bg-red-600 dark:bg-red-400"
+                                    : "bg-primary"
+                                  : "bg-muted-foreground/40"
+                              )}
+                            />
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="p-occupation">Occupation</Label>
-                  <Input
-                    id="p-occupation"
-                    placeholder="e.g. Software Engineer, Teacher"
-                    value={patientForm.occupation}
-                    onChange={(e) => setPatientForm({ ...patientForm, occupation: e.target.value })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="p-height">Height</Label>
-                  <Input
-                    id="p-height"
-                    placeholder="e.g. 5ft 6in"
-                    value={patientForm.height}
-                    onChange={(e) => setPatientForm({ ...patientForm, height: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label className="text-xs font-medium text-foreground">Medical History</Label>
-                <div className="flex flex-wrap gap-2">
-                  {MEDICAL_HISTORY_TOGGLES.map(({ key, label }) => {
-                    const active = !!patientForm.medical_history[key];
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() =>
+                  {patientForm.medical_history.allergies && (
+                    <div className="flex flex-col gap-1.5 animate-in fade-in-50 duration-200">
+                      <Label htmlFor="p-allergies-detail" className="text-xs font-medium text-red-600 dark:text-red-400">
+                        Allergy Details
+                      </Label>
+                      <Input
+                        id="p-allergies-detail"
+                        placeholder="e.g. Penicillin, NSAIDs, Latex..."
+                        value={patientForm.medical_history.allergies_detail || ""}
+                        onChange={(e) =>
                           setPatientForm((prev) => ({
                             ...prev,
                             medical_history: {
                               ...prev.medical_history,
-                              [key]: !prev.medical_history[key],
+                              allergies_detail: e.target.value,
                             },
                           }))
                         }
-                        className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none",
-                          active
-                            ? key === "allergies"
-                              ? "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400 font-semibold ring-1 ring-red-500/30"
-                              : "border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary/30"
-                            : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "h-1.5 w-1.5 rounded-full",
-                            active
-                              ? key === "allergies"
-                                ? "bg-red-600 dark:bg-red-400"
-                                : "bg-primary"
-                              : "bg-muted-foreground/40"
-                          )}
-                        />
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                        className="border-red-300 dark:border-red-900/50 focus-visible:ring-red-500"
+                      />
+                    </div>
+                  )}
 
-              {patientForm.medical_history.allergies && (
-                <div className="flex flex-col gap-1.5 animate-in fade-in-50 duration-200">
-                  <Label htmlFor="p-allergies-detail" className="text-xs font-medium text-red-600 dark:text-red-400">
-                    Allergy Details
-                  </Label>
-                  <Input
-                    id="p-allergies-detail"
-                    placeholder="e.g. Penicillin, NSAIDs, Latex..."
-                    value={patientForm.medical_history.allergies_detail || ""}
-                    onChange={(e) =>
-                      setPatientForm((prev) => ({
-                        ...prev,
-                        medical_history: {
-                          ...prev.medical_history,
-                          allergies_detail: e.target.value,
-                        },
-                      }))
-                    }
-                    className="border-red-300 dark:border-red-900/50 focus-visible:ring-red-500"
-                  />
+                  {patientForm.medical_history.other && (
+                    <div className="flex flex-col gap-1.5 animate-in fade-in-50 duration-200">
+                      <Label htmlFor="p-other-text" className="text-xs font-medium">
+                        Other Details
+                      </Label>
+                      <Input
+                        id="p-other-text"
+                        placeholder="Specify other medical conditions..."
+                        value={patientForm.medical_history.other_text || ""}
+                        onChange={(e) =>
+                          setPatientForm((prev) => ({
+                            ...prev,
+                            medical_history: {
+                              ...prev.medical_history,
+                              other_text: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {patientForm.medical_history.other && (
-                <div className="flex flex-col gap-1.5 animate-in fade-in-50 duration-200">
-                  <Label htmlFor="p-other-text" className="text-xs font-medium">
-                    Other Details
-                  </Label>
-                  <Input
-                    id="p-other-text"
-                    placeholder="Specify other medical conditions..."
-                    value={patientForm.medical_history.other_text || ""}
-                    onChange={(e) =>
-                      setPatientForm((prev) => ({
-                        ...prev,
-                        medical_history: {
-                          ...prev.medical_history,
-                          other_text: e.target.value,
-                        },
-                      }))
-                    }
-                  />
-                </div>
-              )}
-            </div>
+                {/* Optional Queue Placement (New Patients Only on Step 2) */}
+                {!editingPatient && (
+                  <>
+                    <div className="flex items-start gap-2.5 pt-3 border-t border-border">
+                      <input
+                        id="p-add-to-queue"
+                        type="checkbox"
+                        checked={addToTodayQueue}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setAddToTodayQueue(checked);
+                          if (!checked) {
+                            setQueueWeight("");
+                            setQueueBloodPressure("");
+                            setQueueSpo2("");
+                            setQueueChiefComplaint("");
+                            setQueuePastDentalHistory("");
+                          }
+                        }}
+                        className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                      />
+                      <div className="flex flex-col gap-0.5">
+                        <Label htmlFor="p-add-to-queue" className="text-xs font-medium cursor-pointer">
+                          Add to today's in-clinic queue
+                        </Label>
+                        <span className="text-[11px] text-muted-foreground">
+                          Doctor will see this patient in Today's queue right away.
+                        </span>
+                      </div>
+                    </div>
 
-            {/* Optional Queue Placement (New Patients Only) */}
-            {!editingPatient && (
-              <div className="flex items-start gap-2.5 pt-3 border-t border-border">
-                <input
-                  id="p-add-to-queue"
-                  type="checkbox"
-                  checked={addToTodayQueue}
-                  onChange={(e) => setAddToTodayQueue(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
-                />
-                <div className="flex flex-col gap-0.5">
-                  <Label htmlFor="p-add-to-queue" className="text-xs font-medium cursor-pointer">
-                    Add to today's in-clinic queue
-                  </Label>
-                  <span className="text-[11px] text-muted-foreground">
-                    Doctor will see this patient in Today's queue right away.
-                  </span>
-                </div>
-              </div>
+                    {/* Vitals Sub-Section: only rendered when addToTodayQueue is CHECKED */}
+                    {addToTodayQueue && (
+                      <div className="space-y-3 pt-3 border-t border-border animate-in fade-in-50 duration-200">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                          <Activity className="h-3.5 w-3.5 text-primary" />
+                          <span>Today's Check-in Vitals & History (Optional)</span>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="p-weight" className="text-xs">Weight</Label>
+                            <Input
+                              id="p-weight"
+                              placeholder="e.g. 68 kg"
+                              value={queueWeight}
+                              onChange={(e) => setQueueWeight(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="p-bp" className="text-xs">Blood Pressure</Label>
+                            <Input
+                              id="p-bp"
+                              placeholder="e.g. 120/80 mmHg"
+                              value={queueBloodPressure}
+                              onChange={(e) => setQueueBloodPressure(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="p-spo2" className="text-xs">SpO2</Label>
+                            <Input
+                              id="p-spo2"
+                              placeholder="e.g. 98%"
+                              value={queueSpo2}
+                              onChange={(e) => setQueueSpo2(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="p-chief-complaint" className="text-xs">Chief Complaint</Label>
+                          <textarea
+                            id="p-chief-complaint"
+                            rows={2}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                            placeholder="Patient's primary concern or symptoms (e.g. Severe toothache lower right molar)"
+                            value={queueChiefComplaint}
+                            onChange={(e) => setQueueChiefComplaint(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="p-past-dental" className="text-xs">Past Dental History</Label>
+                          <textarea
+                            id="p-past-dental"
+                            rows={2}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                            placeholder="Prior dental treatments, restorations, extractions, or complications"
+                            value={queuePastDentalHistory}
+                            onChange={(e) => setQueuePastDentalHistory(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )}
           </div>
 
           <DialogFooter className="border-t border-border pt-3">
-            <Button type="button" variant="outline" onClick={() => setPatientModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit">
-              {editingPatient ? "Save Changes" : "Create Patient"}
-            </Button>
+            {editingPatient ? (
+              <>
+                <Button type="button" variant="outline" onClick={() => setPatientModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">Save Changes</Button>
+              </>
+            ) : patientModalStep === 1 ? (
+              <>
+                <Button type="button" variant="outline" onClick={() => setPatientModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={handleNextStep}>
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button type="button" variant="outline" onClick={() => setPatientModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setPatientModalStep(1)}>
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Back
+                </Button>
+                <Button type="submit">Create Patient</Button>
+              </>
+            )}
           </DialogFooter>
         </form>
       </Dialog>

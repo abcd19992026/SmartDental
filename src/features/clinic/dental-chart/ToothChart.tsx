@@ -1,5 +1,11 @@
 import { useMemo, useState } from "react";
-import { TOOTH_SHAPES, QUADRANT_TEETH, TOOTH_X_POSITIONS } from "./tooth-data";
+import {
+  TOOTH_SHAPES,
+  QUADRANT_TEETH,
+  TOOTH_X_POSITIONS,
+  CHILD_QUADRANT_TEETH,
+  CHILD_TOOTH_X_POSITIONS,
+} from "./tooth-data";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +16,7 @@ export interface ToothChartProps {
   onChange?: (selectedTeeth: number[]) => void;
   className?: string;
   disabled?: boolean;
+  dentitionType?: "adult" | "child";
 }
 
 export function ToothChart({
@@ -17,8 +24,13 @@ export function ToothChart({
   onChange,
   className,
   disabled = false,
+  dentitionType = "adult",
 }: ToothChartProps) {
   const [hoveredTooth, setHoveredTooth] = useState<number | null>(null);
+
+  const isChild = dentitionType === "child";
+  const activeQuadrants = isChild ? CHILD_QUADRANT_TEETH : QUADRANT_TEETH;
+  const activeXPositions = isChild ? CHILD_TOOTH_X_POSITIONS : TOOTH_X_POSITIONS;
 
   const selectedSet = useMemo(() => new Set(value), [value]);
 
@@ -43,8 +55,8 @@ export function ToothChart({
   };
 
   const renderToothShape = (fdi: number) => {
-    const toothNum = fdi % 10;
-    const shape = TOOTH_SHAPES[toothNum] || TOOTH_SHAPES[1];
+    const shapeKey = isChild ? 50 + (fdi % 10) : fdi % 10;
+    const shape = TOOTH_SHAPES[shapeKey] || TOOTH_SHAPES[fdi % 10] || TOOTH_SHAPES[1];
     const isSelected = selectedSet.has(fdi);
     const isHovered = hoveredTooth === fdi;
 
@@ -57,7 +69,7 @@ export function ToothChart({
         )}
         style={{
           transform: isHovered && !isSelected ? "translateY(-2px)" : "none",
-          transformOrigin: `${TOOTH_X_POSITIONS[fdi] ?? 400}px 36px`,
+          transformOrigin: `${activeXPositions[fdi] ?? 400}px 36px`,
           transition: "transform 0.15s ease-out, filter 0.15s ease-out",
         }}
         onClick={() => handleToggle(fdi)}
@@ -372,29 +384,29 @@ export function ToothChart({
             strokeWidth="1.2"
           />
 
-          {/* QUADRANT 1: Upper Right (18 -> 11) */}
+          {/* QUADRANT 1: Upper Right */}
           <g transform="">
-            {QUADRANT_TEETH.Q1.map((fdi) => renderToothShape(fdi))}
+            {activeQuadrants.Q1.map((fdi) => renderToothShape(fdi))}
           </g>
 
-          {/* QUADRANT 2: Upper Left (21 -> 28) */}
+          {/* QUADRANT 2: Upper Left */}
           <g transform="translate(840, 0) scale(-1, 1) translate(-55, 0)">
-            {QUADRANT_TEETH.Q2.map((fdi) => renderToothShape(fdi))}
+            {activeQuadrants.Q2.map((fdi) => renderToothShape(fdi))}
           </g>
 
-          {/* QUADRANT 4: Lower Right (48 -> 41) - Placed on Bottom-Left directly below Q1 */}
+          {/* QUADRANT 4: Lower Right - Placed on Bottom-Left directly below Q1 */}
           <g transform="scale(1, -1) translate(0, -150)">
-            {QUADRANT_TEETH.Q4.map((fdi) => renderToothShape(fdi))}
+            {activeQuadrants.Q4.map((fdi) => renderToothShape(fdi))}
           </g>
 
-          {/* QUADRANT 3: Lower Left (31 -> 38) - Placed on Bottom-Right directly below Q2 */}
+          {/* QUADRANT 3: Lower Left - Placed on Bottom-Right directly below Q2 */}
           <g transform="translate(840, 0) scale(-1, -1) translate(-55, -150)">
-            {QUADRANT_TEETH.Q3.map((fdi) => renderToothShape(fdi))}
+            {activeQuadrants.Q3.map((fdi) => renderToothShape(fdi))}
           </g>
 
           {/* UPPER TOOTH NUMBERS & HIT TARGETS */}
-          {[...QUADRANT_TEETH.Q1, ...QUADRANT_TEETH.Q2].map((fdi) => {
-            const x = TOOTH_X_POSITIONS[fdi] ?? 0;
+          {[...activeQuadrants.Q1, ...activeQuadrants.Q2].map((fdi) => {
+            const x = activeXPositions[fdi] ?? 0;
             const isSelected = selectedSet.has(fdi);
             const isHovered = hoveredTooth === fdi;
 
@@ -440,8 +452,8 @@ export function ToothChart({
           })}
 
           {/* LOWER TOOTH NUMBERS & HIT TARGETS */}
-          {[...QUADRANT_TEETH.Q4, ...QUADRANT_TEETH.Q3].map((fdi) => {
-            const x = TOOTH_X_POSITIONS[fdi] ?? 0;
+          {[...activeQuadrants.Q4, ...activeQuadrants.Q3].map((fdi) => {
+            const x = activeXPositions[fdi] ?? 0;
             const isSelected = selectedSet.has(fdi);
             const isHovered = hoveredTooth === fdi;
 

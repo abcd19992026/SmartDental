@@ -133,6 +133,7 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
   }
 
   // Live computed recall date
+  const selectedPatient = patients.find((p) => p.id === patientId);
   const selectedTreatment = treatmentTypes.find((t) => t.id === treatmentTypeId);
   const recallDays = selectedTreatment?.recall_days ?? 0;
 
@@ -564,6 +565,7 @@ export function AddVisitModal({ open, onOpenChange, initialPatientId, onSuccess 
               <ToothChart
                 value={selectedTeeth}
                 onChange={setSelectedTeeth}
+                dentitionType={(selectedPatient?.dentition_type as "adult" | "child") || "adult"}
               />
             </div>
 

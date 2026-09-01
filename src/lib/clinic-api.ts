@@ -555,6 +555,9 @@ export interface CreatePatientInput {
   /** Omitted entirely (not sent as null) when left undefined, so the NOT NULL DB default
    * (DEFAULT_MEDICAL_HISTORY) applies -- patients.medical_history has no null branch to satisfy. */
   medical_history?: MedicalHistory;
+  /** Omitted entirely (not sent as null) when left undefined, so the NOT NULL DB default ('adult')
+   * applies -- patients.dentition_type has no null branch to satisfy. */
+  dentition_type?: "adult" | "child";
 }
 
 export async function createPatient(input: CreatePatientInput): Promise<ApiResult<PatientRow>> {
@@ -572,6 +575,7 @@ export async function createPatient(input: CreatePatientInput): Promise<ApiResul
     height: input.height ?? null,
     is_active: true,
     ...(input.medical_history !== undefined ? { medical_history: input.medical_history } : {}),
+    ...(input.dentition_type !== undefined ? { dentition_type: input.dentition_type } : {}),
   };
   const { data, error } = await supabase
     .from("patients")
@@ -586,6 +590,7 @@ export interface UpdatePatientClinicalProfileInput {
   occupation?: string | null;
   height?: string | null;
   medical_history?: MedicalHistory;
+  dentition_type?: "adult" | "child";
 }
 
 export async function updatePatientClinicalProfile(
@@ -1051,6 +1056,14 @@ export async function createWalkIn(input: CreateWalkInInput): Promise<ApiResult<
 
 export interface CreatePatientAndQueueInput extends CreatePatientInput {
   addToTodayQueue?: boolean;
+  /** Per-visit check-in vitals for the walk-in queue entry (only relevant when
+   * addToTodayQueue is true) -- stored on the appointments row, never on the patient's
+   * permanent profile. Same fields CreateWalkInInput already supports. */
+  weight?: string | null;
+  blood_pressure?: string | null;
+  spo2?: string | null;
+  chief_complaint?: string | null;
+  past_dental_history?: string | null;
 }
 
 export interface CreatePatientAndQueueResult {
@@ -1078,6 +1091,11 @@ export async function createPatientAndQueue(
     clinic_id: input.clinic_id,
     branch_id: input.branch_id,
     patient_id: patient.id,
+    weight: input.weight,
+    blood_pressure: input.blood_pressure,
+    spo2: input.spo2,
+    chief_complaint: input.chief_complaint,
+    past_dental_history: input.past_dental_history,
   });
   if (!walkInRes.ok) {
     return { ok: true, data: { patient, queued: false, queueError: walkInRes.error } };
