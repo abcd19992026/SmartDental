@@ -17,7 +17,7 @@ export function ClinicShell() {
   const navItems: NavItem[] = [
     { to: "/app", label: "Today", icon: CalendarClock, end: true },
     { to: "/app/patients", label: "Patients", icon: Users },
-    ...(isOwner ? [{ to: "/app/messages", label: "Messages", icon: MessageSquare }] : []),
+    { to: "/app/messages", label: "Messages", icon: MessageSquare },
     ...(isOwner ? [{ to: "/app/settings", label: "Settings", icon: Settings }] : []),
   ];
 
