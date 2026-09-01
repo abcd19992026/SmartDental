@@ -46,7 +46,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { AddPaymentModal } from "@/features/clinic/billing/AddPaymentModal";
 import { ActiveRecallsPopover } from "@/components/clinic/ActiveRecallsPopover";
 import { PatientSearchSelect } from "@/components/clinic/PatientSearchSelect";
 import { cn } from "@/lib/utils";
@@ -176,10 +175,6 @@ export function TodayPage() {
   const [statusFilter, setStatusFilter] = useState<string>("pending_due");
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
-
-  // Modals State
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [paymentPatient, setPaymentPatient] = useState<{ id: string; name: string; branch_id: string } | null>(null);
 
   // Walk-in Modal State
   const [walkInModalOpen, setWalkInModalOpen] = useState(false);
@@ -649,16 +644,6 @@ export function TodayPage() {
     navigate(`/app/patients/${entry.patient_id}/consultation?appointmentId=${entry.appointment_id}`);
   }
 
-  function handleOpenPayment(entry: DaySheetEntry) {
-    const patientBranch = profile?.branch_id || (branches.length > 0 ? branches[0].id : "");
-    setPaymentPatient({
-      id: entry.patient_id,
-      name: entry.patient_name,
-      branch_id: patientBranch,
-    });
-    setPaymentModalOpen(true);
-  }
-
   const todayStr = todayIST();
 
   // Metrics calculation for Recalls
@@ -690,6 +675,9 @@ export function TodayPage() {
   const inChairCount = daySheet.filter((d) => d.status === "in_chair").length;
   const doneCount = daySheet.filter((d) => d.status === "done").length;
   const paymentDueCount = daySheet.filter((d) => d.payment_due).length;
+
+  // Queue table displays only active in-clinic patients (waiting or in chair)
+  const activeDaySheet = daySheet.filter((d) => d.status === "waiting" || d.status === "in_chair");
 
   const isWalkInPatientIdentified = isNewWalkInPatient
     ? Boolean(newWalkInName.trim()) && newWalkInMobile.replace(/\D/g, "").length === 10
@@ -1096,7 +1084,7 @@ export function TodayPage() {
                   <Skeleton className="h-10 w-full" />
                   <Skeleton className="h-10 w-full" />
                 </div>
-              ) : daySheet.length === 0 ? (
+              ) : activeDaySheet.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-14 px-4 text-center">
                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
                     <UserCheck className="h-6 w-6 text-primary" />
@@ -1125,7 +1113,7 @@ export function TodayPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y border-border">
-                      {daySheet.map((entry) => (
+                      {activeDaySheet.map((entry) => (
                         <tr key={entry.appointment_id} className="hover:bg-muted/30 transition-colors">
                           <td className="py-3.5 px-4 font-medium text-foreground">
                             <Link
@@ -1193,17 +1181,6 @@ export function TodayPage() {
                                 >
                                   <ExternalLink className="h-3.5 w-3.5 mr-1" />
                                   Open
-                                </Button>
-                              )}
-                              {entry.status === "done" && entry.payment_due && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleOpenPayment(entry)}
-                                  className="h-8 px-2.5 text-xs border-amber-600/30 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
-                                >
-                                  <CreditCard className="h-3.5 w-3.5 mr-1" />
-                                  Payment
                                 </Button>
                               )}
                             </div>
@@ -2390,23 +2367,6 @@ export function TodayPage() {
           </DialogFooter>
         </form>
       </Dialog>
-
-      {/* Add Payment Modal (In Clinic tab "Payment" button) */}
-      {paymentPatient && (
-        <AddPaymentModal
-          open={paymentModalOpen}
-          onOpenChange={setPaymentModalOpen}
-          patientId={paymentPatient.id}
-          patientName={paymentPatient.name}
-          clinicId={profile?.clinic_id || ""}
-          branchId={paymentPatient.branch_id}
-          onSuccess={() => {
-            loadDaySheetData();
-            loadTodayData();
-            loadAppointmentsData();
-          }}
-        />
-      )}
     </div>
   );
 }
