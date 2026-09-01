@@ -967,7 +967,7 @@ export function TodayPage() {
               {activeTab === "in_clinic" && (
                 <Button size="sm" onClick={openWalkInModal} className="shadow-sm h-9 whitespace-nowrap">
                   <Plus className="h-4 w-4 mr-1.5" />
-                  + Walk-in
+                  Walk-in
                 </Button>
               )}
               {activeTab === "recalls" && (
@@ -1088,7 +1088,7 @@ export function TodayPage() {
                   </p>
                   <Button size="sm" className="mt-4 shadow-sm" onClick={openWalkInModal}>
                     <Plus className="h-4 w-4 mr-1.5" />
-                    + Walk-in Patient
+                    Walk-in Patient
                   </Button>
                 </div>
               ) : (
@@ -1828,7 +1828,7 @@ export function TodayPage() {
       </Tabs>
 
       {/* ========================================================================= */}
-      {/* MODAL: + WALK-IN PATIENT */}
+      {/* MODAL:  WALK-IN PATIENT */}
       {/* ========================================================================= */}
       <Dialog open={walkInModalOpen} onOpenChange={setWalkInModalOpen}>
         <form onSubmit={handleConfirmWalkIn}>

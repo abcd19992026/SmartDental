@@ -62,16 +62,16 @@ const MEDICAL_HISTORY_TOGGLES: Array<{
   key: keyof Omit<MedicalHistory, "allergies_detail" | "other_text">;
   label: string;
 }> = [
-  { key: "diabetes", label: "Diabetes" },
-  { key: "hypertension", label: "Hypertension" },
-  { key: "thyroid", label: "Thyroid" },
-  { key: "asthma", label: "Asthma" },
-  { key: "tuberculosis", label: "Tuberculosis" },
-  { key: "cardiac", label: "Cardiac" },
-  { key: "arthritis", label: "Arthritis" },
-  { key: "allergies", label: "Allergies" },
-  { key: "other", label: "Other" },
-];
+    { key: "diabetes", label: "Diabetes" },
+    { key: "hypertension", label: "Hypertension" },
+    { key: "thyroid", label: "Thyroid" },
+    { key: "asthma", label: "Asthma" },
+    { key: "tuberculosis", label: "Tuberculosis" },
+    { key: "cardiac", label: "Cardiac" },
+    { key: "arthritis", label: "Arthritis" },
+    { key: "allergies", label: "Allergies" },
+    { key: "other", label: "Other" },
+  ];
 
 export function PatientsPage() {
   const navigate = useNavigate();
@@ -452,9 +452,9 @@ export function PatientsPage() {
         const selectedPatientMedHistory: MedicalHistory =
           selectedPatient.medical_history && typeof selectedPatient.medical_history === "object"
             ? {
-                ...DEFAULT_MEDICAL_HISTORY,
-                ...(selectedPatient.medical_history as unknown as Partial<MedicalHistory>),
-              }
+              ...DEFAULT_MEDICAL_HISTORY,
+              ...(selectedPatient.medical_history as unknown as Partial<MedicalHistory>),
+            }
             : DEFAULT_MEDICAL_HISTORY;
 
         const activeConditions: string[] = [];
@@ -475,362 +475,362 @@ export function PatientsPage() {
         }
 
         return (
-        <div className="flex flex-col gap-6">
-          {/* Unified Patient Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border pb-4">
-            {/* Left side: Back Button + Patient Name + DND Badge + Allergy Banner */}
-            <div className="flex items-start gap-3">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setSearchParams({})}
-                title="Back to Patient List"
-                className="h-9 w-9 shrink-0 mt-0.5"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-xl font-semibold text-foreground tracking-tight">{selectedPatient.name}</h2>
-                  {selectedPatient.do_not_disturb && (
-                    <Badge variant="outline" className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-xs">
-                      Do Not Disturb
-                    </Badge>
+          <div className="flex flex-col gap-6">
+            {/* Unified Patient Header */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border pb-4">
+              {/* Left side: Back Button + Patient Name + DND Badge + Allergy Banner */}
+              <div className="flex items-start gap-3">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setSearchParams({})}
+                  title="Back to Patient List"
+                  className="h-9 w-9 shrink-0 mt-0.5"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-xl font-semibold text-foreground tracking-tight">{selectedPatient.name}</h2>
+                    {selectedPatient.do_not_disturb && (
+                      <Badge variant="outline" className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-xs">
+                        Do Not Disturb
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* TASK 2: Prominent Red Allergy Banner (single warning icon) */}
+                  {selectedPatientMedHistory.allergies && (
+                    <div className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-600 text-white dark:bg-red-950/90 dark:border dark:border-red-600 dark:text-red-200 text-xs sm:text-sm font-semibold tracking-wide shadow-sm">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-white dark:text-red-400" />
+                      <span>
+                        {selectedPatientMedHistory.allergies_detail && selectedPatientMedHistory.allergies_detail.trim()
+                          ? `Allergy: ${selectedPatientMedHistory.allergies_detail.trim()}`
+                          : "Allergy noted (no details recorded)"}
+                      </span>
+                    </div>
                   )}
                 </div>
+              </div>
 
-                {/* TASK 2: Prominent Red Allergy Banner (single warning icon) */}
-                {selectedPatientMedHistory.allergies && (
-                  <div className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-600 text-white dark:bg-red-950/90 dark:border dark:border-red-600 dark:text-red-200 text-xs sm:text-sm font-semibold tracking-wide shadow-sm">
-                    <AlertTriangle className="h-4 w-4 shrink-0 text-white dark:text-red-400" />
-                    <span>
-                      {selectedPatientMedHistory.allergies_detail && selectedPatientMedHistory.allergies_detail.trim()
-                        ? `Allergy: ${selectedPatientMedHistory.allergies_detail.trim()}`
-                        : "Allergy noted (no details recorded)"}
-                    </span>
-                  </div>
-                )}
+              {/* Right side: Billing Numbers + Record Visit Button */}
+              <div className="flex items-center gap-6 sm:gap-8 lg:gap-12 flex-wrap sm:flex-nowrap justify-between lg:justify-end">
+                <BillingBanner summary={billingSummary} loading={billingLoading} />
+                <div className="h-8 w-px bg-border hidden sm:block shrink-0" />
+                <Button
+                  size="sm"
+                  onClick={() => navigate(`/app/patients/${selectedPatient.id}/consultation`)}
+                  className="shadow-sm shrink-0"
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Record Visit
+                </Button>
               </div>
             </div>
 
-            {/* Right side: Billing Numbers + Record Visit Button */}
-            <div className="flex items-center gap-6 sm:gap-8 lg:gap-12 flex-wrap sm:flex-nowrap justify-between lg:justify-end">
-              <BillingBanner summary={billingSummary} loading={billingLoading} />
-              <div className="h-8 w-px bg-border hidden sm:block shrink-0" />
-              <Button
-                size="sm"
-                onClick={() => navigate(`/app/patients/${selectedPatient.id}/consultation`)}
-                className="shadow-sm shrink-0"
-              >
-                <Plus className="h-4 w-4 mr-1.5" />
-                Record Visit
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-3">
-            {/* Patient Profile Card */}
-            <Card className="md:col-span-1">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-                <CardTitle className="text-base font-medium flex items-center gap-2">
-                  <User className="h-4 w-4 text-primary" />
-                  Patient Info
-                </CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openEditPatient(selectedPatient)}
-                  className="h-8 px-2.5 text-xs"
-                >
-                  <Edit2 className="h-3.5 w-3.5 mr-1" />
-                  Edit Profile
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                <div>
-                  <span className="text-xs text-muted-foreground block">Mobile</span>
-                  <span className="font-medium text-foreground">{selectedPatient.mobile}</span>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground block">Alt Mobile</span>
-                  <span className="text-foreground">{selectedPatient.alt_mobile || "—"}</span>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground block">Age / Gender</span>
-                  <span className="font-medium capitalize text-foreground">
-                    {selectedPatient.age ? `${selectedPatient.age} yrs` : "—"} / {selectedPatient.gender || "—"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground block">Branch</span>
-                  <span className="text-foreground">{selectedPatient.branch?.name || "Main"}</span>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground block">Occupation</span>
-                  <span className="text-foreground">{selectedPatient.occupation || "—"}</span>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground block">Height</span>
-                  <span className="text-foreground">{selectedPatient.height || "—"}</span>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground block">Medical Conditions</span>
-                  <span className="text-foreground font-medium">
-                    {activeConditions.length > 0 ? activeConditions.join(" · ") : "—"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground block">Address</span>
-                  <span className="text-foreground">{selectedPatient.address || "—"}</span>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground block">Clinical Notes</span>
-                  <span className="text-foreground">{selectedPatient.notes || "—"}</span>
-                </div>
-
-                {/* DND Toggle Box */}
-                <div className="rounded-lg border border-border bg-muted/30 p-3 mt-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-foreground">Do Not Disturb</span>
-                    <Button
-                      variant={selectedPatient.do_not_disturb ? "destructive" : "outline"}
-                      size="sm"
-                      onClick={() => handleToggleDND(selectedPatient)}
-                      className="h-7 text-xs"
-                    >
-                      {selectedPatient.do_not_disturb ? "Disable DND" : "Enable DND"}
-                    </Button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-tight">
-                    Excludes this patient from all automated recall reminders.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Visit, Payment & Recall Timelines */}
-            <div className="md:col-span-2 flex flex-col gap-6">
-              {/* Prescriptions */}
-              <PrescriptionsCard patientId={selectedPatient.id} refreshKey={prescriptionsRefreshKey} />
-
-              {/* Visit History Timeline (Collapsible Dropdown) */}
-              <Card>
-                <CardHeader
-                  className="flex flex-row items-center justify-between cursor-pointer select-none py-3.5 hover:bg-muted/40 transition-colors rounded-t-lg"
-                  onClick={() => setVisitTimelineOpen((prev) => !prev)}
-                >
-                  <div className="flex items-center gap-2">
-                    <Stethoscope className="h-4 w-4 text-primary" />
-                    <CardTitle className="text-base font-medium">
-                      Visit History Timeline
-                    </CardTitle>
-                    <Badge variant="outline" className="text-xs font-normal ml-1">
-                      {selectedPatient.visits?.length || 0} {selectedPatient.visits?.length === 1 ? "visit" : "visits"}
-                    </Badge>
-                  </div>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0">
-                    <ChevronDown
-                      className={cn(
-                        "h-4 w-4 transition-transform duration-200",
-                        visitTimelineOpen && "rotate-180"
-                      )}
-                    />
+            <div className="grid gap-6 md:grid-cols-3">
+              {/* Patient Profile Card */}
+              <Card className="md:col-span-1">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <User className="h-4 w-4 text-primary" />
+                    Patient Info
+                  </CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openEditPatient(selectedPatient)}
+                    className="h-8 px-2.5 text-xs"
+                  >
+                    <Edit2 className="h-3.5 w-3.5 mr-1" />
+                    Edit Profile
                   </Button>
                 </CardHeader>
-                {visitTimelineOpen && (
-                  <CardContent className="pt-2 border-t border-border">
-                    {!selectedPatient.visits || selectedPatient.visits.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-4 text-center">
-                        No visits recorded yet for this patient.
-                      </p>
-                    ) : (
-                      <div className="relative border-l-2 border-primary/20 ml-3 pl-4 space-y-6 pt-2">
-                        {selectedPatient.visits
-                          .sort((a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime())
-                          .map((v) => {
-                            const hasPrescription = selectedPatient.prescriptions?.some((rx) => rx.visit_id === v.id) ?? false;
-                            return (
-                            <div key={v.id} className="relative">
-                              <span className="absolute -left-[23px] top-1 h-3 w-3 rounded-full bg-primary ring-4 ring-background" />
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                                <span className="font-medium text-foreground text-sm">
-                                  {v.treatment_type?.name || "Treatment Visit"}
-                                </span>
-                                <span className="text-xs text-muted-foreground font-mono">
-                                  {formatDateIST(v.visit_date)}
-                                </span>
-                              </div>
-                              <div className="text-xs text-muted-foreground mt-1 space-y-1">
-                                {/* Teeth chips (renders pills if present, nothing if empty) */}
-                                {((v.teeth && v.teeth.length > 0) || (v.tooth_numbers && v.tooth_numbers.trim())) && (
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <strong className="text-foreground">Teeth:</strong>
-                                    {(v.teeth && v.teeth.length > 0
-                                      ? [...v.teeth].sort((a, b) => a - b)
-                                      : v.tooth_numbers!.split(",").map((s) => s.trim()).filter(Boolean)
-                                    ).map((t) => (
-                                      <Badge
-                                        key={String(t)}
-                                        variant="outline"
-                                        className="h-5 px-1.5 py-0 border-teal-500/30 text-teal-400 bg-teal-500/10 font-mono text-[11px] font-medium"
-                                      >
-                                        {t}
-                                      </Badge>
-                                    ))}
+                <CardContent className="space-y-4 text-sm">
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Mobile</span>
+                    <span className="font-medium text-foreground">{selectedPatient.mobile}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Alt Mobile</span>
+                    <span className="text-foreground">{selectedPatient.alt_mobile || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Age / Gender</span>
+                    <span className="font-medium capitalize text-foreground">
+                      {selectedPatient.age ? `${selectedPatient.age} yrs` : "—"} / {selectedPatient.gender || "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Branch</span>
+                    <span className="text-foreground">{selectedPatient.branch?.name || "Main"}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Occupation</span>
+                    <span className="text-foreground">{selectedPatient.occupation || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Height</span>
+                    <span className="text-foreground">{selectedPatient.height || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Medical Conditions</span>
+                    <span className="text-foreground font-medium">
+                      {activeConditions.length > 0 ? activeConditions.join(" · ") : "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Address</span>
+                    <span className="text-foreground">{selectedPatient.address || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Clinical Notes</span>
+                    <span className="text-foreground">{selectedPatient.notes || "—"}</span>
+                  </div>
+
+                  {/* DND Toggle Box */}
+                  <div className="rounded-lg border border-border bg-muted/30 p-3 mt-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-foreground">Do Not Disturb</span>
+                      <Button
+                        variant={selectedPatient.do_not_disturb ? "destructive" : "outline"}
+                        size="sm"
+                        onClick={() => handleToggleDND(selectedPatient)}
+                        className="h-7 text-xs"
+                      >
+                        {selectedPatient.do_not_disturb ? "Disable DND" : "Enable DND"}
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-tight">
+                      Excludes this patient from all automated recall reminders.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Visit, Payment & Recall Timelines */}
+              <div className="md:col-span-2 flex flex-col gap-6">
+                {/* Prescriptions */}
+                <PrescriptionsCard patientId={selectedPatient.id} refreshKey={prescriptionsRefreshKey} />
+
+                {/* Visit History Timeline (Collapsible Dropdown) */}
+                <Card>
+                  <CardHeader
+                    className="flex flex-row items-center justify-between cursor-pointer select-none py-3.5 hover:bg-muted/40 transition-colors rounded-t-lg"
+                    onClick={() => setVisitTimelineOpen((prev) => !prev)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Stethoscope className="h-4 w-4 text-primary" />
+                      <CardTitle className="text-base font-medium">
+                        Visit History Timeline
+                      </CardTitle>
+                      <Badge variant="outline" className="text-xs font-normal ml-1">
+                        {selectedPatient.visits?.length || 0} {selectedPatient.visits?.length === 1 ? "visit" : "visits"}
+                      </Badge>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0">
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 transition-transform duration-200",
+                          visitTimelineOpen && "rotate-180"
+                        )}
+                      />
+                    </Button>
+                  </CardHeader>
+                  {visitTimelineOpen && (
+                    <CardContent className="pt-2 border-t border-border">
+                      {!selectedPatient.visits || selectedPatient.visits.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-4 text-center">
+                          No visits recorded yet for this patient.
+                        </p>
+                      ) : (
+                        <div className="relative border-l-2 border-primary/20 ml-3 pl-4 space-y-6 pt-2">
+                          {selectedPatient.visits
+                            .sort((a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime())
+                            .map((v) => {
+                              const hasPrescription = selectedPatient.prescriptions?.some((rx) => rx.visit_id === v.id) ?? false;
+                              return (
+                                <div key={v.id} className="relative">
+                                  <span className="absolute -left-[23px] top-1 h-3 w-3 rounded-full bg-primary ring-4 ring-background" />
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                    <span className="font-medium text-foreground text-sm">
+                                      {v.treatment_type?.name || "Treatment Visit"}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground font-mono">
+                                      {formatDateIST(v.visit_date)}
+                                    </span>
                                   </div>
-                                )}
-                                {v.amount !== null && v.amount !== undefined && (
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <strong>Amount:</strong>
-                                    {v.discount_percent && v.discount_percent > 0 ? (
-                                      <>
-                                        <span className="line-through text-muted-foreground">
-                                          {formatINR(v.amount)}
-                                        </span>
-                                        <Badge
-                                          variant="outline"
-                                          className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-[10px] py-0 px-1.5 font-normal"
-                                        >
-                                          {v.discount_percent}% off
-                                        </Badge>
-                                        <span className="font-semibold text-foreground">
-                                          {formatINR(v.net_amount ?? Math.round(v.amount * (1 - v.discount_percent / 100)))}
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <span className="font-medium text-foreground">
-                                        {formatINR(v.net_amount ?? v.amount)}
-                                      </span>
+                                  <div className="text-xs text-muted-foreground mt-1 space-y-1">
+                                    {/* Teeth chips (renders pills if present, nothing if empty) */}
+                                    {((v.teeth && v.teeth.length > 0) || (v.tooth_numbers && v.tooth_numbers.trim())) && (
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <strong className="text-foreground">Teeth:</strong>
+                                        {(v.teeth && v.teeth.length > 0
+                                          ? [...v.teeth].sort((a, b) => a - b)
+                                          : v.tooth_numbers!.split(",").map((s) => s.trim()).filter(Boolean)
+                                        ).map((t) => (
+                                          <Badge
+                                            key={String(t)}
+                                            variant="outline"
+                                            className="h-5 px-1.5 py-0 border-teal-500/30 text-teal-400 bg-teal-500/10 font-mono text-[11px] font-medium"
+                                          >
+                                            {t}
+                                          </Badge>
+                                        ))}
+                                      </div>
                                     )}
+                                    {v.amount !== null && v.amount !== undefined && (
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <strong>Amount:</strong>
+                                        {v.discount_percent && v.discount_percent > 0 ? (
+                                          <>
+                                            <span className="line-through text-muted-foreground">
+                                              {formatINR(v.amount)}
+                                            </span>
+                                            <Badge
+                                              variant="outline"
+                                              className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-[10px] py-0 px-1.5 font-normal"
+                                            >
+                                              {v.discount_percent}% off
+                                            </Badge>
+                                            <span className="font-semibold text-foreground">
+                                              {formatINR(v.net_amount ?? Math.round(v.amount * (1 - v.discount_percent / 100)))}
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <span className="font-medium text-foreground">
+                                            {formatINR(v.net_amount ?? v.amount)}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                    {v.notes && <p><strong>Notes:</strong> {v.notes}</p>}
                                   </div>
-                                )}
-                                {v.notes && <p><strong>Notes:</strong> {v.notes}</p>}
-                              </div>
-                              {/* Doc's Problem 1 (Phase 13A): a visit with no prescription can
+                                  {/* Doc's Problem 1 (Phase 13A): a visit with no prescription can
                                  have one attached later, without re-billing it. */}
-                              {!hasPrescription && (
-                                <Link
-                                  to={`/app/patients/${selectedPatient.id}/consultation?visitId=${v.id}`}
-                                  className="text-xs text-primary underline underline-offset-2 font-medium mt-1.5 inline-block"
-                                >
-                                  + Prescription
-                                </Link>
-                              )}
-                            </div>
-                            );
-                          })}
+                                  {!hasPrescription && (
+                                    <Link
+                                      to={`/app/patients/${selectedPatient.id}/consultation?visitId=${v.id}`}
+                                      className="text-xs text-primary underline underline-offset-2 font-medium mt-1.5 inline-block"
+                                    >
+                                      + Prescription
+                                    </Link>
+                                  )}
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </CardContent>
+                  )}
+                </Card>
+
+                {/* Payment History Card */}
+                <PaymentHistoryCard
+                  payments={paymentHistory}
+                  loading={billingLoading}
+                  onAddPayment={() => setAddPaymentOpen(true)}
+                  onRefresh={() => {
+                    loadBillingData(selectedPatient.id);
+                    loadPatientsData();
+                  }}
+                />
+
+                {/* Recalls History */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base font-medium flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-primary" />
+                      Recalls (Past & Upcoming)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {!selectedPatient.recalls || selectedPatient.recalls.length === 0 ? (
+                      <p className="text-sm text-muted-foreground p-6 text-center">No recalls scheduled.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="border-b border-border bg-muted/40 font-medium text-muted-foreground uppercase">
+                            <tr>
+                              <th className="py-2.5 px-4">Due Date</th>
+                              <th className="py-2.5 px-4">Status</th>
+                              <th className="py-2.5 px-4 text-center">Attempts</th>
+                              <th className="py-2.5 px-4">Last Attempt</th>
+                              <th className="py-2.5 px-4 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {selectedPatient.recalls
+                              .sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime())
+                              .map((r) => {
+                                const isPaused = r.status === "paused";
+                                const isActionable = r.status !== "completed" && r.status !== "declined";
+
+                                return (
+                                  <tr key={r.id}>
+                                    <td className="py-2.5 px-4 font-medium text-foreground">{formatDateIST(r.due_date)}</td>
+                                    <td className="py-2.5 px-4">
+                                      <Badge
+                                        variant="outline"
+                                        className={cn(
+                                          "capitalize font-normal text-[11px]",
+                                          r.status === "pending" && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
+                                          r.status === "sent" && "border-primary/30 text-primary bg-primary/5 dark:bg-primary/10",
+                                          r.status === "booked" && "border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40",
+                                          r.status === "contacted" && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
+                                          r.status === "declined" && "border-muted text-muted-foreground bg-muted/20",
+                                          r.status === "paused" && "border-slate-500/30 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/40"
+                                        )}
+                                      >
+                                        {r.status}
+                                      </Badge>
+                                    </td>
+                                    <td className="py-2.5 px-4 text-center">{r.attempt_count}</td>
+                                    <td className="py-2.5 px-4 text-muted-foreground">
+                                      {r.last_attempt_at ? formatDateIST(r.last_attempt_at.split("T")[0]) : "—"}
+                                    </td>
+                                    <td className="py-2.5 px-4 text-right">
+                                      {isActionable ? (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          title={isPaused ? "Resume Recall" : "Pause Recall"}
+                                          onClick={() => handleTogglePause(r)}
+                                          className={cn(
+                                            "h-7 px-2 text-xs",
+                                            isPaused
+                                              ? "text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                                              : "text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                                          )}
+                                        >
+                                          {isPaused ? (
+                                            <>
+                                              <Play className="h-3 w-3 mr-1 text-emerald-600" />
+                                              Resume
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Pause className="h-3 w-3 mr-1 text-amber-600" />
+                                              Pause
+                                            </>
+                                          )}
+                                        </Button>
+                                      ) : (
+                                        <span className="text-muted-foreground/50 text-[11px]">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                   </CardContent>
-                )}
-              </Card>
-
-              {/* Payment History Card */}
-              <PaymentHistoryCard
-                payments={paymentHistory}
-                loading={billingLoading}
-                onAddPayment={() => setAddPaymentOpen(true)}
-                onRefresh={() => {
-                  loadBillingData(selectedPatient.id);
-                  loadPatientsData();
-                }}
-              />
-
-              {/* Recalls History */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base font-medium flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-primary" />
-                    Recalls (Past & Upcoming)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {!selectedPatient.recalls || selectedPatient.recalls.length === 0 ? (
-                    <p className="text-sm text-muted-foreground p-6 text-center">No recalls scheduled.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead className="border-b border-border bg-muted/40 font-medium text-muted-foreground uppercase">
-                          <tr>
-                            <th className="py-2.5 px-4">Due Date</th>
-                            <th className="py-2.5 px-4">Status</th>
-                            <th className="py-2.5 px-4 text-center">Attempts</th>
-                            <th className="py-2.5 px-4">Last Attempt</th>
-                            <th className="py-2.5 px-4 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                          {selectedPatient.recalls
-                            .sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime())
-                            .map((r) => {
-                              const isPaused = r.status === "paused";
-                              const isActionable = r.status !== "completed" && r.status !== "declined";
-
-                              return (
-                                <tr key={r.id}>
-                                  <td className="py-2.5 px-4 font-medium text-foreground">{formatDateIST(r.due_date)}</td>
-                                  <td className="py-2.5 px-4">
-                                    <Badge
-                                      variant="outline"
-                                      className={cn(
-                                        "capitalize font-normal text-[11px]",
-                                        r.status === "pending" && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
-                                        r.status === "sent" && "border-primary/30 text-primary bg-primary/5 dark:bg-primary/10",
-                                        r.status === "booked" && "border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40",
-                                        r.status === "contacted" && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
-                                        r.status === "declined" && "border-muted text-muted-foreground bg-muted/20",
-                                        r.status === "paused" && "border-slate-500/30 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/40"
-                                      )}
-                                    >
-                                      {r.status}
-                                    </Badge>
-                                  </td>
-                                  <td className="py-2.5 px-4 text-center">{r.attempt_count}</td>
-                                  <td className="py-2.5 px-4 text-muted-foreground">
-                                    {r.last_attempt_at ? formatDateIST(r.last_attempt_at.split("T")[0]) : "—"}
-                                  </td>
-                                  <td className="py-2.5 px-4 text-right">
-                                    {isActionable ? (
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        title={isPaused ? "Resume Recall" : "Pause Recall"}
-                                        onClick={() => handleTogglePause(r)}
-                                        className={cn(
-                                          "h-7 px-2 text-xs",
-                                          isPaused
-                                            ? "text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-                                            : "text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
-                                        )}
-                                      >
-                                        {isPaused ? (
-                                          <>
-                                            <Play className="h-3 w-3 mr-1 text-emerald-600" />
-                                            Resume
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Pause className="h-3 w-3 mr-1 text-amber-600" />
-                                            Pause
-                                          </>
-                                        )}
-                                      </Button>
-                                    ) : (
-                                      <span className="text-muted-foreground/50 text-[11px]">—</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                </Card>
+              </div>
             </div>
           </div>
-        </div>
         );
       })() : (
         /* VIEW B: Patients Table View */
