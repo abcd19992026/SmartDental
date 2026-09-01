@@ -396,6 +396,11 @@ export function ConsultationPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savedVisitId, setSavedVisitId] = useState<string | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  // The visit this consultation is currently acting on -- known upfront from the URL in
+  // existing-visit mode, or set once createVisitWithRecall succeeds in new-visit mode. Used to
+  // scope AddPaymentModal's "Record & Print" lookup to this visit's own prescription (if any),
+  // rather than the patient's most recent prescription across all visits.
+  const [currentVisitId, setCurrentVisitId] = useState<string | null>(visitId);
 
   // Prefill teeth from existing visit
   useEffect(() => {
@@ -653,6 +658,7 @@ export function ConsultationPage() {
     }
 
     const newVisitId = visitRes.data.visit_id;
+    setCurrentVisitId(newVisitId);
 
     if (!hasRxContent) {
       toastSuccess("Visit and recall recorded successfully.");
@@ -1519,6 +1525,7 @@ export function ConsultationPage() {
         patientName={patient.name}
         clinicId={patient.clinic_id}
         branchId={patient.branch_id}
+        visitId={currentVisitId ?? undefined}
         onSuccess={goToPatientProfile}
       />
     </div>

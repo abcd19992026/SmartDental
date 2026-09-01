@@ -26,6 +26,10 @@ interface AddPaymentModalProps {
   patientName?: string;
   clinicId: string;
   branchId: string;
+  /** When provided, "Record & Print" prints this visit's own prescription (if any) instead of
+   * the patient's most recent prescription across all visits. Omitted at call sites with no
+   * single "current visit" context (e.g. PatientsPage, TodayPage). */
+  visitId?: string;
   onSuccess?: () => void;
 }
 
@@ -38,6 +42,7 @@ export function AddPaymentModal({
   patientName,
   clinicId,
   branchId,
+  visitId,
   onSuccess,
 }: AddPaymentModalProps) {
   const { success: toastSuccess, toast } = useToast();
@@ -125,27 +130,36 @@ export function AddPaymentModal({
       return;
     }
 
-    // If "Record & Print" was clicked, open the patient's most recent prescription in the tab
-    // opened above -- the payment itself is already recorded successfully at this point
-    // regardless of what happens next, so a missing prescription is never treated as an error.
+    // If "Record & Print" was clicked, open a prescription in the tab opened above -- the
+    // payment itself is already recorded successfully at this point regardless of what happens
+    // next, so a missing prescription is never treated as an error. When visitId is known, scope
+    // the lookup to that visit's own prescription so we never print an older, unrelated one from
+    // a previous visit; otherwise (no single "current visit" context) fall back to the patient's
+    // most recent prescription across all visits.
     if (shouldPrint) {
-      const { data: latestRx } = await supabase
-        .from("prescriptions")
-        .select("id")
-        .eq("patient_id", patientId)
-        .order("prescribed_on", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const rxQuery = visitId
+        ? supabase.from("prescriptions").select("id").eq("visit_id", visitId).order("created_at", { ascending: false }).limit(1).maybeSingle()
+        : supabase
+            .from("prescriptions")
+            .select("id")
+            .eq("patient_id", patientId)
+            .order("prescribed_on", { ascending: false })
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-      if (latestRx) {
+      const { data: rx } = await rxQuery;
+
+      if (rx) {
         if (win) {
-          win.location.href = `/app/prescriptions/${latestRx.id}/print?print=1`;
+          win.location.href = `/app/prescriptions/${rx.id}/print?print=1`;
         }
       } else {
         win?.close();
         toast({
-          description: "This patient has no prescription yet -- nothing to print.",
+          description: visitId
+            ? "No prescription was created for this visit -- nothing to print."
+            : "This patient has no prescription yet -- nothing to print.",
           type: "info",
         });
       }
