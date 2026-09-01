@@ -30,6 +30,7 @@ import {
   fetchLatestCheckinVitalsForPatient,
   fetchMedicines,
   isAlreadySavedError,
+  updateAppointmentStatus,
   DEFAULT_MEDICAL_HISTORY,
   type MedicalHistory,
   type MedicineRow,
@@ -254,11 +255,14 @@ export function ConsultationPage() {
   const { patientId } = useParams<{ patientId: string }>();
   const [searchParams] = useSearchParams();
   const visitId = searchParams.get("visitId");
+  // Present when opened via "Open" on an in_chair entry in the in-clinic queue (TodayPage) --
+  // absent in existing-visit mode (?visitId=) and everywhere else this page can be reached from.
+  const appointmentId = searchParams.get("appointmentId");
   const isExistingVisitMode = Boolean(visitId);
 
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const { success: toastSuccess } = useToast();
+  const { success: toastSuccess, toast } = useToast();
 
   const canPrescribe = profile?.role === "owner" || profile?.role === "super_admin";
 
@@ -669,7 +673,20 @@ export function ConsultationPage() {
     return attemptPrescriptionSave(newVisitId);
   }
 
-  function goToPatientProfile() {
+  // Single exit point for leaving this consultation. When opened from the in-clinic queue
+  // (appointmentId present), marks that appointment "done" first -- this is the only place the
+  // appointment transitions out of "in_chair", so every way of leaving (Save, Save & Print,
+  // Save & Payment, Back, Cancel) picks it up automatically without duplicating the call.
+  async function goToPatientProfile() {
+    if (appointmentId) {
+      const res = await updateAppointmentStatus(appointmentId, "done");
+      if (!res.ok) {
+        toast({
+          description: `The visit was saved, but the appointment could not be marked done: ${res.error}`,
+          type: "info",
+        });
+      }
+    }
     if (patient) {
       navigate(`/app/patients?id=${patient.id}`);
     } else {

@@ -646,7 +646,7 @@ export function TodayPage() {
   }
 
   function handleOpenConsultation(entry: DaySheetEntry) {
-    navigate(`/app/patients/${entry.patient_id}/consultation`);
+    navigate(`/app/patients/${entry.patient_id}/consultation?appointmentId=${entry.appointment_id}`);
   }
 
   function handleOpenPayment(entry: DaySheetEntry) {
@@ -992,7 +992,7 @@ export function TodayPage() {
               {activeTab === "recalls" && (
                 <Button size="sm" onClick={openAddVisitPatientPicker} className="shadow-sm h-9 whitespace-nowrap">
                   <Plus className="h-4 w-4 mr-1.5" />
-                  + Add Visit
+                  Add Visit
                 </Button>
               )}
             </div>
@@ -1628,7 +1628,7 @@ export function TodayPage() {
                   <p className="text-sm text-muted-foreground">No recalls in queue matching your filters.</p>
                   <Button variant="outline" size="sm" className="mt-4" onClick={openAddVisitPatientPicker}>
                     <Plus className="h-4 w-4 mr-1.5" />
-                    + Add Visit
+                    Add Visit
                   </Button>
                 </div>
               ) : (
