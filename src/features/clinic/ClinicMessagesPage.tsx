@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
 import { Filter, MessageSquare } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/auth/useAuth";
 import { formatDateIST } from "@/lib/dates";
 import type { Database } from "@/types/database.types";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,13 +11,6 @@ import { Button } from "@/components/ui/button";
 type MessageLogRow = Database["public"]["Tables"]["message_log"]["Row"];
 
 export function ClinicMessagesPage() {
-  const { profile } = useAuth();
-
-  // Guardrail: Owner Only access (matching Settings tab)
-  if (profile?.role !== "owner") {
-    return <Navigate to="/app" replace />;
-  }
-
   const [messages, setMessages] = useState<MessageLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
