@@ -57,7 +57,7 @@ export function ToothChart({
         )}
         style={{
           transform: isHovered && !isSelected ? "translateY(-2px)" : "none",
-          transformOrigin: `${TOOTH_X_POSITIONS[fdi] ?? 400}px 26px`,
+          transformOrigin: `${TOOTH_X_POSITIONS[fdi] ?? 400}px 36px`,
           transition: "transform 0.15s ease-out, filter 0.15s ease-out",
         }}
         onClick={() => handleToggle(fdi)}
@@ -66,29 +66,42 @@ export function ToothChart({
       >
         <title>{`Tooth ${fdi} • ${shape.type}`}</title>
 
-        {/* 1. Base 3D Tooth Volume (Full Anatomy: Root to Crown) */}
+        {/* 1. Outer Luminous Halo / Glow for Selected Teeth (as in reference 23/24-26) */}
+        {isSelected && (
+          <path
+            d={shape.outlinePath}
+            fill="none"
+            stroke="rgb(45, 212, 191)"
+            strokeWidth={3.5}
+            strokeOpacity={0.6}
+            filter="url(#tooth-selected-halo)"
+            className="pointer-events-none"
+          />
+        )}
+
+        {/* 2. Base Tooth Volume (Full Root & Crown Anatomy) */}
         <path
           d={shape.outlinePath}
           fill={
             isSelected
-              ? "url(#selected-crown-gradient)"
+              ? "url(#tooth-selected-body)"
               : isHovered
-              ? "url(#hover-crown-gradient)"
-              : "url(#ivory-crown-gradient)"
+              ? "url(#tooth-hover-body)"
+              : "url(#tooth-unselected-body)"
           }
           stroke={
             isSelected
               ? "rgb(45, 212, 191)" // teal-400
               : isHovered
-              ? "rgba(100, 116, 139, 0.85)" // slate-500
-              : "rgba(148, 163, 184, 0.75)" // slate-400
+              ? "rgba(100, 116, 139, 0.95)" // slate-500
+              : "rgba(100, 116, 139, 0.8)" // slate-500
           }
-          strokeWidth={isSelected ? 2.0 : isHovered ? 1.6 : 1.25}
+          strokeWidth={isSelected ? 1.8 : isHovered ? 1.5 : 1.25}
           strokeLinecap="round"
           strokeLinejoin="round"
           filter={
             isSelected
-              ? "url(#tooth-selected-glow)"
+              ? undefined
               : isHovered
               ? "url(#tooth-hover-shadow)"
               : "url(#tooth-depth-shadow)"
@@ -96,20 +109,20 @@ export function ToothChart({
           className="transition-all duration-150"
         />
 
-        {/* 2. Anatomical Root Contour & Cervical Margin Shading */}
+        {/* 3. Anatomical Root & Cervical Margin Shading */}
         <path
           d={shape.shadowPath}
           fill={
             isSelected
-              ? "url(#selected-root-gradient)"
+              ? "url(#tooth-selected-root)"
               : isHovered
-              ? "url(#hover-root-gradient)"
-              : "url(#ivory-root-gradient)"
+              ? "url(#tooth-hover-root)"
+              : "url(#tooth-unselected-root)"
           }
           className="transition-all duration-150 pointer-events-none"
         />
 
-        {/* 3. Anatomical Fissures, Grooves & Marginal Ridges */}
+        {/* 4. Anatomical Fissures, Grooves & Marginal Ridges */}
         {Array.isArray(shape.lineHighlightPath) ? (
           shape.lineHighlightPath.map((dStr, idx) => (
             <path
@@ -118,12 +131,12 @@ export function ToothChart({
               fill="none"
               stroke={
                 isSelected
-                  ? "rgba(240, 253, 250, 0.95)" // crisp luminous teal-50
+                  ? "rgba(94, 234, 212, 0.9)" // bright teal-300
                   : isHovered
-                  ? "rgba(71, 85, 105, 0.75)" // slate-600
-                  : "rgba(100, 116, 139, 0.55)" // slate-500
+                  ? "rgba(71, 85, 105, 0.8)"
+                  : "rgba(100, 116, 139, 0.6)"
               }
-              strokeWidth={isSelected ? 1.5 : 1.1}
+              strokeWidth={isSelected ? 1.3 : 1.05}
               strokeLinecap="round"
               strokeLinejoin="round"
               className="transition-colors duration-150 pointer-events-none"
@@ -135,12 +148,12 @@ export function ToothChart({
             fill="none"
             stroke={
               isSelected
-                ? "rgba(240, 253, 250, 0.95)"
+                ? "rgba(94, 234, 212, 0.9)"
                 : isHovered
-                ? "rgba(71, 85, 105, 0.75)"
-                : "rgba(100, 116, 139, 0.55)"
+                ? "rgba(71, 85, 105, 0.8)"
+                : "rgba(100, 116, 139, 0.6)"
             }
-            strokeWidth={isSelected ? 1.5 : 1.1}
+            strokeWidth={isSelected ? 1.3 : 1.05}
             strokeLinecap="round"
             strokeLinejoin="round"
             className="transition-colors duration-150 pointer-events-none"
@@ -167,90 +180,89 @@ export function ToothChart({
           xmlns="http://www.w3.org/2000/svg"
         >
           <defs>
-            {/* 3D Depth Shadow for teeth */}
+            {/* 3D Depth Shadow for unselected teeth */}
             <filter id="tooth-depth-shadow" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="1.5" stdDeviation="1.2" floodColor="#0f172a" floodOpacity="0.15" />
+              <feDropShadow dx="0" dy="1.5" stdDeviation="1.2" floodColor="#0f172a" floodOpacity="0.25" />
             </filter>
 
             {/* Hover Lift Shadow */}
             <filter id="tooth-hover-shadow" x="-30%" y="-30%" width="160%" height="160%">
-              <feDropShadow dx="0" dy="3" stdDeviation="2.5" floodColor="#0f172a" floodOpacity="0.25" />
+              <feDropShadow dx="0" dy="3" stdDeviation="2.5" floodColor="#0f172a" floodOpacity="0.35" />
             </filter>
 
-            {/* Selected Vibrant Teal Glow */}
-            <filter id="tooth-selected-glow" x="-40%" y="-40%" width="180%" height="180%">
-              <feDropShadow dx="0" dy="0" stdDeviation="3.5" floodColor="#14b8a6" floodOpacity="0.75" />
-              <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodColor="#2dd4bf" floodOpacity="0.9" />
+            {/* Soft Teal Halo / Glow for Selected Teeth (matching reference) */}
+            <filter id="tooth-selected-halo" x="-60%" y="-60%" width="220%" height="220%">
+              <feDropShadow dx="0" dy="0" stdDeviation="5.5" floodColor="#14b8a6" floodOpacity="0.65" />
+              <feDropShadow dx="0" dy="0" stdDeviation="2.5" floodColor="#2dd4bf" floodOpacity="0.85" />
+              <feDropShadow dx="0" dy="0" stdDeviation="1" floodColor="#5eead4" floodOpacity="1" />
             </filter>
 
-            {/* Normal Ivory / Enamel Gradient (Root to Biting Edge) */}
-            <linearGradient id="ivory-crown-gradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#e5dccf" />
-              <stop offset="30%" stopColor="#efe8dc" />
-              <stop offset="65%" stopColor="#faf7f1" />
-              <stop offset="88%" stopColor="#ffffff" />
-              <stop offset="100%" stopColor="#f5f0e6" />
+            {/* Unselected Solid Light Grey / Off-White Tooth Body Gradient */}
+            <linearGradient id="tooth-unselected-body" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#cbd5e1" stopOpacity="1" />
+              <stop offset="35%" stopColor="#e2e8f0" stopOpacity="1" />
+              <stop offset="70%" stopColor="#f1f5f9" stopOpacity="1" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="1" />
             </linearGradient>
 
-            {/* Normal Root & Cervical Shadow Gradient */}
-            <linearGradient id="ivory-root-gradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#cfbeaa" stopOpacity="0.85" />
-              <stop offset="50%" stopColor="#decbb7" stopOpacity="0.45" />
-              <stop offset="100%" stopColor="#f8f4ec" stopOpacity="0.05" />
+            {/* Unselected Root/Cervical Shadow Gradient */}
+            <linearGradient id="tooth-unselected-root" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#94a3b8" stopOpacity="0.6" />
+              <stop offset="50%" stopColor="#cbd5e1" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="#f1f5f9" stopOpacity="0" />
             </linearGradient>
 
-            {/* Hover Pearl Gradient (Root to Biting Edge) */}
-            <linearGradient id="hover-crown-gradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#cbd5e1" />
-              <stop offset="35%" stopColor="#e2e8f0" />
-              <stop offset="75%" stopColor="#ffffff" />
-              <stop offset="100%" stopColor="#f1f5f9" />
+            {/* Hover State Body Gradient */}
+            <linearGradient id="tooth-hover-body" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#e2e8f0" stopOpacity="1" />
+              <stop offset="40%" stopColor="#f8fafc" stopOpacity="1" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="1" />
             </linearGradient>
 
             {/* Hover Root Shadow Gradient */}
-            <linearGradient id="hover-root-gradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#94a3b8" stopOpacity="0.7" />
-              <stop offset="60%" stopColor="#cbd5e1" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#ffffff" stopOpacity="0.1" />
+            <linearGradient id="tooth-hover-root" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#cbd5e1" stopOpacity="0.5" />
+              <stop offset="60%" stopColor="#e2e8f0" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
             </linearGradient>
 
-            {/* Selected 3D Teal Crown Gradient (Root to Biting Edge) */}
-            <linearGradient id="selected-crown-gradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#0f766e" />
-              <stop offset="30%" stopColor="#14b8a6" />
-              <stop offset="70%" stopColor="#2dd4bf" />
-              <stop offset="100%" stopColor="#5eead4" />
+            {/* Selected Dark Translucent Teal Body Gradient */}
+            <linearGradient id="tooth-selected-body" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#042f2e" stopOpacity="0.95" />
+              <stop offset="35%" stopColor="#0d5a55" stopOpacity="0.9" />
+              <stop offset="75%" stopColor="#115e59" stopOpacity="0.85" />
+              <stop offset="100%" stopColor="#134e4a" stopOpacity="0.9" />
             </linearGradient>
 
             {/* Selected Root Shading Gradient */}
-            <linearGradient id="selected-root-gradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#042f2e" stopOpacity="0.75" />
-              <stop offset="55%" stopColor="#115e59" stopOpacity="0.4" />
+            <linearGradient id="tooth-selected-root" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#021c1b" stopOpacity="0.85" />
+              <stop offset="55%" stopColor="#0f766e" stopOpacity="0.4" />
               <stop offset="100%" stopColor="#2dd4bf" stopOpacity="0.1" />
             </linearGradient>
           </defs>
 
-          {/* Corner Quadrant Labels (Teal Pill/Badge Style matching Selected badges) */}
+          {/* Corner Quadrant Labels (Teal Pill/Badge Style matching Reference) */}
           {/* Q1 Upper Right (Top-Left) */}
           <g className="select-none pointer-events-none">
             <rect
               x="14"
               y="-42"
               width="108"
-              height="20"
-              rx="10"
-              fill="rgba(20, 184, 166, 0.1)"
-              stroke="rgba(20, 184, 166, 0.4)"
-              strokeWidth="1"
+              height="22"
+              rx="11"
+              fill="rgba(20, 184, 166, 0.2)"
+              stroke="rgba(45, 212, 191, 0.6)"
+              strokeWidth="1.2"
             />
             <text
               x="68"
-              y="-28"
+              y="-27"
               textAnchor="middle"
-              fontSize="10.5"
-              fontFamily="monospace"
-              fontWeight="600"
-              fill="rgb(94, 234, 212)"
+              fontSize="11"
+              fontFamily="sans-serif"
+              fontWeight="700"
+              fill="rgb(45, 212, 191)"
               className="tracking-wide"
             >
               Q1 Upper Right
@@ -263,20 +275,20 @@ export function ToothChart({
               x="773"
               y="-42"
               width="108"
-              height="20"
-              rx="10"
-              fill="rgba(20, 184, 166, 0.1)"
-              stroke="rgba(20, 184, 166, 0.4)"
-              strokeWidth="1"
+              height="22"
+              rx="11"
+              fill="rgba(20, 184, 166, 0.2)"
+              stroke="rgba(45, 212, 191, 0.6)"
+              strokeWidth="1.2"
             />
             <text
               x="827"
-              y="-28"
+              y="-27"
               textAnchor="middle"
-              fontSize="10.5"
-              fontFamily="monospace"
-              fontWeight="600"
-              fill="rgb(94, 234, 212)"
+              fontSize="11"
+              fontFamily="sans-serif"
+              fontWeight="700"
+              fill="rgb(45, 212, 191)"
               className="tracking-wide"
             >
               Q2 Upper Left
@@ -289,20 +301,20 @@ export function ToothChart({
               x="14"
               y="196"
               width="108"
-              height="20"
-              rx="10"
-              fill="rgba(20, 184, 166, 0.1)"
-              stroke="rgba(20, 184, 166, 0.4)"
-              strokeWidth="1"
+              height="22"
+              rx="11"
+              fill="rgba(20, 184, 166, 0.2)"
+              stroke="rgba(45, 212, 191, 0.6)"
+              strokeWidth="1.2"
             />
             <text
               x="68"
-              y="210"
+              y="211"
               textAnchor="middle"
-              fontSize="10.5"
-              fontFamily="monospace"
-              fontWeight="600"
-              fill="rgb(94, 234, 212)"
+              fontSize="11"
+              fontFamily="sans-serif"
+              fontWeight="700"
+              fill="rgb(45, 212, 191)"
               className="tracking-wide"
             >
               Q4 Lower Right
@@ -315,20 +327,20 @@ export function ToothChart({
               x="773"
               y="196"
               width="108"
-              height="20"
-              rx="10"
-              fill="rgba(20, 184, 166, 0.1)"
-              stroke="rgba(20, 184, 166, 0.4)"
-              strokeWidth="1"
+              height="22"
+              rx="11"
+              fill="rgba(20, 184, 166, 0.2)"
+              stroke="rgba(45, 212, 191, 0.6)"
+              strokeWidth="1.2"
             />
             <text
               x="827"
-              y="210"
+              y="211"
               textAnchor="middle"
-              fontSize="10.5"
-              fontFamily="monospace"
-              fontWeight="600"
-              fill="rgb(94, 234, 212)"
+              fontSize="11"
+              fontFamily="sans-serif"
+              fontWeight="700"
+              fill="rgb(45, 212, 191)"
               className="tracking-wide"
             >
               Q3 Lower Left
