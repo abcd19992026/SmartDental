@@ -190,6 +190,11 @@ export function TodayPage() {
   const [newWalkInAge, setNewWalkInAge] = useState("");
   const [newWalkInGender, setNewWalkInGender] = useState<"male" | "female" | "other">("male");
   const [walkInBranchId, setWalkInBranchId] = useState("");
+  const [walkInWeight, setWalkInWeight] = useState("");
+  const [walkInBloodPressure, setWalkInBloodPressure] = useState("");
+  const [walkInSpo2, setWalkInSpo2] = useState("");
+  const [walkInChiefComplaint, setWalkInChiefComplaint] = useState("");
+  const [walkInPastDentalHistory, setWalkInPastDentalHistory] = useState("");
   const [submittingWalkIn, setSubmittingWalkIn] = useState(false);
   const [walkInError, setWalkInError] = useState<string | null>(null);
   const [allPatients, setAllPatients] = useState<PatientRow[]>([]);
@@ -302,6 +307,11 @@ export function TodayPage() {
     setNewWalkInMobile("");
     setNewWalkInAge("");
     setNewWalkInGender("male");
+    setWalkInWeight("");
+    setWalkInBloodPressure("");
+    setWalkInSpo2("");
+    setWalkInChiefComplaint("");
+    setWalkInPastDentalHistory("");
     setWalkInBranchId(profile?.branch_id || (branches.length > 0 ? branches[0].id : ""));
     setWalkInModalOpen(true);
 
@@ -379,6 +389,11 @@ export function TodayPage() {
       clinic_id: profile.clinic_id,
       branch_id: activeBranchId,
       patient_id: finalPatientId,
+      weight: walkInWeight.trim() || null,
+      blood_pressure: walkInBloodPressure.trim() || null,
+      spo2: walkInSpo2.trim() || null,
+      chief_complaint: walkInChiefComplaint.trim() || null,
+      past_dental_history: walkInPastDentalHistory.trim() || null,
     });
 
     if (!walkInRes.ok) {
@@ -675,6 +690,10 @@ export function TodayPage() {
   const inChairCount = daySheet.filter((d) => d.status === "in_chair").length;
   const doneCount = daySheet.filter((d) => d.status === "done").length;
   const paymentDueCount = daySheet.filter((d) => d.payment_due).length;
+
+  const isWalkInPatientIdentified = isNewWalkInPatient
+    ? Boolean(newWalkInName.trim()) && newWalkInMobile.replace(/\D/g, "").length === 10
+    : Boolean(selectedWalkInPatientId);
 
   // Row Action Handlers for Recalls
   async function handleMarkAsSent(r: JoinedRecall) {
@@ -1943,6 +1962,67 @@ export function TodayPage() {
                   ))}
                 </select>
               </div>
+            )}
+
+            {/* Vitals & Clinical History (Optional) - only rendered once patient is identified */}
+            {isWalkInPatientIdentified && (
+              <>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="wi-weight" className="text-xs">Weight</Label>
+                    <Input
+                      id="wi-weight"
+                      placeholder="e.g. 68 kg"
+                      value={walkInWeight}
+                      onChange={(e) => setWalkInWeight(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="wi-bp" className="text-xs">Blood Pressure</Label>
+                    <Input
+                      id="wi-bp"
+                      placeholder="e.g. 120/80 mmHg"
+                      value={walkInBloodPressure}
+                      onChange={(e) => setWalkInBloodPressure(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="wi-spo2" className="text-xs">SpO2</Label>
+                    <Input
+                      id="wi-spo2"
+                      placeholder="e.g. 98%"
+                      value={walkInSpo2}
+                      onChange={(e) => setWalkInSpo2(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="wi-chief-complaint" className="text-xs">Chief Complaint</Label>
+                  <textarea
+                    id="wi-chief-complaint"
+                    rows={2}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                    placeholder="Patient's primary concern or symptoms (e.g. Severe toothache lower right molar)"
+                    value={walkInChiefComplaint}
+                    onChange={(e) => setWalkInChiefComplaint(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="wi-past-dental" className="text-xs">Past Dental History</Label>
+                  <textarea
+                    id="wi-past-dental"
+                    rows={2}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                    placeholder="Prior dental treatments, restorations, extractions, or complications"
+                    value={walkInPastDentalHistory}
+                    onChange={(e) => setWalkInPastDentalHistory(e.target.value)}
+                  />
+                </div>
+              </>
             )}
           </div>
 

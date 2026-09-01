@@ -1017,6 +1017,11 @@ export interface CreateWalkInInput {
   clinic_id: string;
   branch_id: string;
   patient_id: string;
+  weight?: string | null;
+  blood_pressure?: string | null;
+  spo2?: string | null;
+  chief_complaint?: string | null;
+  past_dental_history?: string | null;
 }
 
 /** Adds a walk-in to today's in-clinic queue: status='waiting', checked_in_at=scheduled_at=now().
@@ -1032,6 +1037,11 @@ export async function createWalkIn(input: CreateWalkInInput): Promise<ApiResult<
       scheduled_at: now,
       checked_in_at: now,
       status: "waiting",
+      checkin_weight: input.weight ?? null,
+      checkin_blood_pressure: input.blood_pressure ?? null,
+      checkin_spo2: input.spo2 ?? null,
+      checkin_chief_complaint: input.chief_complaint ?? null,
+      checkin_past_dental_history: input.past_dental_history ?? null,
     })
     .select()
     .single();
