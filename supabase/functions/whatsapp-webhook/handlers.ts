@@ -121,21 +121,37 @@ async function handleInboundMessage(serviceClient: SupabaseClient, clinicId: str
 
   const replyText = message.text?.body ?? null;
 
-  // Not status-filtered: a patient can reply again after the recall has already moved past
-  // pending/sent (contacted, booked, declined, ...), and that reply must still be captured, not
-  // silently dropped. due_date desc + limit 1 picks the patient's current/most recent recall
-  // cycle regardless of its status.
-  const { data: recall, error: recallError } = await serviceClient
+  // Prefer the recall currently awaiting contact (pending/sent), most recently created.
+  let { data: recall, error: recallError } = await serviceClient
     .from("recalls")
     .select("id, status")
     .eq("patient_id", patient.id)
     .eq("clinic_id", clinicId)
-    .order("due_date", { ascending: false })
+    .in("status", ["pending", "sent"])
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (recallError) {
-    console.log(`Webhook: recall lookup errored: ${recallError.message}`);
+    console.log(`Webhook: active recall lookup errored: ${recallError.message}`);
+  }
+
+  // No active recall (e.g. patient replying after everything's already actioned) --
+  // fall back to the most recently created recall overall, so the reply is still
+  // captured somewhere instead of being dropped.
+  if (!recall) {
+    const fallback = await serviceClient
+      .from("recalls")
+      .select("id, status")
+      .eq("patient_id", patient.id)
+      .eq("clinic_id", clinicId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (fallback.error) {
+      console.log(`Webhook: fallback recall lookup errored: ${fallback.error.message}`);
+    }
+    recall = fallback.data;
   }
   if (!recall) {
     console.log(`Webhook: inbound message from patient ${patient.id} in clinic ${clinicId} matches no recall at all`);
