@@ -55,9 +55,9 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-background font-sans text-foreground antialiased">
+    <div className="dark min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-[#0f172a] font-sans text-slate-100 antialiased">
       {/* Left Panel: Branded Dark Content (~58% width on desktop) */}
-      <div className="hidden lg:flex lg:col-span-7 xl:col-span-7 flex-col justify-between p-12 lg:p-20 relative overflow-hidden bg-gradient-to-br from-[#064e3b]/90 via-[#0f172a] to-[#022c22] text-slate-100 select-none border-r border-border">
+      <div className="hidden lg:flex lg:col-span-7 xl:col-span-7 flex-col justify-between p-12 lg:p-20 relative overflow-hidden bg-gradient-to-br from-[#064e3b]/90 via-[#0f172a] to-[#022c22] text-slate-100 select-none border-r border-slate-800">
         {/* Soft Ambient Glows */}
         <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-teal-500/10 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-96 h-96 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
@@ -112,40 +112,40 @@ export function LoginPage() {
       </div>
 
       {/* Right Panel: Form Side (~42% width on desktop) */}
-      <div className="lg:col-span-5 xl:col-span-5 flex flex-col justify-between p-8 sm:p-12 lg:p-16 bg-background">
+      <div className="lg:col-span-5 xl:col-span-5 flex flex-col justify-between p-8 sm:p-12 lg:p-16 bg-[#0f172a] text-slate-100">
         {/* Brand Wordmark (Top-Left on right panel) */}
         <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/10 text-teal-400 border border-teal-500/20">
             <CalendarClock className="h-4 w-4" />
           </span>
-          <span className="text-xl font-semibold tracking-tight text-foreground">SmartDentist</span>
+          <span className="text-xl font-semibold tracking-tight text-white">SmartDentist</span>
         </div>
 
         {/* Form Container */}
         <div className="w-full max-w-sm mx-auto my-auto py-8 space-y-6">
           <div className="space-y-1.5 text-left">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight text-white">
               Sign in
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-slate-400">
               Enter your credentials to access your clinic dashboard.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4 pt-1">
             {notice && (
-              <Alert variant="destructive" className="py-2.5 px-3">
-                <AlertDescription className="text-xs">{notice}</AlertDescription>
+              <Alert variant="destructive" className="py-2.5 px-3 bg-red-950/40 border-red-900/50 text-red-300">
+                <AlertDescription className="text-xs text-red-300">{notice}</AlertDescription>
               </Alert>
             )}
             {error && (
-              <Alert variant="destructive" className="py-2.5 px-3">
-                <AlertDescription className="text-xs">{error}</AlertDescription>
+              <Alert variant="destructive" className="py-2.5 px-3 bg-red-950/40 border-red-900/50 text-red-300">
+                <AlertDescription className="text-xs text-red-300">{error}</AlertDescription>
               </Alert>
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-xs font-medium text-foreground">
+              <Label htmlFor="email" className="text-xs font-medium text-slate-200">
                 Email
               </Label>
               <Input
@@ -156,12 +156,12 @@ export function LoginPage() {
                 placeholder="name@clinic.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-10 text-sm border-border bg-background transition-colors focus-visible:ring-1 focus-visible:ring-ring"
+                className="h-10 text-sm border-slate-700 bg-slate-900/80 text-slate-100 placeholder:text-slate-500 transition-colors focus-visible:border-teal-500 focus-visible:ring-1 focus-visible:ring-teal-500/50"
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-xs font-medium text-foreground">
+              <Label htmlFor="password" className="text-xs font-medium text-slate-200">
                 Password
               </Label>
               <Input
@@ -172,14 +172,14 @@ export function LoginPage() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="h-10 text-sm border-border bg-background transition-colors focus-visible:ring-1 focus-visible:ring-ring"
+                className="h-10 text-sm border-slate-700 bg-slate-900/80 text-slate-100 placeholder:text-slate-500 transition-colors focus-visible:border-teal-500 focus-visible:ring-1 focus-visible:ring-teal-500/50"
               />
             </div>
 
             <Button
               type="submit"
               disabled={submitting}
-              className="w-full h-10 mt-2 font-medium text-sm transition-all cursor-pointer shadow-none active:scale-[0.99]"
+              className="w-full h-10 mt-2 font-medium text-sm transition-all cursor-pointer shadow-none active:scale-[0.99] bg-teal-500 hover:bg-teal-400 text-slate-950 font-semibold"
             >
               {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Sign in
