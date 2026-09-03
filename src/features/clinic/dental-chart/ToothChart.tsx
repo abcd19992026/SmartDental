@@ -512,7 +512,7 @@ export function ToothChart({
                 <Badge
                   key={fdi}
                   variant="outline"
-                  className="h-5 px-1.5 py-0 border-teal-500/40 text-teal-300 bg-teal-500/10 font-mono text-[11px] font-medium"
+                  className="h-5 px-1.5 py-0 border-teal-200 text-teal-800 bg-teal-100 dark:border-teal-500/40 dark:text-teal-300 dark:bg-teal-500/10 font-mono text-[11px] font-medium"
                 >
                   {fdi}
                 </Badge>

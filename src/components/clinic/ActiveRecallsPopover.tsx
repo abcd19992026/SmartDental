@@ -97,10 +97,10 @@ export function ActiveRecallsPopover({
                         variant="outline"
                         className={cn(
                           "capitalize text-[10px] py-0 px-1.5 font-normal",
-                          r.status === "pending" && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
-                          r.status === "sent" && "border-primary/30 text-primary bg-primary/5 dark:bg-primary/10",
-                          r.status === "contacted" && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
-                          r.status === "paused" && "border-slate-500/30 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/40"
+                          r.status === "pending" && "border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400",
+                          r.status === "sent" && "border-teal-200 text-teal-800 bg-teal-100 dark:border-primary/30 dark:text-primary dark:bg-primary/10",
+                          r.status === "contacted" && "border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400",
+                          r.status === "paused" && "border-slate-200 text-slate-700 bg-slate-100 dark:border-slate-500/30 dark:text-slate-400 dark:bg-slate-800/40"
                         )}
                       >
                         {r.status}

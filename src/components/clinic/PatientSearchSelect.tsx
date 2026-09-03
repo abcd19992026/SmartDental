@@ -95,7 +95,7 @@ export function PatientSearchSelect({
                 <span className="font-semibold text-sm text-foreground truncate">
                   {selectedPatient.name}
                 </span>
-                <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0 h-4 shrink-0 font-medium">
+                <Badge variant="outline" className="text-[10px] border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/30 dark:text-emerald-400 dark:bg-emerald-500/10 px-1.5 py-0 h-4 shrink-0 font-medium">
                   Selected
                 </Badge>
               </div>

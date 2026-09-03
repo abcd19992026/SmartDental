@@ -177,13 +177,13 @@ export function WhatsAppTab() {
 
         <div>
           {isFullyConnected ? (
-            <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40">
-              <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600 dark:text-emerald-400" />
+            <Badge variant="outline" className="border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-700 dark:text-emerald-400" />
               Automated Sending Active
             </Badge>
           ) : (
-            <Badge variant="outline" className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40">
-              <AlertCircle className="h-3.5 w-3.5 mr-1 text-amber-600 dark:text-amber-400" />
+            <Badge variant="outline" className="border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              <AlertCircle className="h-3.5 w-3.5 mr-1 text-amber-700 dark:text-amber-400" />
               Setup Incomplete
             </Badge>
           )}

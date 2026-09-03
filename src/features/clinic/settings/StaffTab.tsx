@@ -324,7 +324,7 @@ export function StaffTab() {
                       </td>
                       <td className="py-3.5 px-4">
                         {s.is_active ? (
-                          <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40">
+                          <Badge variant="outline" className="border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
                             Active
                           </Badge>
                         ) : (

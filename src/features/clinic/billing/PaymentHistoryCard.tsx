@@ -98,11 +98,11 @@ export function PaymentHistoryCard({
                           variant="outline"
                           className={cn(
                             "text-[11px] font-normal py-0 px-2",
-                            p.mode === "upi" && "border-indigo-500/30 text-indigo-400 bg-indigo-500/10",
-                            p.mode === "cash" && "border-emerald-500/30 text-emerald-400 bg-emerald-500/10",
-                            p.mode === "card" && "border-sky-500/30 text-sky-400 bg-sky-500/10",
-                            p.mode === "bank_transfer" && "border-purple-500/30 text-purple-400 bg-purple-500/10",
-                            p.mode === "other" && "border-slate-500/30 text-slate-400 bg-slate-500/10"
+                            p.mode === "upi" && "border-indigo-200 text-indigo-800 bg-indigo-100 dark:border-indigo-500/30 dark:text-indigo-400 dark:bg-indigo-500/10",
+                            p.mode === "cash" && "border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/30 dark:text-emerald-400 dark:bg-emerald-500/10",
+                            p.mode === "card" && "border-sky-200 text-sky-800 bg-sky-100 dark:border-sky-500/30 dark:text-sky-400 dark:bg-sky-500/10",
+                            p.mode === "bank_transfer" && "border-purple-200 text-purple-800 bg-purple-100 dark:border-purple-500/30 dark:text-purple-400 dark:bg-purple-500/10",
+                            p.mode === "other" && "border-slate-200 text-slate-700 bg-slate-100 dark:border-slate-500/30 dark:text-slate-400 dark:bg-slate-500/10"
                           )}
                         >
                           {formatPaymentMode(p.mode)}
@@ -111,7 +111,7 @@ export function PaymentHistoryCard({
                         {isVoided && (
                           <Badge
                             variant="outline"
-                            className="border-rose-600/30 text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 text-[11px] font-medium"
+                            className="border-rose-200 text-rose-800 bg-rose-100 dark:border-rose-500/30 dark:text-rose-400 dark:bg-rose-950/40 text-[11px] font-medium"
                           >
                             Voided
                           </Badge>

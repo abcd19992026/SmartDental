@@ -512,7 +512,7 @@ export function ClinicDetailPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-medium text-foreground">{clinic.name}</h1>
               {clinic.is_active ? (
-                <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40">
+                <Badge variant="outline" className="border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
                   Active Subscription
                 </Badge>
               ) : (
@@ -681,7 +681,7 @@ export function ClinicDetailPage() {
                         <td className="py-3 px-4 text-muted-foreground">{b.phone || "—"}</td>
                         <td className="py-3 px-4">
                           {b.is_active ? (
-                            <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40">
+                            <Badge variant="outline" className="border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
                               Active
                             </Badge>
                           ) : (
@@ -961,7 +961,7 @@ export function ClinicDetailPage() {
                         <td className="py-3 px-4 text-muted-foreground">{u.phone || "—"}</td>
                         <td className="py-3 px-4">
                           {u.is_active ? (
-                            <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40">
+                            <Badge variant="outline" className="border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
                               Active
                             </Badge>
                           ) : (

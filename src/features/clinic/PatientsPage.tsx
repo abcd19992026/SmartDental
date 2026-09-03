@@ -542,7 +542,7 @@ export function PatientsPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-xl font-semibold text-foreground tracking-tight">{selectedPatient.name}</h2>
                     {selectedPatient.do_not_disturb && (
-                      <Badge variant="outline" className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-xs">
+                      <Badge variant="outline" className="border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400 text-xs">
                         Do Not Disturb
                       </Badge>
                     )}
@@ -725,7 +725,7 @@ export function PatientsPage() {
                                           <Badge
                                             key={String(t)}
                                             variant="outline"
-                                            className="h-5 px-1.5 py-0 border-teal-500/30 text-teal-400 bg-teal-500/10 font-mono text-[11px] font-medium"
+                                            className="h-5 px-1.5 py-0 border-teal-200 text-teal-800 bg-teal-100 dark:border-teal-500/30 dark:text-teal-400 dark:bg-teal-500/10 font-mono text-[11px] font-medium"
                                           >
                                             {t}
                                           </Badge>
@@ -742,7 +742,7 @@ export function PatientsPage() {
                                             </span>
                                             <Badge
                                               variant="outline"
-                                              className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-[10px] py-0 px-1.5 font-normal"
+                                              className="border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400 text-[10px] py-0 px-1.5 font-normal"
                                             >
                                               {v.discount_percent}% off
                                             </Badge>
@@ -827,12 +827,12 @@ export function PatientsPage() {
                                         variant="outline"
                                         className={cn(
                                           "capitalize font-normal text-[11px]",
-                                          r.status === "pending" && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
-                                          r.status === "sent" && "border-primary/30 text-primary bg-primary/5 dark:bg-primary/10",
-                                          r.status === "booked" && "border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40",
-                                          r.status === "contacted" && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
+                                          r.status === "pending" && "border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400",
+                                          r.status === "sent" && "border-teal-200 text-teal-800 bg-teal-100 dark:border-primary/30 dark:text-primary dark:bg-primary/10",
+                                          r.status === "booked" && "border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400",
+                                          r.status === "contacted" && "border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400",
                                           r.status === "declined" && "border-muted text-muted-foreground bg-muted/20",
-                                          r.status === "paused" && "border-slate-500/30 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/40"
+                                          r.status === "paused" && "border-slate-200 text-slate-700 bg-slate-100 dark:border-slate-500/30 dark:text-slate-400 dark:bg-slate-800/40"
                                         )}
                                       >
                                         {r.status}
@@ -852,8 +852,8 @@ export function PatientsPage() {
                                           className={cn(
                                             "h-7 px-2 text-xs",
                                             isPaused
-                                              ? "text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-                                              : "text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                                              ? "text-emerald-800 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/40"
+                                              : "text-amber-800 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/40"
                                           )}
                                         >
                                           {isPaused ? (
@@ -982,11 +982,11 @@ export function PatientsPage() {
                             </td>
                             <td className="py-3.5 px-4">
                               {p.do_not_disturb ? (
-                                <Badge variant="outline" className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40">
+                                <Badge variant="outline" className="border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
                                   DND
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40">
+                                <Badge variant="outline" className="border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
                                   Active
                                 </Badge>
                               )}

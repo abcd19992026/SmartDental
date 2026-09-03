@@ -150,13 +150,13 @@ export function ClinicMessagesPage() {
                     if (m.status === "failed") {
                       pillStyle = "border-destructive/30 text-destructive bg-destructive/10 dark:bg-destructive/20";
                     } else if (m.status === "queued") {
-                      pillStyle = "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40";
+                      pillStyle = "border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400";
                     } else if (m.status === "sent") {
-                      pillStyle = "border-blue-600/30 text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40";
+                      pillStyle = "border-blue-200 text-blue-800 bg-blue-100 dark:border-blue-600/30 dark:text-blue-400 dark:bg-blue-950/40";
                     } else if (m.status === "delivered") {
-                      pillStyle = "border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40";
+                      pillStyle = "border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400";
                     } else if (m.status === "read") {
-                      pillStyle = "border-sky-600/30 text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40";
+                      pillStyle = "border-sky-200 text-sky-800 bg-sky-100 dark:border-sky-600/30 dark:text-sky-400 dark:bg-sky-950/40";
                     }
 
                     const dateStr = m.sent_at || m.created_at;

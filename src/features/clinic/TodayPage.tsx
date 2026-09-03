@@ -889,7 +889,7 @@ export function TodayPage() {
         return (
           <Badge
             variant="outline"
-            className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-xs font-normal"
+            className="border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400 text-xs font-normal"
           >
             Waiting
           </Badge>
@@ -898,7 +898,7 @@ export function TodayPage() {
         return (
           <Badge
             variant="outline"
-            className="border-teal-500/30 text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 text-xs font-normal"
+            className="border-teal-200 text-teal-800 bg-teal-100 dark:border-teal-500/30 dark:text-teal-400 dark:bg-teal-950/40 text-xs font-normal"
           >
             In Chair
           </Badge>
@@ -907,7 +907,7 @@ export function TodayPage() {
         return (
           <Badge
             variant="outline"
-            className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 text-xs font-normal"
+            className="border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400 text-xs font-normal"
           >
             Done
           </Badge>
@@ -950,7 +950,7 @@ export function TodayPage() {
                 {appointments.length > 0 && (
                   <Badge
                     variant="outline"
-                    className="ml-1 text-[10px] py-0 px-1.5 font-normal border-indigo-600/30 text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40"
+                    className="ml-1 text-[10px] py-0 px-1.5 font-normal border-indigo-200 text-indigo-800 bg-indigo-100 dark:border-indigo-600/30 dark:text-indigo-400 dark:bg-indigo-950/40"
                   >
                     {appointments.length}
                   </Badge>
@@ -962,7 +962,7 @@ export function TodayPage() {
                 {dueTodayCount > 0 && (
                   <Badge
                     variant="outline"
-                    className="ml-1 text-[10px] py-0 px-1.5 font-normal border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40"
+                    className="ml-1 text-[10px] py-0 px-1.5 font-normal border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-600/30 dark:text-amber-400 dark:bg-amber-950/40"
                   >
                     {dueTodayCount}
                   </Badge>
@@ -1147,7 +1147,7 @@ export function TodayPage() {
                             {entry.payment_due ? (
                               <Badge
                                 variant="outline"
-                                className="border-red-500/30 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 text-[11px] font-normal"
+                                className="border-red-200 text-red-800 bg-red-100 dark:border-red-500/30 dark:text-red-400 dark:bg-red-950/40 text-[11px] font-normal"
                               >
                                 Payment Due
                               </Badge>
@@ -1283,7 +1283,7 @@ export function TodayPage() {
                                 {isToday && (
                                   <Badge
                                     variant="outline"
-                                    className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 text-[10px] py-0 px-1.5 font-normal"
+                                    className="border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400 text-[10px] py-0 px-1.5 font-normal"
                                   >
                                     Today
                                   </Badge>
@@ -1444,7 +1444,7 @@ export function TodayPage() {
                       Replies Waiting Action ({repliesWaitingRecalls.length})
                     </CardTitle>
                   </div>
-                  <Badge variant="outline" className="border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-100/50 dark:bg-amber-900/40 text-xs font-normal">
+                  <Badge variant="outline" className="border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400 text-xs font-normal">
                     Action Required
                   </Badge>
                 </div>
@@ -1722,12 +1722,12 @@ export function TodayPage() {
                                 className={cn(
                                   "capitalize font-normal text-xs",
                                   r.status === "pending" && days < 0 && "border-destructive/30 text-destructive bg-destructive/10",
-                                  r.status === "pending" && days === 0 && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
-                                  r.status === "sent" && "border-primary/30 text-primary bg-primary/5 dark:bg-primary/10",
-                                  r.status === "booked" && "border-emerald-600/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40",
-                                  r.status === "contacted" && "border-amber-600/30 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
+                                  r.status === "pending" && days === 0 && "border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400",
+                                  r.status === "sent" && "border-teal-200 text-teal-800 bg-teal-100 dark:border-primary/30 dark:text-primary dark:bg-primary/10",
+                                  r.status === "booked" && "border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400",
+                                  r.status === "contacted" && "border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400",
                                   r.status === "declined" && "border-muted text-muted-foreground bg-muted/20",
-                                  r.status === "paused" && "border-slate-500/30 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/40"
+                                  r.status === "paused" && "border-slate-200 text-slate-700 bg-slate-100 dark:border-slate-500/30 dark:text-slate-400 dark:bg-slate-800/40"
                                 )}
                               >
                                 {r.status}
@@ -1744,7 +1744,7 @@ export function TodayPage() {
                                     size="sm"
                                     title="Resume Recall"
                                     onClick={() => handleTogglePause(r)}
-                                    className="h-8 px-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                                    className="h-8 px-2 text-xs text-emerald-800 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/40"
                                   >
                                     <Play className="h-3.5 w-3.5 mr-1 text-emerald-600" />
                                     Resume
@@ -1793,7 +1793,7 @@ export function TodayPage() {
                                       size="sm"
                                       title="Pause Recall"
                                       onClick={() => handleTogglePause(r)}
-                                      className="h-8 px-2 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                                      className="h-8 px-2 text-xs text-amber-800 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/40"
                                     >
                                       <Pause className="h-3.5 w-3.5 mr-1 text-amber-600" />
                                       Pause
