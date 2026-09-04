@@ -49,9 +49,9 @@ export function Sidebar({ panelLabel, navItems, mobileOpen, onMobileOpenChange }
     <>
       {/* Desktop Fixed Sidebar */}
       <aside className="hidden md:flex h-screen w-60 shrink-0 flex-col border-r border-border bg-surface sticky top-0 left-0 z-20">
-        <div className="flex h-14 items-center border-b border-border px-4">
+        <div className="flex h-14 items-center gap-2 border-b border-border px-4">
           <span className="text-sm font-medium text-foreground">SmartDentist</span>
-          <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+          <span className="shrink-0 whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
             {panelLabel}
           </span>
         </div>
@@ -71,9 +71,9 @@ export function Sidebar({ panelLabel, navItems, mobileOpen, onMobileOpenChange }
           {/* Sliding Panel */}
           <div className="fixed inset-y-0 left-0 z-50 w-64 bg-surface shadow-xl flex flex-col border-r border-border animate-in slide-in-from-left duration-200">
             <div className="flex h-14 items-center justify-between border-b border-border px-4">
-              <div className="flex items-center">
+              <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-foreground">SmartDentist</span>
-                <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                <span className="shrink-0 whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                   {panelLabel}
                 </span>
               </div>

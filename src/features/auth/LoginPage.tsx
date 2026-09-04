@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
-import { Loader2, CalendarClock, CalendarCheck, MessageSquare, Building2, History } from "lucide-react";
+import { Loader2, CalendarCheck, MessageSquare, Building2, History } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
 import { Button } from "@/components/ui/button";
@@ -115,9 +115,7 @@ export function LoginPage() {
       <div className="lg:col-span-5 xl:col-span-5 flex flex-col justify-between p-8 sm:p-12 lg:p-16 bg-[#0f172a] text-slate-100">
         {/* Brand Wordmark (Top-Left on right panel) */}
         <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/10 text-teal-400 border border-teal-500/20">
-            <CalendarClock className="h-4 w-4" />
-          </span>
+          <img src="/favicon.svg" alt="" className="h-8 w-8 rounded-lg bg-white/95 p-0.5" />
           <span className="text-xl font-semibold tracking-tight text-white">SmartDentist</span>
         </div>
 
