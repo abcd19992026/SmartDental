@@ -865,22 +865,22 @@ export function TodayPage() {
 
   function getRecallRowBgClass(r: JoinedRecall) {
     if (r.status === "paused") {
-      return "opacity-75 bg-slate-50/50 dark:bg-slate-900/30 hover:bg-slate-100/50 dark:hover:bg-slate-900/50";
+      return "opacity-75 bg-slate-50/50 dark:bg-slate-900/30 [@media(hover:hover)]:hover:bg-slate-100/50 [@media(hover:hover)]:dark:hover:bg-slate-900/50";
     }
     if (r.status === "booked") {
-      return "bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/40";
+      return "bg-emerald-50/50 dark:bg-emerald-950/30 [@media(hover:hover)]:hover:bg-emerald-100/50 [@media(hover:hover)]:dark:hover:bg-emerald-900/40";
     }
     if (r.status === "contacted") {
-      return "bg-amber-50/70 dark:bg-amber-950/40 hover:bg-amber-100/70 dark:hover:bg-amber-900/50";
+      return "bg-amber-50/70 dark:bg-amber-950/40 [@media(hover:hover)]:hover:bg-amber-100/70 [@media(hover:hover)]:dark:hover:bg-amber-900/50";
     }
     const days = daysUntilIST(r.due_date);
     if (days < 0 && (r.status === "pending" || r.status === "failed")) {
-      return "bg-red-50/50 dark:bg-red-950/30 hover:bg-red-100/50 dark:hover:bg-red-900/40";
+      return "bg-red-50/50 dark:bg-red-950/30 [@media(hover:hover)]:hover:bg-red-100/50 [@media(hover:hover)]:dark:hover:bg-red-900/40";
     }
     if (days === 0 && r.status === "pending") {
-      return "bg-amber-50/50 dark:bg-amber-950/30 hover:bg-amber-100/50 dark:hover:bg-amber-900/40";
+      return "bg-amber-50/50 dark:bg-amber-950/30 [@media(hover:hover)]:hover:bg-amber-100/50 [@media(hover:hover)]:dark:hover:bg-amber-900/40";
     }
-    return "hover:bg-muted/40";
+    return "[@media(hover:hover)]:hover:bg-muted/40";
   }
 
   function getStatusPill(status: string) {
