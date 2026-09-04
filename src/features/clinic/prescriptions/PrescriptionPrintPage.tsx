@@ -91,6 +91,46 @@ export function PrescriptionPrintPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const hasAutoPrintedRef = useRef(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  useEffect(() => {
+    function updateDimensions() {
+      const w = window.innerWidth;
+      const targetWidth = 793;
+      setScale(Math.min(1, w / targetWidth));
+      if (contentRef.current) {
+        setContentHeight(contentRef.current.offsetHeight);
+      }
+    }
+
+    updateDimensions();
+    window.addEventListener("resize", updateDimensions);
+
+    const handleBeforePrint = () => setIsPrinting(true);
+    const handleAfterPrint = () => setIsPrinting(false);
+    window.addEventListener("beforeprint", handleBeforePrint);
+    window.addEventListener("afterprint", handleAfterPrint);
+
+    let ro: ResizeObserver | null = null;
+    if (contentRef.current && typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => {
+        if (contentRef.current) {
+          setContentHeight(contentRef.current.offsetHeight);
+        }
+      });
+      ro.observe(contentRef.current);
+    }
+
+    return () => {
+      window.removeEventListener("resize", updateDimensions);
+      window.removeEventListener("beforeprint", handleBeforePrint);
+      window.removeEventListener("afterprint", handleAfterPrint);
+      ro?.disconnect();
+    };
+  }, [loading, error]);
 
   useEffect(() => {
     if (!id) return;
@@ -188,9 +228,10 @@ export function PrescriptionPrintPage() {
   const medicalHistoryText = formatMedicalHistory(prescription.medical_history);
   const investigationText = formatInvestigation(prescription.investigation);
   const hasVitalsRow = Boolean(prescription.height || prescription.weight || prescription.blood_pressure || prescription.spo2);
+  const isScaling = !isPrinting && scale < 1;
 
   return (
-    <div className="bg-white text-black min-h-screen">
+    <div className="bg-white text-black min-h-screen w-full overflow-x-hidden print:overflow-visible">
       <style>{`
         @page { size: A4; margin: 0; }
         @media print {
@@ -218,14 +259,36 @@ export function PrescriptionPrintPage() {
       </div>
 
       <div
-        className="mx-auto flex flex-col justify-between text-black text-[11px] leading-[1.45]"
-        style={{
-          width: "210mm",
-          minHeight: "297mm",
-          padding: "6mm 8mm 6mm 14mm",
-          boxSizing: "border-box",
-        }}
+        className="w-full bg-white flex justify-center overflow-x-hidden print:!overflow-visible print:!h-auto print:!w-auto print:!block"
+        style={
+          isScaling && contentHeight
+            ? { height: `${Math.ceil(contentHeight * scale)}px` }
+            : undefined
+        }
       >
+        <div
+          className="print:!transform-none"
+          style={
+            isScaling
+              ? {
+                  transform: `scale(${scale})`,
+                  transformOrigin: "top center",
+                  width: "210mm",
+                  flexShrink: 0,
+                }
+              : undefined
+          }
+        >
+          <div
+            ref={contentRef}
+            className="mx-auto flex flex-col justify-between text-black text-[11px] leading-[1.45]"
+            style={{
+              width: "210mm",
+              minHeight: "297mm",
+              padding: "6mm 8mm 6mm 14mm",
+              boxSizing: "border-box",
+            }}
+          >
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col">
           {/* Header */}
@@ -560,5 +623,7 @@ export function PrescriptionPrintPage() {
         </div>
       </div>
     </div>
+  </div>
+</div>
   );
 }

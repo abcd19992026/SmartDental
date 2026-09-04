@@ -1453,7 +1453,8 @@ export function TodayPage() {
                 </p>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
+                {/* Desktop View: Table */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="border-y border-amber-600/20 bg-amber-100/40 dark:bg-amber-950/40 text-[11px] font-medium text-muted-foreground uppercase">
                       <tr>
@@ -1529,6 +1530,92 @@ export function TodayPage() {
                       })}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile View: Card List */}
+                <div className="md:hidden divide-y divide-amber-600/15">
+                  {repliesWaitingRecalls.map((r) => {
+                    const replyTextClean = r.notes ? r.notes.replace(/^Patient reply:\s*/i, "") : null;
+                    return (
+                      <div key={r.id} className="p-4 flex flex-col gap-3 bg-amber-50/20 dark:bg-amber-950/20 transition-colors">
+                        <div>
+                          <Link
+                            to={`/app/patients?id=${r.patient_id}`}
+                            className="font-semibold text-base text-foreground hover:underline block"
+                          >
+                            {r.patient?.name || "Unknown Patient"}
+                          </Link>
+                          {replyTextClean && (
+                            <div className="mt-1.5 p-2.5 rounded-md bg-amber-100/70 dark:bg-amber-900/40 border border-amber-300/60 dark:border-amber-700/40 text-xs font-normal text-amber-950 dark:text-amber-100">
+                              <span className="font-semibold text-amber-800 dark:text-amber-300">Reply: </span>
+                              "{replyTextClean}"
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-1.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground font-medium">Mobile:</span>
+                            {r.patient?.mobile ? (
+                              <a
+                                href={`tel:${r.patient.mobile}`}
+                                className="inline-flex items-center gap-1 font-medium text-foreground hover:text-primary"
+                              >
+                                <Phone className="h-3.5 w-3.5 text-primary" />
+                                {r.patient.mobile}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground font-medium">Treatment:</span>
+                            <span className="font-medium text-foreground">
+                              {r.visit?.treatment_type?.name || "General Checkup"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground font-medium">Last Attempt:</span>
+                            <span className="font-medium text-foreground">
+                              {r.last_attempt_at ? formatDateIST(r.last_attempt_at.split("T")[0]) : "—"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-2 border-t border-amber-600/15 flex-wrap">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => openBookAppointmentModal(r)}
+                            className="flex-1 min-h-[36px] text-xs shadow-sm"
+                          >
+                            <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                            Book Visit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSnooze7Days(r)}
+                            className="min-h-[36px] px-3 text-xs bg-background/80"
+                          >
+                            <Clock className="h-3.5 w-3.5 mr-1.5" />
+                            Snooze (+7d)
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Dismiss this reply"
+                            onClick={() => handleDismissReply(r)}
+                            className="min-h-[36px] px-2.5 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -1609,7 +1696,9 @@ export function TodayPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                  {/* Desktop View: Table */}
+                  <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="border-b border-border bg-muted/40 text-xs font-medium text-muted-foreground uppercase">
                       <tr>
@@ -1817,7 +1906,227 @@ export function TodayPage() {
                     </tbody>
                   </table>
                 </div>
-              )}
+
+                {/* Mobile View: Card List */}
+                <div className="md:hidden divide-y divide-border">
+                  {filteredRecalls.map((r) => {
+                    const days = daysUntilIST(r.due_date);
+                    const activeRecallsForPatient = r.patient_id ? patientActiveRecallsMap[r.patient_id] || [] : [];
+                    const activeCount = activeRecallsForPatient.length;
+                    const isPaused = r.status === "paused";
+
+                    return (
+                      <div
+                        key={r.id}
+                        className={cn(
+                          "p-4 flex flex-col gap-3 transition-colors",
+                          getRecallRowBgClass(r)
+                        )}
+                      >
+                        {/* Header: Patient Name + Active Badge + Status Badge */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
+                            <Link
+                              to={`/app/patients?id=${r.patient_id}`}
+                              className="font-semibold text-base text-foreground hover:underline"
+                            >
+                              {r.patient?.name || "Unknown Patient"}
+                            </Link>
+                            {activeCount > 1 && (
+                              <ActiveRecallsPopover
+                                patientName={r.patient?.name || "Patient"}
+                                recalls={activeRecallsForPatient}
+                                onTogglePause={handleTogglePause}
+                              >
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] py-0 px-1.5 font-normal border-muted-foreground/30 text-muted-foreground bg-muted/30 hover:bg-muted/60 transition-colors"
+                                >
+                                  {activeCount} active recalls
+                                </Badge>
+                              </ActiveRecallsPopover>
+                            )}
+                          </div>
+
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "capitalize font-normal text-xs shrink-0",
+                              r.status === "pending" && days < 0 && "border-destructive/30 text-destructive bg-destructive/10",
+                              r.status === "pending" && days === 0 && "border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400",
+                              r.status === "sent" && "border-teal-200 text-teal-800 bg-teal-100 dark:border-primary/30 dark:text-primary dark:bg-primary/10",
+                              r.status === "booked" && "border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400",
+                              r.status === "contacted" && "border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400",
+                              r.status === "declined" && "border-muted text-muted-foreground bg-muted/20",
+                              r.status === "paused" && "border-slate-200 text-slate-700 bg-slate-100 dark:border-slate-500/30 dark:text-slate-400 dark:bg-slate-800/40"
+                            )}
+                          >
+                            {r.status}
+                          </Badge>
+                        </div>
+
+                        {/* Details List */}
+                        <div className="flex flex-col gap-1.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground font-medium">Mobile:</span>
+                            {r.patient?.mobile ? (
+                              <a
+                                href={`tel:${r.patient.mobile}`}
+                                className="inline-flex items-center gap-1 font-medium text-foreground hover:text-primary"
+                              >
+                                <Phone className="h-3.5 w-3.5 text-primary" />
+                                {r.patient.mobile}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground font-medium">Last Treatment:</span>
+                            <span className="font-medium text-foreground">
+                              {r.visit?.treatment_type?.name || "General Checkup"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground font-medium">Due Date:</span>
+                            <div className="text-foreground font-medium flex items-center gap-1.5 flex-wrap justify-end">
+                              <span>{formatDateIST(r.due_date)}</span>
+                              {days < 0 && (
+                                <span className="text-[11px] text-destructive font-normal">
+                                  ({Math.abs(days)}d overdue)
+                                </span>
+                              )}
+                              {days === 0 && (
+                                <span className="text-[11px] text-amber-700 dark:text-amber-400 font-normal">
+                                  (Today)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {r.status !== "booked" && r.status !== "completed" && r.status !== "declined" && r.status !== "cancelled" ? (
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground font-medium">Due Time:</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="time"
+                                  aria-label="Recall due time (optional)"
+                                  title="Optional reminder time. When set, sends reminder 2 hours before."
+                                  value={r.due_time ? r.due_time.substring(0, 5) : ""}
+                                  onChange={(e) => handleUpdateRecallTime(r, e.target.value)}
+                                  disabled={updatingRecallTimeId === r.id}
+                                  className="h-6 w-24 rounded border border-input bg-background px-1.5 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                                />
+                                {r.due_time && (
+                                  <button
+                                    type="button"
+                                    title="Clear reminder time"
+                                    onClick={() => handleUpdateRecallTime(r, "")}
+                                    disabled={updatingRecallTimeId === r.id}
+                                    className="text-muted-foreground hover:text-destructive p-0.5 rounded transition-colors disabled:opacity-50"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ) : r.due_time ? (
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground font-medium">Due Time:</span>
+                              <span className="text-[11px] text-muted-foreground font-normal">
+                                {formatRecallTime(r.due_time)}
+                              </span>
+                            </div>
+                          ) : null}
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground font-medium">Attempts:</span>
+                            <span className="font-medium text-foreground">{r.attempt_count}</span>
+                          </div>
+                        </div>
+
+                        {/* Actions Row */}
+                        <div className="flex items-center gap-1.5 pt-2 border-t border-border/60 flex-wrap">
+                          {isPaused ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              title="Resume Recall"
+                              onClick={() => handleTogglePause(r)}
+                              className="w-full min-h-[36px] text-xs text-emerald-800 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100"
+                            >
+                              <Play className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                              Resume
+                            </Button>
+                          ) : (
+                            <>
+                              {profile?.role === "owner" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  title="Send WhatsApp message now (bypasses the scheduled send time)"
+                                  onClick={() => handleSendNow(r)}
+                                  disabled={sendingNowId === r.id}
+                                  className="min-h-[36px] px-2.5 text-xs text-primary border-primary/30 hover:bg-primary/10 flex-1"
+                                >
+                                  {sendingNowId === r.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                  ) : (
+                                    <Send className="h-3.5 w-3.5 mr-1" />
+                                  )}
+                                  Send Now
+                                </Button>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                title="Mark as Sent"
+                                onClick={() => handleMarkAsSent(r)}
+                                className="min-h-[36px] px-2.5 text-xs flex-1"
+                              >
+                                <Send className="h-3.5 w-3.5 mr-1" />
+                                Sent
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                title="Snooze 7 Days"
+                                onClick={() => handleSnooze7Days(r)}
+                                className="min-h-[36px] px-2.5 text-xs flex-1"
+                              >
+                                <Clock className="h-3.5 w-3.5 mr-1" />
+                                +7d
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Pause Recall"
+                                onClick={() => handleTogglePause(r)}
+                                className="min-h-[36px] px-2 text-xs text-amber-800 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/40"
+                              >
+                                <Pause className="h-3.5 w-3.5 mr-1 text-amber-600" />
+                                Pause
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Not Interested"
+                                onClick={() => handleMarkDeclined(r)}
+                                className="min-h-[36px] px-2 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             </CardContent>
           </Card>
         </TabsContent>
