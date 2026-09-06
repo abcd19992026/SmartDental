@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
-import { CalendarClock, Users, Settings, MessageSquare } from "lucide-react";
+import { CalendarClock, Users, Settings, MessageSquare, TrendingUp } from "lucide-react";
 import { useAuth } from "@/auth/useAuth";
 import { Sidebar, type NavItem } from "@/layouts/components/Sidebar";
 import { TopBar } from "@/layouts/components/TopBar";
@@ -18,6 +18,7 @@ export function ClinicShell() {
     { to: "/app", label: "Today", icon: CalendarClock, end: true },
     { to: "/app/patients", label: "Patients", icon: Users },
     { to: "/app/messages", label: "Messages", icon: MessageSquare },
+    ...(isOwner ? [{ to: "/app/recall-report", label: "Recall Report", icon: TrendingUp }] : []),
     ...(isOwner ? [{ to: "/app/settings", label: "Settings", icon: Settings }] : []),
   ];
 

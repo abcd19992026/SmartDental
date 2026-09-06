@@ -17,6 +17,7 @@ import { MessagesPage } from "@/features/super-admin/MessagesPage";
 import { TodayPage } from "@/features/clinic/TodayPage";
 import { PatientsPage } from "@/features/clinic/PatientsPage";
 import { ClinicMessagesPage } from "@/features/clinic/ClinicMessagesPage";
+import { RecallReportPage } from "@/features/clinic/RecallReportPage";
 import { SettingsPage } from "@/features/clinic/settings/SettingsPage";
 import { PrescriptionPrintPage } from "@/features/clinic/prescriptions/PrescriptionPrintPage";
 import { ConsultationPage } from "@/features/clinic/ConsultationPage";
@@ -44,6 +45,7 @@ export function AppRoutes() {
                  (Phase 13A) -- inside ClinicShell (sidebar/topbar), unlike the print route. */}
               <Route path="patients/:patientId/consultation" element={<ConsultationPage />} />
               <Route path="messages" element={<ClinicMessagesPage />} />
+              <Route path="recall-report" element={<RecallReportPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="settings/:tab" element={<SettingsPage />} />
             </Route>
