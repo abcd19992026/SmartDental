@@ -347,6 +347,11 @@ export interface InsertPaymentInput {
    * patient_payments' partial unique index on this column instead of recording the same payment
    * twice on a slow-network double-tap. */
   client_request_id?: string | null;
+  /** Optional link to the specific visit this payment was collected for. When set, the
+   * patient_payments_insert RLS policy requires the visit to belong to the same patient and
+   * clinic, and it can never be changed afterward (protect_patient_payments_immutable_fields).
+   * Feeds the Recall Report's per-return-visit collected-amount. */
+  visit_id?: string | null;
 }
 
 export interface PatientPaymentRecord {
@@ -380,6 +385,7 @@ export async function insertPayment(input: InsertPaymentInput): Promise<ApiResul
       paid_on: input.paid_on,
       notes: input.notes ?? null,
       client_request_id: input.client_request_id ?? null,
+      visit_id: input.visit_id ?? null,
     })
     .select()
     .single();
@@ -413,6 +419,98 @@ export async function voidPayment(paymentId: string, voidReason: string): Promis
     .single();
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: data as unknown as PatientPaymentRecord };
+}
+
+// ---------------------------------------------------------------------------
+// recall_return_attribution -- Phase 25A. Per recall, did the patient return within 45 days of
+// the recall actually being sent, and how much did that return visit bring in. Plain RLS-scoped
+// read of the security_invoker view; no Edge Function.
+//
+// patient_name comes from the view itself (it joins patients), not a second round-trip -- the
+// Phase 25A Task 3 decision, since the caller always needs the name and the view's patients read
+// is already RLS-scoped through security_invoker.
+//
+// Rows are returned raw, one per recall. Deliberately NOT pre-aggregated into returned/collected
+// counts here: that summary belongs in the Phase 25B UI layer so every headline number stays
+// traceable to the individual rows it came from.
+// ---------------------------------------------------------------------------
+
+export interface RecallReportRow {
+  recall_id: string;
+  clinic_id: string;
+  branch_id: string;
+  patient_id: string;
+  patient_name: string;
+  due_date: string;
+  status: string;
+  /** Earliest message_log.sent_at with status sent/delivered/read -- always present (a recall
+   * never successfully sent is absent from the view). */
+  first_sent_at: string;
+  /** Earliest message_log.sent_at with status delivered/read; null if never confirmed delivered. */
+  delivered_at: string | null;
+  reply_received_at: string | null;
+  /** Null when the patient did not return in the window, or the candidate return visit was
+   * already credited to an earlier-due recall. */
+  return_visit_id: string | null;
+  return_visit_date: string | null;
+  /** visits.net_amount (tamper-proof generated column) of the credited return visit. */
+  return_visit_amount: number | null;
+  /** Sum of non-voided patient_payments linked to the return visit. Null -- never 0 -- when
+   * there is no credited return visit or nothing has been linked to it yet. */
+  collected_amount: number | null;
+}
+
+interface RecallReportRawRow extends Omit<RecallReportRow, "return_visit_amount" | "collected_amount"> {
+  return_visit_amount: string | number | null;
+  collected_amount: string | number | null;
+}
+
+/** One row per recall whose due_date falls in [monthStart, monthEndExclusive), optionally scoped
+ * to a single branch. monthStart is 'YYYY-MM-01' and monthEndExclusive is the first day of the
+ * next month, so the range is a whole calendar month with no overlap between adjacent months. */
+export async function fetchRecallReport(
+  monthStart: string,
+  monthEndExclusive: string,
+  branchId?: string | null,
+): Promise<ApiResult<RecallReportRow[]>> {
+  let query = supabase
+    .from("recall_return_attribution")
+    .select(
+      `recall_id, clinic_id, branch_id, patient_id, patient_name, due_date, status,
+       first_sent_at, delivered_at, reply_received_at,
+       return_visit_id, return_visit_date, return_visit_amount, collected_amount`,
+    )
+    .gte("due_date", monthStart)
+    .lt("due_date", monthEndExclusive)
+    .order("due_date", { ascending: true });
+
+  if (branchId) {
+    query = query.eq("branch_id", branchId);
+  }
+
+  const { data, error } = await query;
+  if (error) return { ok: false, error: error.message };
+
+  const rows = (data ?? []) as unknown as RecallReportRawRow[];
+  return {
+    ok: true,
+    data: rows.map((r) => ({
+      recall_id: r.recall_id,
+      clinic_id: r.clinic_id,
+      branch_id: r.branch_id,
+      patient_id: r.patient_id,
+      patient_name: r.patient_name,
+      due_date: r.due_date,
+      status: r.status,
+      first_sent_at: r.first_sent_at,
+      delivered_at: r.delivered_at,
+      reply_received_at: r.reply_received_at,
+      return_visit_id: r.return_visit_id,
+      return_visit_date: r.return_visit_date,
+      return_visit_amount: r.return_visit_amount === null ? null : Number(r.return_visit_amount),
+      collected_amount: r.collected_amount === null ? null : Number(r.collected_amount),
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------

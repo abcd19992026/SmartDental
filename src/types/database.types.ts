@@ -509,6 +509,7 @@ export type Database = {
           notes: string | null
           paid_on: string
           patient_id: string
+          visit_id: string | null
           void_reason: string | null
           voided_at: string | null
           voided_by: string | null
@@ -525,6 +526,7 @@ export type Database = {
           notes?: string | null
           paid_on?: string
           patient_id: string
+          visit_id?: string | null
           void_reason?: string | null
           voided_at?: string | null
           voided_by?: string | null
@@ -541,6 +543,7 @@ export type Database = {
           notes?: string | null
           paid_on?: string
           patient_id?: string
+          visit_id?: string | null
           void_reason?: string | null
           voided_at?: string | null
           voided_by?: string | null
@@ -579,6 +582,13 @@ export type Database = {
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_payments_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
             referencedColumns: ["id"]
           },
           {
@@ -1211,6 +1221,47 @@ export type Database = {
       }
     }
     Views: {
+      recall_return_attribution: {
+        Row: {
+          branch_id: string | null
+          clinic_id: string | null
+          collected_amount: number | null
+          delivered_at: string | null
+          due_date: string | null
+          first_sent_at: string | null
+          patient_id: string | null
+          patient_name: string | null
+          recall_id: string | null
+          reply_received_at: string | null
+          return_visit_amount: number | null
+          return_visit_date: string | null
+          return_visit_id: string | null
+          status: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recalls_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recalls_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recalls_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patient_billing_summary: {
         Row: {
           clinic_id: string | null

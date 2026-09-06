@@ -110,6 +110,7 @@ export function AddPaymentModal({
       paid_on: paidOn,
       notes: notes.trim() || null,
       client_request_id: clientRequestId,
+      visit_id: visitId ?? null,
     };
 
     const res = await insertPayment(input);
