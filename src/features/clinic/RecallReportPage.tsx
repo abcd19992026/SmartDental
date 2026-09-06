@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import {
   TrendingUp,
   Send,
@@ -89,6 +90,10 @@ function formatReportDate(dateStr: string | null | undefined): string {
 
 export function RecallReportPage() {
   const { profile } = useAuth();
+
+  if (profile?.role !== "owner") {
+    return <Navigate to="/app" replace />;
+  }
 
   const [selectedMonth, setSelectedMonth] = useState<string>(() => todayIST().slice(0, 7));
   const [selectedBranchId, setSelectedBranchId] = useState<string>("all");
