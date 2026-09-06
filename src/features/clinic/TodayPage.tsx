@@ -1918,10 +1918,7 @@ export function TodayPage() {
                     return (
                       <div
                         key={r.id}
-                        className={cn(
-                          "p-4 flex flex-col gap-3 transition-colors",
-                          getRecallRowBgClass(r)
-                        )}
+                        className="p-4 flex flex-col gap-3 transition-colors"
                       >
                         {/* Header: Patient Name + Active Badge + Status Badge */}
                         <div className="flex items-start justify-between gap-2">
