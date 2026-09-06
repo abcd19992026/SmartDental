@@ -4,9 +4,7 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowLeft,
-  ArrowRight,
   Calendar,
-  ChevronDown,
   ClipboardPlus,
   CreditCard,
   FileText,
@@ -275,22 +273,6 @@ export function ConsultationPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // ---- Accordion active section state (one open at a time) ----
-  const [openSection, setOpenSection] = useState<string | null>("today_status");
-
-  function toggleSection(sectionId: string) {
-    setOpenSection((curr) => (curr === sectionId ? null : sectionId));
-  }
-
-  function goToSection(sectionId: string) {
-    setOpenSection(sectionId);
-    setTimeout(() => {
-      const el = document.getElementById(`section-${sectionId}`);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }, 60);
-  }
 
   useEffect(() => {
     if (!patientId) return;
@@ -969,7 +951,7 @@ export function ConsultationPage() {
           </Card>
         </div>
 
-        {/* RIGHT COLUMN (~72-75% width): Collapsible Accordion Sections */}
+        {/* RIGHT COLUMN (~72-75% width): Flat Sections */}
         <div className="flex-1 w-full space-y-4">
           {savedVisitId && (
             <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs text-foreground">
@@ -980,10 +962,7 @@ export function ConsultationPage() {
 
           {/* SECTION 1: Today's Status */}
           <Card id="section-today_status" className="transition-all duration-200 scroll-mt-6">
-            <CardHeader
-              className="flex flex-row items-center justify-between cursor-pointer select-none py-3.5 px-5 hover:bg-muted/30 transition-colors rounded-t-lg"
-              onClick={() => toggleSection("today_status")}
-            >
+            <CardHeader className="flex flex-row items-center justify-between py-3.5 px-5">
               <div className="flex items-center gap-2.5">
                 <HeartPulse className="h-4 w-4 text-primary" />
                 <CardTitle className="text-sm font-semibold">1. Today's Status</CardTitle>
@@ -997,93 +976,68 @@ export function ConsultationPage() {
                     Complaint noted
                   </Badge>
                 )}
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0">
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      openSection === "today_status" && "rotate-180",
-                    )}
-                  />
-                </Button>
               </div>
             </CardHeader>
-            {openSection === "today_status" && (
-              <CardContent className="pt-4 px-5 border-t border-border space-y-4">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="c-weight">Weight</Label>
-                    <Input
-                      id="c-weight"
-                      placeholder="e.g. 68 kg"
-                      value={rxDraft.weight}
-                      onChange={(e) => patchRxDraft({ weight: e.target.value })}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="c-bp">Blood Pressure</Label>
-                    <Input
-                      id="c-bp"
-                      placeholder="e.g. 120/80 mmHg"
-                      value={rxDraft.blood_pressure}
-                      onChange={(e) => patchRxDraft({ blood_pressure: e.target.value })}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="c-spo2">SpO2</Label>
-                    <Input
-                      id="c-spo2"
-                      placeholder="e.g. 98%"
-                      value={rxDraft.spo2}
-                      onChange={(e) => patchRxDraft({ spo2: e.target.value })}
-                    />
-                  </div>
-                </div>
-
+            <CardContent className="pt-4 px-5 border-t border-border space-y-4">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="c-chief-complaint">Chief Complaint</Label>
-                  <textarea
-                    id="c-chief-complaint"
-                    rows={2}
-                    className={textareaClass}
-                    placeholder="Patient's primary concern or symptoms (e.g. Sharp pain in lower right tooth since 3 days)"
-                    value={rxDraft.chief_complaint}
-                    onChange={(e) => patchRxDraft({ chief_complaint: e.target.value })}
+                  <Label htmlFor="c-weight">Weight</Label>
+                  <Input
+                    id="c-weight"
+                    placeholder="e.g. 68 kg"
+                    value={rxDraft.weight}
+                    onChange={(e) => patchRxDraft({ weight: e.target.value })}
                   />
                 </div>
-
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="c-past-dental">Past Dental History</Label>
-                  <textarea
-                    id="c-past-dental"
-                    rows={2}
-                    className={textareaClass}
-                    placeholder="Prior dental treatments, restorations, extractions, or complications"
-                    value={rxDraft.past_dental_history}
-                    onChange={(e) => patchRxDraft({ past_dental_history: e.target.value })}
+                  <Label htmlFor="c-bp">Blood Pressure</Label>
+                  <Input
+                    id="c-bp"
+                    placeholder="e.g. 120/80 mmHg"
+                    value={rxDraft.blood_pressure}
+                    onChange={(e) => patchRxDraft({ blood_pressure: e.target.value })}
                   />
                 </div>
-
-                <div className="flex justify-end pt-2 border-t border-border/40">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => goToSection("examination")}
-                    className="gap-1 text-xs hover:bg-primary/5 hover:text-primary hover:border-primary/40"
-                  >
-                    Next <ArrowRight className="h-3.5 w-3.5" />
-                  </Button>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="c-spo2">SpO2</Label>
+                  <Input
+                    id="c-spo2"
+                    placeholder="e.g. 98%"
+                    value={rxDraft.spo2}
+                    onChange={(e) => patchRxDraft({ spo2: e.target.value })}
+                  />
                 </div>
-              </CardContent>
-            )}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="c-chief-complaint">Chief Complaint</Label>
+                <textarea
+                  id="c-chief-complaint"
+                  rows={2}
+                  className={textareaClass}
+                  placeholder="Patient's primary concern or symptoms (e.g. Sharp pain in lower right tooth since 3 days)"
+                  value={rxDraft.chief_complaint}
+                  onChange={(e) => patchRxDraft({ chief_complaint: e.target.value })}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="c-past-dental">Past Dental History</Label>
+                <textarea
+                  id="c-past-dental"
+                  rows={2}
+                  className={textareaClass}
+                  placeholder="Prior dental treatments, restorations, extractions, or complications"
+                  value={rxDraft.past_dental_history}
+                  onChange={(e) => patchRxDraft({ past_dental_history: e.target.value })}
+                />
+              </div>
+            </CardContent>
           </Card>
 
           {/* SECTION 2: Examination */}
           <Card id="section-examination" className="transition-all duration-200 scroll-mt-6">
-            <CardHeader
-              className="flex flex-row items-center justify-between cursor-pointer select-none py-3.5 px-5 hover:bg-muted/30 transition-colors rounded-t-lg"
-              onClick={() => toggleSection("examination")}
-            >
+            <CardHeader className="flex flex-row items-center justify-between py-3.5 px-5">
               <div className="flex items-center gap-2.5">
                 <Stethoscope className="h-4 w-4 text-primary" />
                 <CardTitle className="text-sm font-semibold">2. Examination</CardTitle>
@@ -1097,92 +1051,67 @@ export function ConsultationPage() {
                     {rxDraft.provisional_diagnosis}
                   </Badge>
                 )}
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0">
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      openSection === "examination" && "rotate-180",
-                    )}
-                  />
-                </Button>
               </div>
             </CardHeader>
-            {openSection === "examination" && (
-              <CardContent className="pt-4 px-5 border-t border-border space-y-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="c-oral-exam">Oral Examination</Label>
-                  <textarea
-                    id="c-oral-exam"
-                    rows={2}
-                    className={textareaClass}
-                    placeholder="Clinical findings (e.g. Deep occlusal caries irt 46, tender to vertical percussion)"
-                    value={rxDraft.oral_examination}
-                    onChange={(e) => patchRxDraft({ oral_examination: e.target.value })}
+            <CardContent className="pt-4 px-5 border-t border-border space-y-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="c-oral-exam">Oral Examination</Label>
+                <textarea
+                  id="c-oral-exam"
+                  rows={2}
+                  className={textareaClass}
+                  placeholder="Clinical findings (e.g. Deep occlusal caries irt 46, tender to vertical percussion)"
+                  value={rxDraft.oral_examination}
+                  onChange={(e) => patchRxDraft({ oral_examination: e.target.value })}
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs font-medium text-foreground">Investigation</Label>
+                <div className="flex flex-wrap gap-2">
+                  <TogglePill
+                    active={rxDraft.investigation.iopa}
+                    label="IOPA"
+                    onClick={() => patchInvestigation({ iopa: !rxDraft.investigation.iopa })}
+                  />
+                  <TogglePill
+                    active={rxDraft.investigation.rvg}
+                    label="RVG"
+                    onClick={() => patchInvestigation({ rvg: !rxDraft.investigation.rvg })}
+                  />
+                  <TogglePill
+                    active={rxDraft.investigation.opg}
+                    label="OPG"
+                    onClick={() => patchInvestigation({ opg: !rxDraft.investigation.opg })}
+                  />
+                  <TogglePill
+                    active={rxDraft.investigation.blood_other}
+                    label="Blood / Other"
+                    onClick={() => patchInvestigation({ blood_other: !rxDraft.investigation.blood_other })}
                   />
                 </div>
+                <Input
+                  placeholder="Investigation notes (e.g. Radiolucency involving pulp irt 46, periapical widening)"
+                  value={rxDraft.investigation.notes}
+                  onChange={(e) => patchInvestigation({ notes: e.target.value })}
+                />
+              </div>
 
-                <div className="flex flex-col gap-2">
-                  <Label className="text-xs font-medium text-foreground">Investigation</Label>
-                  <div className="flex flex-wrap gap-2">
-                    <TogglePill
-                      active={rxDraft.investigation.iopa}
-                      label="IOPA"
-                      onClick={() => patchInvestigation({ iopa: !rxDraft.investigation.iopa })}
-                    />
-                    <TogglePill
-                      active={rxDraft.investigation.rvg}
-                      label="RVG"
-                      onClick={() => patchInvestigation({ rvg: !rxDraft.investigation.rvg })}
-                    />
-                    <TogglePill
-                      active={rxDraft.investigation.opg}
-                      label="OPG"
-                      onClick={() => patchInvestigation({ opg: !rxDraft.investigation.opg })}
-                    />
-                    <TogglePill
-                      active={rxDraft.investigation.blood_other}
-                      label="Blood / Other"
-                      onClick={() => patchInvestigation({ blood_other: !rxDraft.investigation.blood_other })}
-                    />
-                  </div>
-                  <Input
-                    placeholder="Investigation notes (e.g. Radiolucency involving pulp irt 46, periapical widening)"
-                    value={rxDraft.investigation.notes}
-                    onChange={(e) => patchInvestigation({ notes: e.target.value })}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="c-diagnosis">Provisional Diagnosis</Label>
-                  <Input
-                    id="c-diagnosis"
-                    placeholder="e.g. Acute apical periodontitis irt 46"
-                    value={rxDraft.provisional_diagnosis}
-                    onChange={(e) => patchRxDraft({ provisional_diagnosis: e.target.value })}
-                  />
-                </div>
-
-                <div className="flex justify-end pt-2 border-t border-border/40">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => goToSection("treatment")}
-                    className="gap-1 text-xs hover:bg-primary/5 hover:text-primary hover:border-primary/40"
-                  >
-                    Next <ArrowRight className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </CardContent>
-            )}
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="c-diagnosis">Provisional Diagnosis</Label>
+                <Input
+                  id="c-diagnosis"
+                  placeholder="e.g. Acute apical periodontitis irt 46"
+                  value={rxDraft.provisional_diagnosis}
+                  onChange={(e) => patchRxDraft({ provisional_diagnosis: e.target.value })}
+                />
+              </div>
+            </CardContent>
           </Card>
 
           {/* SECTION 3: Treatment */}
           <Card id="section-treatment" className="transition-all duration-200 scroll-mt-6">
-            <CardHeader
-              className="flex flex-row items-center justify-between cursor-pointer select-none py-3.5 px-5 hover:bg-muted/30 transition-colors rounded-t-lg"
-              onClick={() => toggleSection("treatment")}
-            >
+            <CardHeader className="flex flex-row items-center justify-between py-3.5 px-5">
               <div className="flex items-center gap-2.5">
                 <Calendar className="h-4 w-4 text-primary" />
                 <CardTitle className="text-sm font-semibold">3. Treatment</CardTitle>
@@ -1196,135 +1125,110 @@ export function ConsultationPage() {
                     {selectedTeeth.length} {selectedTeeth.length === 1 ? "tooth" : "teeth"} selected
                   </Badge>
                 )}
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0">
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      openSection === "treatment" && "rotate-180",
-                    )}
-                  />
-                </Button>
               </div>
             </CardHeader>
-            {openSection === "treatment" && (
-              <CardContent className="pt-4 px-5 border-t border-border space-y-4">
-                {!isExistingVisitMode && (
-                  <fieldset disabled={Boolean(savedVisitId)} className="space-y-4 disabled:opacity-50">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="c-tt">Treatment Type *</Label>
-                        <select
-                          id="c-tt"
-                          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                          value={treatmentTypeId}
-                          onChange={(e) => setTreatmentTypeId(e.target.value)}
-                        >
-                          {treatmentTypes.map((tt) => (
-                            <option key={tt.id} value={tt.id}>
-                              {tt.name} ({tt.recall_days}d recall)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="c-date">Visit Date *</Label>
-                        <Input id="c-date" type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Label htmlFor="c-recall" className="text-xs shrink-0 font-medium">
-                        Next Recall Date{recallDays ? ` (${recallDays}d default)` : ""}:
-                      </Label>
-                      <Input
-                        id="c-recall"
-                        type="date"
-                        value={recallOverride}
-                        onChange={(e) => {
-                          setRecallOverride(e.target.value);
-                          if (!e.target.value) setRecallTimeOverride("");
-                        }}
-                        className="h-8 w-36 text-xs"
-                      />
-                      <div className="flex items-center gap-1">
-                        <Input
-                          id="c-recall-time"
-                          type="time"
-                          aria-label="Recall Due Time (optional)"
-                          title="Optional reminder time. When set, sends reminder 2 hours before."
-                          value={recallTimeOverride}
-                          onChange={(e) => setRecallTimeOverride(e.target.value)}
-                          disabled={!recallOverride}
-                          className="h-8 w-28 text-xs disabled:opacity-50"
-                        />
-                        {recallTimeOverride && (
-                          <button
-                            type="button"
-                            title="Clear reminder time"
-                            onClick={() => setRecallTimeOverride("")}
-                            className="text-xs text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
+            <CardContent className="pt-4 px-5 border-t border-border space-y-4">
+              {!isExistingVisitMode && (
+                <fieldset disabled={Boolean(savedVisitId)} className="space-y-4 disabled:opacity-50">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="c-notes">Clinical / Visit Notes</Label>
-                      <Input
-                        id="c-notes"
-                        placeholder="e.g. Scaling done, advised warm saline rinse"
-                        value={visitNotes}
-                        onChange={(e) => setVisitNotes(e.target.value)}
-                      />
+                      <Label htmlFor="c-tt">Treatment Type *</Label>
+                      <select
+                        id="c-tt"
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        value={treatmentTypeId}
+                        onChange={(e) => setTreatmentTypeId(e.target.value)}
+                      >
+                        {treatmentTypes.map((tt) => (
+                          <option key={tt.id} value={tt.id}>
+                            {tt.name} ({tt.recall_days}d recall)
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  </fieldset>
-                )}
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="c-date">Visit Date *</Label>
+                      <Input id="c-date" type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
+                    </div>
+                  </div>
 
-                {/* Tooth Chart */}
-                <div className="flex flex-col gap-1.5 pt-1">
-                  <Label className="text-xs font-medium text-foreground">Interactive Dental Chart (Teeth Selection)</Label>
-                  <ToothChart
-                    value={selectedTeeth}
-                    onChange={setSelectedTeeth}
-                    dentitionType={(patient?.dentition_type as "adult" | "child") ?? "adult"}
-                  />
-                </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Label htmlFor="c-recall" className="text-xs shrink-0 font-medium">
+                      Next Recall Date{recallDays ? ` (${recallDays}d default)` : ""}:
+                    </Label>
+                    <Input
+                      id="c-recall"
+                      type="date"
+                      value={recallOverride}
+                      onChange={(e) => {
+                        setRecallOverride(e.target.value);
+                        if (!e.target.value) setRecallTimeOverride("");
+                      }}
+                      className="h-8 w-36 text-xs"
+                    />
+                    <div className="flex items-center gap-1">
+                      <Input
+                        id="c-recall-time"
+                        type="time"
+                        aria-label="Recall Due Time (optional)"
+                        title="Optional reminder time. When set, sends reminder 2 hours before."
+                        value={recallTimeOverride}
+                        onChange={(e) => setRecallTimeOverride(e.target.value)}
+                        disabled={!recallOverride}
+                        className="h-8 w-28 text-xs disabled:opacity-50"
+                      />
+                      {recallTimeOverride && (
+                        <button
+                          type="button"
+                          title="Clear reminder time"
+                          onClick={() => setRecallTimeOverride("")}
+                          className="text-xs text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="c-treatment-plan">Treatment Plan</Label>
-                  <textarea
-                    id="c-treatment-plan"
-                    rows={2}
-                    className={textareaClass}
-                    placeholder="Proposed treatment course (e.g. Root Canal Treatment irt 46 followed by PFM Crown)"
-                    value={rxDraft.treatment_plan}
-                    onChange={(e) => patchRxDraft({ treatment_plan: e.target.value })}
-                  />
-                </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="c-notes">Clinical / Visit Notes</Label>
+                    <Input
+                      id="c-notes"
+                      placeholder="e.g. Scaling done, advised warm saline rinse"
+                      value={visitNotes}
+                      onChange={(e) => setVisitNotes(e.target.value)}
+                    />
+                  </div>
+                </fieldset>
+              )}
 
-                <div className="flex justify-end pt-2 border-t border-border/40">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => goToSection("rx")}
-                    className="gap-1 text-xs hover:bg-primary/5 hover:text-primary hover:border-primary/40"
-                  >
-                    Next <ArrowRight className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </CardContent>
-            )}
+              {/* Tooth Chart */}
+              <div className="flex flex-col gap-1.5 pt-1">
+                <Label className="text-xs font-medium text-foreground">Interactive Dental Chart (Teeth Selection)</Label>
+                <ToothChart
+                  value={selectedTeeth}
+                  onChange={setSelectedTeeth}
+                  dentitionType={(patient?.dentition_type as "adult" | "child") ?? "adult"}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="c-treatment-plan">Treatment Plan</Label>
+                <textarea
+                  id="c-treatment-plan"
+                  rows={2}
+                  className={textareaClass}
+                  placeholder="Proposed treatment course (e.g. Root Canal Treatment irt 46 followed by PFM Crown)"
+                  value={rxDraft.treatment_plan}
+                  onChange={(e) => patchRxDraft({ treatment_plan: e.target.value })}
+                />
+              </div>
+            </CardContent>
           </Card>
 
           {/* SECTION 4: Rx (Medicines) */}
           <Card id="section-rx" className="transition-all duration-200 scroll-mt-6">
-            <CardHeader
-              className="flex flex-row items-center justify-between cursor-pointer select-none py-3.5 px-5 hover:bg-muted/30 transition-colors rounded-t-lg"
-              onClick={() => toggleSection("rx")}
-            >
+            <CardHeader className="flex flex-row items-center justify-between py-3.5 px-5">
               <div className="flex items-center gap-2.5">
                 <Pill className="h-4 w-4 text-primary" />
                 <CardTitle className="text-sm font-semibold">4. Rx (Medicines)</CardTitle>
@@ -1338,99 +1242,72 @@ export function ConsultationPage() {
                     {rxDraft.medications.filter((m) => m.name.trim()).length} medicines added
                   </Badge>
                 )}
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0">
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      openSection === "rx" && "rotate-180",
-                    )}
-                  />
-                </Button>
               </div>
             </CardHeader>
-            {openSection === "rx" && (
-              <CardContent className="pt-4 px-5 border-t border-border space-y-4">
-                {canPrescribe ? (
-                  <div className="space-y-4">
-                    <div className="flex flex-col gap-2">
-                      <Label className="text-xs font-medium text-foreground">Medications List</Label>
-                      {rxDraft.medications.length === 0 ? (
-                        <p className="text-xs text-muted-foreground py-2 italic">
-                          No medications added yet. Click below to add medicines to this prescription.
-                        </p>
-                      ) : (
-                        <div className="flex flex-col gap-2">
-                          {rxDraft.medications.map((m, i) => (
-                            <MedicationRowEditor
-                              key={i}
-                              index={i}
-                              row={m}
-                              allMedications={rxDraft.medications}
-                              medicines={medicines}
-                              onChange={(partial) => updateMedicationRow(i, partial)}
-                              onSelectMedicine={(medicine) => selectMedicineForRow(i, medicine)}
-                              onRemove={() => removeMedicationRow(i)}
-                            />
-                          ))}
-                        </div>
-                      )}
-                      <Button type="button" variant="outline" size="sm" onClick={addMedicationRow} className="self-start mt-1">
-                        <Plus className="h-3.5 w-3.5 mr-1.5" />
-                        Add Medicine
-                      </Button>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2 pt-2">
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="rx-doctor-name">Doctor Name *</Label>
-                        <Input
-                          id="rx-doctor-name"
-                          value={rxDraft.doctor_name}
-                          onChange={(e) => patchRxDraft({ doctor_name: e.target.value })}
-                          placeholder="Prescribing dentist name"
-                        />
+            <CardContent className="pt-4 px-5 border-t border-border space-y-4">
+              {canPrescribe ? (
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-2">
+                    <Label className="text-xs font-medium text-foreground">Medications List</Label>
+                    {rxDraft.medications.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2 italic">
+                        No medications added yet. Click below to add medicines to this prescription.
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {rxDraft.medications.map((m, i) => (
+                          <MedicationRowEditor
+                            key={i}
+                            index={i}
+                            row={m}
+                            allMedications={rxDraft.medications}
+                            medicines={medicines}
+                            onChange={(partial) => updateMedicationRow(i, partial)}
+                            onSelectMedicine={(medicine) => selectMedicineForRow(i, medicine)}
+                            onRemove={() => removeMedicationRow(i)}
+                          />
+                        ))}
                       </div>
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="rx-notes">Prescription Notes / Advice</Label>
-                        <Input
-                          id="rx-notes"
-                          value={rxDraft.notes}
-                          onChange={(e) => patchRxDraft({ notes: e.target.value })}
-                          placeholder="General instructions or precautions for patient"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground py-2">
-                    Only a doctor can prescribe medications for this patient.
-                  </p>
-                )}
-
-                {!isExistingVisitMode && (
-                  <div className="flex justify-end pt-2 border-t border-border/40">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => goToSection("billing")}
-                      className="gap-1 text-xs hover:bg-primary/5 hover:text-primary hover:border-primary/40"
-                    >
-                      Next <ArrowRight className="h-3.5 w-3.5" />
+                    )}
+                    <Button type="button" variant="outline" size="sm" onClick={addMedicationRow} className="self-start mt-1">
+                      <Plus className="h-3.5 w-3.5 mr-1.5" />
+                      Add Medicine
                     </Button>
                   </div>
-                )}
-              </CardContent>
-            )}
+
+                  <div className="grid gap-4 sm:grid-cols-2 pt-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="rx-doctor-name">Doctor Name *</Label>
+                      <Input
+                        id="rx-doctor-name"
+                        value={rxDraft.doctor_name}
+                        onChange={(e) => patchRxDraft({ doctor_name: e.target.value })}
+                        placeholder="Prescribing dentist name"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="rx-notes">Prescription Notes / Advice</Label>
+                      <Input
+                        id="rx-notes"
+                        value={rxDraft.notes}
+                        onChange={(e) => patchRxDraft({ notes: e.target.value })}
+                        placeholder="General instructions or precautions for patient"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground py-2">
+                  Only a doctor can prescribe medications for this patient.
+                </p>
+              )}
+            </CardContent>
           </Card>
 
           {/* SECTION 5: Billing (Hidden in existing-visit mode) */}
           {!isExistingVisitMode && (
             <Card id="section-billing" className="transition-all duration-200 scroll-mt-6">
-              <CardHeader
-                className="flex flex-row items-center justify-between cursor-pointer select-none py-3.5 px-5 hover:bg-muted/30 transition-colors rounded-t-lg"
-                onClick={() => toggleSection("billing")}
-              >
+              <CardHeader className="flex flex-row items-center justify-between py-3.5 px-5">
                 <div className="flex items-center gap-2.5">
                   <IndianRupee className="h-4 w-4 text-primary" />
                   <CardTitle className="text-sm font-semibold">5. Billing</CardTitle>
@@ -1444,69 +1321,59 @@ export function ConsultationPage() {
                       Net: {formatINR(netAmt)}
                     </Badge>
                   )}
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0">
-                    <ChevronDown
-                      className={cn(
-                        "h-4 w-4 transition-transform duration-200",
-                        openSection === "billing" && "rotate-180",
-                      )}
-                    />
-                  </Button>
                 </div>
               </CardHeader>
-              {openSection === "billing" && (
-                <CardContent className="pt-4 px-5 border-t border-border space-y-4">
-                  <fieldset disabled={Boolean(savedVisitId)} className="space-y-4 disabled:opacity-50">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="c-amt">Amount Charged (₹) *</Label>
-                        <Input
-                          id="c-amt"
-                          type="number"
-                          min="0"
-                          step="any"
-                          placeholder="e.g. 5000 (or 0 if free)"
-                          value={amount}
-                          onChange={(e) => setAmount(e.target.value)}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="c-disc">Discount %</Label>
-                        <Input
-                          id="c-disc"
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="any"
-                          placeholder="0"
-                          value={discountPercent}
-                          onChange={(e) => setDiscountPercent(e.target.value)}
-                        />
+              <CardContent className="pt-4 px-5 border-t border-border space-y-4">
+                <fieldset disabled={Boolean(savedVisitId)} className="space-y-4 disabled:opacity-50">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="c-amt">Amount Charged (₹) *</Label>
+                      <Input
+                        id="c-amt"
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="e.g. 5000 (or 0 if free)"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="c-disc">Discount %</Label>
+                      <Input
+                        id="c-disc"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="any"
+                        placeholder="0"
+                        value={discountPercent}
+                        onChange={(e) => setDiscountPercent(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {parsedAmt > 0 && (
+                    <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Calculated Net Payable:</span>
+                      <div className="flex items-center gap-2">
+                        {parsedDisc > 0 && (
+                          <span className="line-through text-muted-foreground font-mono">
+                            {formatINR(parsedAmt)}
+                          </span>
+                        )}
+                        <span className="font-semibold text-foreground text-sm font-mono">
+                          {formatINR(netAmt)}
+                        </span>
                       </div>
                     </div>
-
-                    {parsedAmt > 0 && (
-                      <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">Calculated Net Payable:</span>
-                        <div className="flex items-center gap-2">
-                          {parsedDisc > 0 && (
-                            <span className="line-through text-muted-foreground font-mono">
-                              {formatINR(parsedAmt)}
-                            </span>
-                          )}
-                          <span className="font-semibold text-foreground text-sm font-mono">
-                            {formatINR(netAmt)}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </fieldset>
-                </CardContent>
-              )}
+                  )}
+                </fieldset>
+              </CardContent>
             </Card>
           )}
-          </div>
         </div>
+      </div>
 
       {/* FIXED BOTTOM ACTION BAR */}
       <div className="fixed bottom-0 left-0 right-0 md:left-60 bg-card/95 backdrop-blur border-t border-border py-2.5 px-4 sm:px-6 z-30 shadow-lg">
