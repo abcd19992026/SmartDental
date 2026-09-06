@@ -90,10 +90,7 @@ function formatReportDate(dateStr: string | null | undefined): string {
 
 export function RecallReportPage() {
   const { profile } = useAuth();
-
-  if (profile?.role !== "owner") {
-    return <Navigate to="/app" replace />;
-  }
+  const isOwner = profile?.role === "owner";
 
   const [selectedMonth, setSelectedMonth] = useState<string>(() => todayIST().slice(0, 7));
   const [selectedBranchId, setSelectedBranchId] = useState<string>("all");
@@ -106,17 +103,19 @@ export function RecallReportPage() {
   // Load branches once for multi-branch clinics
   useEffect(() => {
     async function loadBranches() {
+      if (!isOwner) return;
       const { data } = await supabase.from("branches").select("*").eq("is_active", true).order("name");
       if (data) {
         setBranches(data);
       }
     }
     loadBranches();
-  }, []);
+  }, [isOwner]);
 
   // Fetch report on filter changes
   useEffect(() => {
     async function loadReport() {
+      if (!isOwner) return;
       setLoading(true);
       setError(null);
 
@@ -135,7 +134,7 @@ export function RecallReportPage() {
     }
 
     loadReport();
-  }, [selectedMonth, selectedBranchId]);
+  }, [isOwner, selectedMonth, selectedBranchId]);
 
   // Aggregated Summary values
   const recallsSent = reportRows.filter((r) => r.first_sent_at !== null).length;
@@ -156,7 +155,9 @@ export function RecallReportPage() {
   // Drilldown rows (patients who returned)
   const returnedRows = reportRows.filter((r) => r.return_visit_id !== null);
 
-  const isOwner = profile?.role === "owner";
+  if (!isOwner) {
+    return <Navigate to="/app" replace />;
+  }
 
   return (
     <div className="flex flex-col gap-6 max-w-7xl mx-auto pb-10">
