@@ -8,7 +8,6 @@ import {
   UserCheck,
   Receipt,
   IndianRupee,
-  Info,
   ChevronLeft,
   ChevronRight,
   AlertCircle,
@@ -347,13 +346,6 @@ export function RecallReportPage() {
             </Card>
           </div>
 
-          {/* Honesty Note */}
-          <div className="flex items-start sm:items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground">
-            <Info className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5 sm:mt-0" />
-            <p>
-              Ye &apos;wapas aaye&apos; recall ke baad hue visits hain -- ye zaroori nahi ki recall hi wajah thi, sirf itna pakka hai ki visit recall ke 45 din ke andar hui.
-            </p>
-          </div>
 
           {/* Drilldown Table */}
           <Card>
