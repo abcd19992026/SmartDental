@@ -1,5 +1,6 @@
 import type { ApiResult } from "@/lib/admin-api";
 import { toFunctionError } from "@/lib/admin-api";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/types/database.types";
 import { todayIST } from "@/lib/dates";
@@ -217,6 +218,66 @@ export async function sendRecallNow(recallId: string): Promise<ApiResult<SendRec
     body: { recall_id: recallId },
   });
   if (error) return toFunctionError(error);
+  if (!data) return { ok: false, error: "Empty response from server" };
+  return { ok: true, data };
+}
+
+// ---------------------------------------------------------------------------
+// send-payment-message (Edge Function) -- Phase 30A. An owner or receptionist sends the
+// payment_update_nanda_dental template (total bill / paid / balance due) for one patient,
+// on demand -- never triggered by cron, never bundled with a recall reminder. See
+// supabase/functions/send-payment-message/index.ts: containment (a receptionist may only target
+// a patient in their own branch, an owner any branch of their own clinic), and the guard order
+// (PATIENT_DND, WHATSAPP_DISABLED, CLINIC_SUSPENDED, DAILY_CAP_EXCEEDED, MONTHLY_QUOTA_EXCEEDED,
+// TEMPLATE_MISSING) are all enforced server-side.
+//
+// The caller (the UI dialog that triggers this) generates client_request_id ONCE when the
+// button/dialog opens and passes the same value on every retry -- this function never generates
+// its own, so a slow-network retry collides with message_log's partial unique index instead of
+// sending the payment update twice.
+//
+// Unlike sendRecallNow/sendTestMessage (which collapse a guard rejection into ApiResult's plain
+// `error` string via toFunctionError), a guard rejection here carries a distinct `error_code`
+// (see the list above) the caller needs to show the right message for -- so this returns its own
+// result shape instead of reusing ApiResult, and extracts `error_code` from the 400 response body
+// itself rather than discarding it.
+// ---------------------------------------------------------------------------
+
+export interface SendPaymentUpdateMessageOutput {
+  success: boolean;
+  /** True when this call was a retry of an already-completed send (same client_request_id) --
+   * the message was not sent again. */
+  already_sent?: boolean;
+  wa_message_id?: string | null;
+  error_code?: string | null;
+  error_message?: string;
+  patient_id: string;
+}
+
+export type SendPaymentUpdateMessageResult =
+  | { ok: true; data: SendPaymentUpdateMessageOutput }
+  // A guard rejection (DND/disabled/suspended/cap/quota/template) or an auth/validation failure --
+  // error_code is only present for the six named guards, absent for auth/validation errors.
+  | { ok: false; error: string; error_code?: string };
+
+export async function sendPaymentUpdateMessage(
+  patientId: string,
+  clientRequestId: string,
+): Promise<SendPaymentUpdateMessageResult> {
+  const { data, error } = await supabase.functions.invoke<SendPaymentUpdateMessageOutput>("send-payment-message", {
+    body: { patient_id: patientId, client_request_id: clientRequestId },
+  });
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const body = await error.context.json();
+        return { ok: false, error: body.error ?? "Request failed", error_code: body.error_code };
+      } catch {
+        return { ok: false, error: "Request failed" };
+      }
+    }
+    return { ok: false, error: error instanceof Error ? error.message : "Request failed" };
+  }
   if (!data) return { ok: false, error: "Empty response from server" };
   return { ok: true, data };
 }

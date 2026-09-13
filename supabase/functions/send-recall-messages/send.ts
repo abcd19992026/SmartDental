@@ -67,7 +67,7 @@ function sleep(ms: number): Promise<void> {
  * integer, en-IN digit grouping -- minus the currency symbol, since the WhatsApp template body
  * already has a literal ₹ in front of {{4}}/{{5}}/{{6}}. Never returns an empty string: Math.round
  * of any finite number, including 0, always produces a non-empty "0"+ string. */
-function formatAmountForWhatsapp(value: number): string {
+export function formatAmountForWhatsapp(value: number): string {
   return Math.round(value).toLocaleString("en-IN");
 }
 
@@ -84,7 +84,7 @@ interface PatientBilling {
  * zeroes (never null/undefined) for a patient with no visits/payments at all -- the view is
  * driven from patients, so a row always exists, but this function only ever needs patient_id and
  * has no independent reason to assume one back regardless. */
-async function fetchPatientBilling(serviceClient: SupabaseClient, patientId: string): Promise<PatientBilling> {
+export async function fetchPatientBilling(serviceClient: SupabaseClient, patientId: string): Promise<PatientBilling> {
   const { data } = await serviceClient
     .from("patient_billing_summary")
     .select("total_billed, total_paid, due")
@@ -249,6 +249,7 @@ export async function sendOneRecallMessage(
       mobile: recall.patients.mobile,
       template_name: template.meta_template_name,
       status: "queued",
+      message_type: "recall",
     })
     .select("id")
     .single();

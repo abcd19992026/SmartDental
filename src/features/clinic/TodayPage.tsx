@@ -269,6 +269,7 @@ export function TodayPage() {
         .from("message_log")
         .select("id", { count: "exact" })
         .eq("is_test", false)
+        .eq("message_type", "recall")
         .gte("created_at", `${todayStr}T00:00:00`),
     ]);
 

@@ -133,3 +133,58 @@ export async function authorizeOwnerOrSuperAdmin(req: Request): Promise<OwnerOrS
     serviceClient,
   };
 }
+
+export interface OwnerOrReceptionistAuthOk {
+  ok: true;
+  userId: string;
+  role: "owner" | "receptionist";
+  /** The caller's own clinic_id -- both roles always have one (unlike super_admin). Callers must
+   * resolve the ACTING clinic from this field -- never from anything in the request body. */
+  clinicId: string;
+  /** The caller's own branch_id. Always present for a receptionist; may be null for an owner
+   * (an owner is not confined to one branch). A receptionist may only act on a patient/record
+   * whose branch_id equals this -- the same scoping RLS applies to a receptionist's direct writes
+   * (e.g. visits_insert, patient_payments_insert) -- while an owner may act on any branch within
+   * their own clinic. */
+  branchId: string | null;
+  serviceClient: SupabaseClient;
+}
+
+export type OwnerOrReceptionistAuth = OwnerOrReceptionistAuthOk | SuperAdminAuthErr;
+
+/**
+ * Step 3 for routes a clinic's day-to-day staff use directly (not owner/super_admin
+ * administrative actions): confirm the caller's profile is_active = true and role IN ('owner',
+ * 'receptionist') -- 403 otherwise. Branch containment for a receptionist (their target record's
+ * branch_id must equal `branchId` here) is each route's own responsibility, same as
+ * authorizeOwnerOrSuperAdmin's clinic containment.
+ */
+export async function authorizeOwnerOrReceptionist(req: Request): Promise<OwnerOrReceptionistAuth> {
+  const verified = await verifyBearerToken(req);
+  if (!verified.ok) return verified;
+  const { userId, serviceClient } = verified;
+
+  const { data: profile, error: profileError } = await serviceClient
+    .from("profiles")
+    .select("role, is_active, clinic_id, branch_id")
+    .eq("id", userId)
+    .single();
+
+  if (
+    profileError ||
+    !profile ||
+    !profile.is_active ||
+    (profile.role !== "owner" && profile.role !== "receptionist")
+  ) {
+    return { ok: false, status: 403, error: "Forbidden: owner or receptionist access required" };
+  }
+
+  return {
+    ok: true,
+    userId,
+    role: profile.role as "owner" | "receptionist",
+    clinicId: profile.clinic_id as string,
+    branchId: profile.branch_id,
+    serviceClient,
+  };
+}
