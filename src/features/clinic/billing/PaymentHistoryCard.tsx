@@ -9,12 +9,15 @@ import { formatINR, cn } from "@/lib/utils";
 import { formatDateIST } from "@/lib/dates";
 import type { PatientPaymentHistoryEntry } from "@/lib/clinic-api";
 import { VoidPaymentModal } from "@/features/clinic/billing/VoidPaymentModal";
+import { SendPaymentUpdateButton } from "@/features/clinic/billing/SendPaymentUpdateButton";
 
 interface PaymentHistoryCardProps {
   payments: PatientPaymentHistoryEntry[];
   loading?: boolean;
   onAddPayment?: () => void;
   onRefresh?: () => void;
+  patientId?: string;
+  patientName?: string;
 }
 
 function formatPaymentMode(mode: string): string {
@@ -39,6 +42,8 @@ export function PaymentHistoryCard({
   loading,
   onAddPayment,
   onRefresh,
+  patientId,
+  patientName,
 }: PaymentHistoryCardProps) {
   const { profile } = useAuth();
   const isOwner = profile?.role === "owner" || profile?.role === "super_admin";
@@ -48,17 +53,26 @@ export function PaymentHistoryCard({
   return (
     <>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardHeader className="flex flex-row items-center justify-between pb-3 flex-wrap gap-2">
           <CardTitle className="text-base font-medium flex items-center gap-2">
             <CreditCard className="h-4 w-4 text-primary" />
             Payment History
           </CardTitle>
-          {onAddPayment && (
-            <Button size="sm" variant="outline" onClick={onAddPayment} className="h-8 text-xs">
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Payment
-            </Button>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {patientId && (
+              <SendPaymentUpdateButton
+                key={patientId}
+                patientId={patientId}
+                patientName={patientName ?? "patient"}
+              />
+            )}
+            {onAddPayment && (
+              <Button size="sm" variant="outline" onClick={onAddPayment} className="h-8 text-xs">
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Payment
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (

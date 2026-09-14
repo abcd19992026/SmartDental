@@ -782,6 +782,8 @@ export function PatientsPage() {
                 <PaymentHistoryCard
                   payments={paymentHistory}
                   loading={billingLoading}
+                  patientId={selectedPatient.id}
+                  patientName={selectedPatient.name}
                   onAddPayment={() => setAddPaymentOpen(true)}
                   onRefresh={() => {
                     loadBillingData(selectedPatient.id);
