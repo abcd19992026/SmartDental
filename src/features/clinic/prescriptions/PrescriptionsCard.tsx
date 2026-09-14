@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { ClipboardPlus, MessageCircle } from "lucide-react";
+import { ClipboardPlus } from "lucide-react";
 import { fetchPrescriptionsForPatient, type PrescriptionRow } from "@/lib/clinic-api";
 import { formatDateIST } from "@/lib/dates";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/components/ui/toast";
+import { SendPrescriptionButton } from "@/features/clinic/prescriptions/SendPrescriptionButton";
 
 interface PrescriptionsCardProps {
   patientId: string;
@@ -14,7 +14,6 @@ interface PrescriptionsCardProps {
 }
 
 export function PrescriptionsCard({ patientId, refreshKey }: PrescriptionsCardProps) {
-  const { toast } = useToast();
   const [prescriptions, setPrescriptions] = useState<PrescriptionRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -74,20 +73,7 @@ export function PrescriptionsCard({ patientId, refreshKey }: PrescriptionsCardPr
                   >
                     View
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2 text-xs shrink-0"
-                    onClick={() =>
-                      toast({
-                        description: "This feature is launching soon — send prescriptions directly as a PDF on WhatsApp.",
-                        type: "info",
-                      })
-                    }
-                  >
-                    <MessageCircle className="h-3.5 w-3.5 mr-1" />
-                    Send WhatsApp
-                  </Button>
+                  <SendPrescriptionButton prescriptionId={p.id} />
                 </div>
               </div>
             ))}

@@ -283,6 +283,58 @@ export async function sendPaymentUpdateMessage(
 }
 
 // ---------------------------------------------------------------------------
+// send-prescription-pdf (Edge Function) -- an owner or receptionist sends a prescription as a
+// PDF over WhatsApp for one patient, on demand. Same shape as sendPaymentUpdateMessage above:
+// the caller generates client_request_id ONCE (when the button/dialog opens) and passes the
+// same value on every retry -- this function never generates its own, so a slow-network retry
+// collides with the Edge Function's own idempotency key instead of sending the PDF twice.
+//
+// Same convention as sendPaymentUpdateMessage: a guard rejection carries a distinct `error_code`
+// the caller needs to show the right message for, so this returns its own result shape instead
+// of reusing ApiResult, and extracts `error_code` from the 400 response body itself rather than
+// discarding it.
+// ---------------------------------------------------------------------------
+
+export interface SendPrescriptionPdfOutput {
+  success: boolean;
+  /** True when this call was a retry of an already-completed send (same client_request_id) --
+   * the PDF was not sent again. */
+  already_sent?: boolean;
+  wa_message_id?: string | null;
+  error_code?: string | null;
+  error_message?: string;
+  prescription_id: string;
+}
+
+export type SendPrescriptionPdfResult =
+  | { ok: true; data: SendPrescriptionPdfOutput }
+  // A guard rejection (DND/disabled/suspended/cap/quota/template) or an auth/validation failure --
+  // error_code is only present for the six named guards, absent for auth/validation errors.
+  | { ok: false; error: string; error_code?: string };
+
+export async function sendPrescriptionPdf(
+  prescriptionId: string,
+  clientRequestId: string,
+): Promise<SendPrescriptionPdfResult> {
+  const { data, error } = await supabase.functions.invoke<SendPrescriptionPdfOutput>("send-prescription-pdf", {
+    body: { prescription_id: prescriptionId, client_request_id: clientRequestId },
+  });
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const body = await error.context.json();
+        return { ok: false, error: body.error ?? "Request failed", error_code: body.error_code };
+      } catch {
+        return { ok: false, error: "Request failed" };
+      }
+    }
+    return { ok: false, error: error instanceof Error ? error.message : "Request failed" };
+  }
+  if (!data) return { ok: false, error: "Empty response from server" };
+  return { ok: true, data };
+}
+
+// ---------------------------------------------------------------------------
 // patient_payments / patient_billing_summary -- Phase 6A. Plain RLS-scoped reads/writes, no Edge
 // Function: patient_payments is append-only (no DELETE policy exists at all; UPDATE is
 // owner/super_admin-only and an allowlist trigger permits changing only voided_at/voided_by/
