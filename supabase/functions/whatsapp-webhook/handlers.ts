@@ -163,15 +163,20 @@ async function handleInboundMessage(serviceClient: SupabaseClient, clinicId: str
   // status (contacted, booked, declined, completed, paused, failed) is left alone -- a later
   // reply must never silently reopen a decision staff already made.
   //
-  // reply_received_at is what actually drives the Today page's "Replies Waiting" visibility --
-  // deliberately independent of status. It's stamped on every reply, unconditionally, so a
-  // recall that's already declined/booked/etc. still surfaces a new reply instead of the message
-  // silently vanishing into notes with no visible signal. Dismissing a card (reply_dismissed_at,
-  // set client-side) only ever hides THIS reply; a later reply bumps reply_received_at again and
-  // reply_dismissed_at < reply_received_at makes the card reappear.
+  // reply_received_at is stamped on every reply, unconditionally, so a recall that's already
+  // declined/booked/etc. still records a new reply instead of the message silently vanishing
+  // into notes with no visible signal.
+  //
+  // reply_dismissed_at is reset to null here, unconditionally, alongside it: dismissing a card
+  // (client-side "X" button) only ever hides the reply that existed at dismiss time -- a NEW
+  // reply must always clear that hide so the Today page's "Replies Waiting" query (which filters
+  // reply_dismissed_at IS NULL) surfaces the card again. This only touches the notes/reply-
+  // tracking fields, same as reply_received_at -- it never touches status, so a staff decision
+  // (booked/declined/etc.) is exactly as untouched by this update as it already was.
   const updates: Record<string, unknown> = {
     notes: replyText ? `Patient reply: ${replyText}` : "Patient replied (no text content)",
     reply_received_at: new Date().toISOString(),
+    reply_dismissed_at: null,
   };
   if (recall.status === "pending" || recall.status === "sent") {
     updates.status = "contacted";

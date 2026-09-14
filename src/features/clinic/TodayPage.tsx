@@ -661,7 +661,12 @@ export function TodayPage() {
   // or a visit completing it). status is the single source of truth here, not the presence of a
   // reply note -- a reply note can be stale on an already-terminal recall (booked/declined/
   // completed), which must not surface it as still needing action.
-  const repliesWaitingRecalls = recalls.filter((r) => r.status === "contacted");
+  //
+  // reply_dismissed_at IS NOT NULL additionally hides a card staff already clicked "X" on --
+  // set client-side by handleDismissReply below, and cleared back to null by the webhook
+  // (handleInboundMessage) the moment a NEW reply comes in, so dismissal is a temporary "seen
+  // it" hide, never a permanent mute of that recall's contacted state.
+  const repliesWaitingRecalls = recalls.filter((r) => r.status === "contacted" && !r.reply_dismissed_at);
   const repliesWaitingCount = repliesWaitingRecalls.length;
 
   // Monthly stats calculation for Recalls
