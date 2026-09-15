@@ -13,7 +13,7 @@ import { validateSendPaymentMessageRequest, type SendPaymentMessageRequest } fro
  * automatic recall cron). Onboarding a second clinic onto this endpoint will need a real
  * "which template serves payment updates for this clinic" column -- out of scope for this
  * Nanda-only rollout. */
-const PAYMENT_TEMPLATE_NAME = "payment_update_nanda_dental";
+const PAYMENT_TEMPLATE_NAME = "payment_update";
 
 Deno.serve(async (req) => {
   // Per-request origin echo, same as every other browser-invoked, staff-triggered function
