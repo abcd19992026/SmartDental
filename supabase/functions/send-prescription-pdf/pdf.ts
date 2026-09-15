@@ -90,7 +90,7 @@ const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
 const MARGIN = 42;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
-const BOTTOM_SAFE = MARGIN + 10;
+const BOTTOM_SAFE = 135;
 // PrescriptionPrintPage.tsx's logo is h-20 w-20 (Tailwind default scale: 20 * 4px = 80px). This
 // PDF's content width (CONTENT_WIDTH points) is built to match the print page's fixed 210mm
 // print width in CSS px 1:1 (595.28pt page width == 210mm == the print page's own content box),
@@ -110,14 +110,7 @@ export async function buildPrescriptionPdf(
   // exact match to Georgia isn't possible. TimesRomanBold is the closest available serif/bold
   // approximation and is used for the clinic name only, below.
   const serifBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
-  // Picked here (not just above the drawText call below) because the logo-block spacing needs
-  // it too: heightAtSize() is the font's actual rendered vertical extent at this size (ascent +
-  // descent), not the nominal point size -- a 39pt font's glyphs reach meaningfully higher above
-  // their own baseline than "39" alone suggests. Using this as the gap before the clinic name's
-  // baseline (both with and without a logo) is what keeps its glyph tops from climbing back up
-  // into the Regd/Mob line or the bottom of the logo image above it.
-  const clinicNameSize = 39;
-  const clinicNameHeight = serifBold.heightAtSize(clinicNameSize);
+  const serifItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
 
   let page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   let y = PAGE_HEIGHT - MARGIN;
@@ -237,6 +230,9 @@ export async function buildPrescriptionPdf(
   }
   y -= 16;
 
+  const headerTopY = y;
+  let logoHeight = 0;
+
   if (clinic.logo_url) {
     try {
       const logoResponse = await fetch(clinic.logo_url);
@@ -249,70 +245,67 @@ export async function buildPrescriptionPdf(
         const scale = Math.min(LOGO_SIZE / logoImage.width, LOGO_SIZE / logoImage.height, 1);
         const w = logoImage.width * scale;
         const h = logoImage.height * scale;
-        const drawY = y - h;
+        logoHeight = h;
+        const drawY = headerTopY - h;
         page.drawImage(logoImage, { x: MARGIN, y: drawY, width: w, height: h });
         if (logoBothSides) {
           page.drawImage(logoImage, { x: PAGE_WIDTH - MARGIN - w, y: drawY, width: w, height: h });
         }
-        // The logo's ACTUAL bottom edge (drawY, from its real scaled height h) -- not a
-        // hardcoded LOGO_SIZE assumption, which overstates the gap for a non-square image
-        // scaled down to fit the LOGO_SIZE box on its narrower side.
-        y = drawY;
       }
     } catch (err) {
       console.error("Failed to embed clinic logo in prescription PDF -- continuing without it", err);
     }
   }
 
-  // Reserve the clinic name's own rendered height before placing its baseline -- applies
-  // uniformly whether or not a logo was drawn above (y is either just below the Regd/Mob line,
-  // or the logo's real bottom edge from the block above), which is what fixes both the no-logo
-  // and with-logo overlap cases the same way.
-  y -= clinicNameHeight;
   const clinicName = clinic.name.toUpperCase();
-  // PrescriptionPrintPage.tsx renders the clinic name at text-[43px] against an 11px body
-  // baseline (the print page's default text size) -- scaled here against this PDF's own 10pt
-  // body baseline (labeledRow's default `size`), same ratio: 43/11 * 10 ≈ 39.
+  const clinicNameSize = 35;
   const clinicNameWidth = serifBold.widthOfTextAtSize(clinicName, clinicNameSize);
-  page.drawText(clinicName, { x: (PAGE_WIDTH - clinicNameWidth) / 2, y, size: clinicNameSize, font: serifBold });
-  y -= clinicNameSize + 4;
+  const clinicNameY = tagline ? headerTopY - 32 : headerTopY - 36;
+  page.drawText(clinicName, { x: (PAGE_WIDTH - clinicNameWidth) / 2, y: clinicNameY, size: clinicNameSize, font: serifBold });
 
+  let textBottomY = clinicNameY;
   if (tagline) {
-    const taglineSize = 9;
-    const taglineWidth = font.widthOfTextAtSize(tagline, taglineSize);
-    page.drawText(tagline, { x: (PAGE_WIDTH - taglineWidth) / 2, y, size: taglineSize, font });
-    y -= 14;
+    const taglineSize = 10.5;
+    const taglineWidth = serifItalic.widthOfTextAtSize(tagline, taglineSize);
+    const taglineY = clinicNameY - 14;
+    page.drawText(tagline, { x: (PAGE_WIDTH - taglineWidth) / 2, y: taglineY, size: taglineSize, font: serifItalic, color: rgb(0.15, 0.15, 0.15) });
+    textBottomY = taglineY;
   }
+
+  const rowHeight = Math.max(logoHeight || LOGO_SIZE, headerTopY - textBottomY + 8);
+  y = headerTopY - rowHeight - 22;
 
   // Mirrors PrescriptionPrintPage.tsx's doctor row: N equal-width columns (N = doctors.length),
   // each doctor's name centered in their own column with their qualification centered directly
   // below it in that same column -- not one space-joined line, which reads as a single doctor
   // with a garbled multi-part name once there's more than one.
   if (doctors.length > 0) {
-    const doctorSize = 10;
-    const qualSize = 8;
-    const colWidth = CONTENT_WIDTH / doctors.length;
+    const doctorSize = 18;
+    const qualSize = 10;
+    const doctorsBlockWidth = 410;
+    const startX = (PAGE_WIDTH - doctorsBlockWidth) / 2;
+    const colWidth = doctorsBlockWidth / doctors.length;
 
     doctors.forEach((d, i) => {
-      const colCenterX = MARGIN + colWidth * i + colWidth / 2;
+      const colCenterX = startX + colWidth * i + colWidth / 2;
       const nameWidth = bold.widthOfTextAtSize(d.name, doctorSize);
       page.drawText(d.name, { x: colCenterX - nameWidth / 2, y, size: doctorSize, font: bold });
     });
-    y -= 12;
+    y -= doctorSize + 2;
 
     if (doctors.some((d) => d.qualification && d.qualification.trim())) {
       doctors.forEach((d, i) => {
         const qual = d.qualification?.trim();
         if (!qual) return;
-        const colCenterX = MARGIN + colWidth * i + colWidth / 2;
+        const colCenterX = startX + colWidth * i + colWidth / 2;
         const qualWidth = font.widthOfTextAtSize(qual, qualSize);
         page.drawText(qual, { x: colCenterX - qualWidth / 2, y, size: qualSize, font, color: rgb(0.35, 0.35, 0.35) });
       });
-      y -= 12;
+      y -= qualSize;
     }
   }
 
-  hr(4, 10);
+  hr(3, 13);
 
   // Mirrors PrescriptionPrintPage.tsx's "grid grid-cols-3 gap-x-6 gap-y-1" patient block exactly:
   // Row 1 Patient / Age-Sex / Date, Row 2 Address / Mobile / Occupation, Row 3 (only when at
@@ -349,10 +342,10 @@ export async function buildPrescriptionPdf(
       page.drawText(prescription.weight, { x: x + bold.widthOfTextAtSize(label, size), y, size, font });
     }
     drawVitalsCell(MARGIN + colWidth * 2, prescription.blood_pressure, prescription.spo2, size);
-    y -= 13 + 4;
+    y -= 13 + 1;
   }
 
-  hr(4, 10);
+  hr(2, 14);
 
   const medicalHistoryText = formatMedicalHistory(prescription.medical_history);
   const investigationText = formatInvestigation(prescription.investigation);
@@ -367,7 +360,7 @@ export async function buildPrescriptionPdf(
     labeledRow("Teeth", prescription.teeth.join(", "));
   }
 
-  hr(6, 10, 1);
+  hr(1, 18, 1);
 
   const medications = prescription.medications ?? [];
   if (medications.length > 0) {
@@ -408,41 +401,58 @@ export async function buildPrescriptionPdf(
     labeledRow("Advice", prescription.notes, 60);
   }
 
-  ensureSpace(50);
-  y -= 20;
+  // --- Bottom Pinned Signature & Footer ---
+  ensureSpace(120);
+
+  const sigY = 115;
   const sigWidth = 160;
   const sigX = PAGE_WIDTH - MARGIN - sigWidth;
-  page.drawLine({ start: { x: sigX, y }, end: { x: sigX + sigWidth, y }, thickness: 0.75 });
-  y -= 12;
+  page.drawLine({ start: { x: sigX, y: sigY }, end: { x: sigX + sigWidth, y: sigY }, thickness: 0.75 });
   const doctorNameWidth = font.widthOfTextAtSize(prescription.doctor_name, 10);
-  page.drawText(prescription.doctor_name, { x: sigX + (sigWidth - doctorNameWidth) / 2, y, size: 10, font });
+  page.drawText(prescription.doctor_name, { x: sigX + (sigWidth - doctorNameWidth) / 2, y: sigY - 12, size: 10, font });
 
-  ensureSpace(60);
-  y -= 20;
-  hr(0, 8, 0.75);
+  page.drawLine({ start: { x: MARGIN, y: 85 }, end: { x: PAGE_WIDTH - MARGIN, y: 85 }, thickness: 0.75, color: rgb(0.6, 0.6, 0.6) });
+
+  let footerY = 73;
+  const footerSize = 8;
   const timings = typeof lh.timings === "string" ? lh.timings : null;
   const sundayTimings = typeof lh.sunday_timings === "string" ? lh.sunday_timings : null;
   if (timings) {
-    page.drawText(`Timing: ${timings}`, { x: MARGIN, y, size: 8, font, color: rgb(0.3, 0.3, 0.3) });
+    const label = "Timing: ";
+    page.drawText(label, { x: MARGIN, y: footerY, size: footerSize, font: bold, color: rgb(0, 0, 0) });
+    const labelWidth = bold.widthOfTextAtSize(label, footerSize);
+    page.drawText(timings, { x: MARGIN + labelWidth, y: footerY, size: footerSize, font, color: rgb(0.2, 0.2, 0.2) });
   }
   if (sundayTimings) {
-    const text = `Sunday Timing: ${sundayTimings}`;
-    page.drawText(text, { x: PAGE_WIDTH - MARGIN - font.widthOfTextAtSize(text, 8), y, size: 8, font, color: rgb(0.3, 0.3, 0.3) });
+    const label = "Sunday Timing: ";
+    const labelWidth = bold.widthOfTextAtSize(label, footerSize);
+    const valueWidth = font.widthOfTextAtSize(sundayTimings, footerSize);
+    const totalWidth = labelWidth + valueWidth;
+    const startX = PAGE_WIDTH - MARGIN - totalWidth;
+    page.drawText(label, { x: startX, y: footerY, size: footerSize, font: bold, color: rgb(0, 0, 0) });
+    page.drawText(sundayTimings, { x: startX + labelWidth, y: footerY, size: footerSize, font, color: rgb(0.2, 0.2, 0.2) });
   }
-  if (timings || sundayTimings) y -= 12;
+  if (timings || sundayTimings) footerY -= 11;
+
   if (clinic.address) {
-    page.drawText(`Address: ${clinic.address}`, { x: MARGIN, y, size: 8, font, color: rgb(0.3, 0.3, 0.3) });
-    y -= 12;
+    const label = "Address: ";
+    page.drawText(label, { x: MARGIN, y: footerY, size: footerSize, font: bold, color: rgb(0, 0, 0) });
+    const labelWidth = bold.widthOfTextAtSize(label, footerSize);
+    page.drawText(clinic.address, { x: MARGIN + labelWidth, y: footerY, size: footerSize, font, color: rgb(0.2, 0.2, 0.2) });
+    footerY -= 11;
   }
   if (clinic.email) {
-    page.drawText(`Email: ${clinic.email}`, { x: MARGIN, y, size: 8, font, color: rgb(0.3, 0.3, 0.3) });
-    y -= 12;
+    const label = "Email: ";
+    page.drawText(label, { x: MARGIN, y: footerY, size: footerSize, font: bold, color: rgb(0, 0, 0) });
+    const labelWidth = bold.widthOfTextAtSize(label, footerSize);
+    page.drawText(clinic.email, { x: MARGIN + labelWidth, y: footerY, size: footerSize, font, color: rgb(0.2, 0.2, 0.2) });
+    footerY -= 11;
   }
   const footerNote = typeof lh.footer_note === "string" ? lh.footer_note : null;
   if (footerNote) {
     const text = `* ${footerNote} *`;
     const textWidth = bold.widthOfTextAtSize(text, 8);
-    page.drawText(text, { x: (PAGE_WIDTH - textWidth) / 2, y, size: 8, font: bold });
+    page.drawText(text, { x: (PAGE_WIDTH - textWidth) / 2, y: 35, size: 8, font: bold, color: rgb(0, 0, 0) });
   }
 
   return pdfDoc.save();
