@@ -110,6 +110,14 @@ export async function buildPrescriptionPdf(
   // exact match to Georgia isn't possible. TimesRomanBold is the closest available serif/bold
   // approximation and is used for the clinic name only, below.
   const serifBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
+  // Picked here (not just above the drawText call below) because the logo-block spacing needs
+  // it too: heightAtSize() is the font's actual rendered vertical extent at this size (ascent +
+  // descent), not the nominal point size -- a 39pt font's glyphs reach meaningfully higher above
+  // their own baseline than "39" alone suggests. Using this as the gap before the clinic name's
+  // baseline (both with and without a logo) is what keeps its glyph tops from climbing back up
+  // into the Regd/Mob line or the bottom of the logo image above it.
+  const clinicNameSize = 39;
+  const clinicNameHeight = serifBold.heightAtSize(clinicNameSize);
 
   let page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   let y = PAGE_HEIGHT - MARGIN;
@@ -246,18 +254,25 @@ export async function buildPrescriptionPdf(
         if (logoBothSides) {
           page.drawImage(logoImage, { x: PAGE_WIDTH - MARGIN - w, y: drawY, width: w, height: h });
         }
-        y -= LOGO_SIZE + 6;
+        // The logo's ACTUAL bottom edge (drawY, from its real scaled height h) -- not a
+        // hardcoded LOGO_SIZE assumption, which overstates the gap for a non-square image
+        // scaled down to fit the LOGO_SIZE box on its narrower side.
+        y = drawY;
       }
     } catch (err) {
       console.error("Failed to embed clinic logo in prescription PDF -- continuing without it", err);
     }
   }
 
+  // Reserve the clinic name's own rendered height before placing its baseline -- applies
+  // uniformly whether or not a logo was drawn above (y is either just below the Regd/Mob line,
+  // or the logo's real bottom edge from the block above), which is what fixes both the no-logo
+  // and with-logo overlap cases the same way.
+  y -= clinicNameHeight;
+  const clinicName = clinic.name.toUpperCase();
   // PrescriptionPrintPage.tsx renders the clinic name at text-[43px] against an 11px body
   // baseline (the print page's default text size) -- scaled here against this PDF's own 10pt
   // body baseline (labeledRow's default `size`), same ratio: 43/11 * 10 ≈ 39.
-  const clinicName = clinic.name.toUpperCase();
-  const clinicNameSize = 39;
   const clinicNameWidth = serifBold.widthOfTextAtSize(clinicName, clinicNameSize);
   page.drawText(clinicName, { x: (PAGE_WIDTH - clinicNameWidth) / 2, y, size: clinicNameSize, font: serifBold });
   y -= clinicNameSize + 4;
