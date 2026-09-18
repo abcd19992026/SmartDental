@@ -664,7 +664,11 @@ export function PatientsPage() {
               {/* Visit, Payment & Recall Timelines */}
               <div className="md:col-span-2 flex flex-col gap-6">
                 {/* Prescriptions */}
-                <PrescriptionsCard patientId={selectedPatient.id} refreshKey={prescriptionsRefreshKey} />
+                <PrescriptionsCard
+                  patientId={selectedPatient.id}
+                  refreshKey={prescriptionsRefreshKey}
+                  dentitionType={(selectedPatient.dentition_type as "adult" | "child") || "adult"}
+                />
 
                 {/* Visit History Timeline (Collapsible Dropdown) */}
                 <Card>

@@ -166,6 +166,54 @@ export function draftToMedications(rows: MedicationRowState[]): PrescriptionMedi
     }));
 }
 
+// ---------------------------------------------------------------------------
+// Reverse direction -- prefilling this section from a previously saved prescription row (the
+// edit flow). Only needed there: the create flow (AddVisitModal) always starts from
+// emptyPrescriptionDraft. jsonb columns are nullable and untyped from the DB client's point of
+// view (see the clinic-api.ts note on PrescriptionRow), so each parser tolerates null/undefined/
+// partial shapes rather than assuming the exact column default.
+// ---------------------------------------------------------------------------
+
+export function medicalHistoryJsonToDraft(json: unknown): MedicalHistoryState {
+  const v = (json ?? {}) as Record<string, unknown>;
+  return {
+    diabetes: Boolean(v.diabetes),
+    hypertension: Boolean(v.hypertension),
+    thyroid: Boolean(v.thyroid),
+    asthma: Boolean(v.asthma),
+    tuberculosis: Boolean(v.tuberculosis),
+    cardiac: Boolean(v.cardiac),
+    allergies: Boolean(v.allergies),
+    arthritis: Boolean(v.arthritis),
+    other: Boolean(v.other),
+    other_text: typeof v.other_text === "string" ? v.other_text : "",
+  };
+}
+
+export function investigationJsonToDraft(json: unknown): InvestigationState {
+  const v = (json ?? {}) as Record<string, unknown>;
+  return {
+    iopa: Boolean(v.iopa),
+    rvg: Boolean(v.rvg),
+    opg: Boolean(v.opg),
+    blood_other: Boolean(v.blood_other),
+    notes: typeof v.notes === "string" ? v.notes : "",
+  };
+}
+
+export function medicationsJsonToDraft(json: unknown): MedicationRowState[] {
+  if (!Array.isArray(json)) return [];
+  return json.map((m) => {
+    const row = (m ?? {}) as Record<string, unknown>;
+    return {
+      name: typeof row.name === "string" ? row.name : "",
+      dosage: typeof row.dosage === "string" ? row.dosage : "",
+      duration: typeof row.duration === "string" ? row.duration : "",
+      notes: typeof row.notes === "string" ? row.notes : "",
+    };
+  });
+}
+
 const textareaClass =
   "w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground";
 

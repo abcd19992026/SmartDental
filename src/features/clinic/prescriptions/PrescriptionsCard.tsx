@@ -1,21 +1,33 @@
 import { useEffect, useState } from "react";
-import { ClipboardPlus } from "lucide-react";
+import { ClipboardPlus, Pencil } from "lucide-react";
 import { fetchPrescriptionsForPatient, type PrescriptionRow } from "@/lib/clinic-api";
 import { formatDateIST } from "@/lib/dates";
+import { useAuth } from "@/auth/useAuth";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SendPrescriptionButton } from "@/features/clinic/prescriptions/SendPrescriptionButton";
+import { EditPrescriptionModal } from "@/features/clinic/prescriptions/EditPrescriptionModal";
 
 interface PrescriptionsCardProps {
   patientId: string;
   /** Bumped by the parent (e.g. after AddVisitModal's onSuccess) to trigger a reload. */
   refreshKey?: number;
+  /** For the edit modal's tooth chart layout. Defaults to "adult" when unknown. */
+  dentitionType?: "adult" | "child";
 }
 
-export function PrescriptionsCard({ patientId, refreshKey }: PrescriptionsCardProps) {
+export function PrescriptionsCard({ patientId, refreshKey, dentitionType }: PrescriptionsCardProps) {
+  const { profile } = useAuth();
+  // Matches AddVisitModal's canPrescribe gate -- editing a prescription is owner/super_admin
+  // only (prescriptions_update RLS), so a receptionist never sees a button that would just fail.
+  const canEditRx = profile?.role === "owner" || profile?.role === "super_admin";
+
   const [prescriptions, setPrescriptions] = useState<PrescriptionRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // Bumped after a successful edit to force a reload independent of the parent's own refreshKey.
+  const [localRefreshKey, setLocalRefreshKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -29,7 +41,7 @@ export function PrescriptionsCard({ patientId, refreshKey }: PrescriptionsCardPr
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patientId, refreshKey]);
+  }, [patientId, refreshKey, localRefreshKey]);
 
   return (
     <Card>
@@ -73,6 +85,17 @@ export function PrescriptionsCard({ patientId, refreshKey }: PrescriptionsCardPr
                   >
                     View
                   </Button>
+                  {canEditRx && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs shrink-0"
+                      onClick={() => setEditingId(p.id)}
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-1" />
+                      Edit
+                    </Button>
+                  )}
                   <SendPrescriptionButton prescriptionId={p.id} />
                 </div>
               </div>
@@ -80,6 +103,16 @@ export function PrescriptionsCard({ patientId, refreshKey }: PrescriptionsCardPr
           </div>
         )}
       </CardContent>
+
+      <EditPrescriptionModal
+        open={editingId !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setEditingId(null);
+        }}
+        prescriptionId={editingId}
+        dentitionType={dentitionType}
+        onSuccess={() => setLocalRefreshKey((k) => k + 1)}
+      />
     </Card>
   );
 }

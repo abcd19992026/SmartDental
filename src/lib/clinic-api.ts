@@ -937,7 +937,15 @@ export async function createPrescription(input: CreatePrescriptionInput): Promis
   return { ok: true, data };
 }
 
-export type UpdatePrescriptionInput = Partial<Omit<CreatePrescriptionInput, "clinic_id" | "patient_id">>;
+// Everything structural/immutable is omitted here, not just left optional -- clinic_id,
+// patient_id, branch_id, visit_id are guarded server-side by protect_prescription_immutable_fields
+// (blocks the UPDATE outright if any of them differ from the current row), and client_request_id
+// is insert-only double-submit protection that has no meaning on an edit. Excluding them from the
+// type means a caller can't even accidentally pass them through, let alone rely on the trigger to
+// catch it.
+export type UpdatePrescriptionInput = Partial<
+  Omit<CreatePrescriptionInput, "clinic_id" | "patient_id" | "branch_id" | "visit_id" | "client_request_id">
+>;
 
 export async function updatePrescription(
   prescriptionId: string,
@@ -949,6 +957,10 @@ export async function updatePrescription(
     .eq("id", prescriptionId)
     .select()
     .single();
+  // .single() turns a 0-row result (RLS silently blocked the update -- e.g. a receptionist, or a
+  // prescription outside the caller's clinic) into a real PostgREST error (PGRST116) rather than
+  // returning ok:true with stale/undefined data, so callers never need a separate rows-affected
+  // check on top of this.
   if (error) return { ok: false, error: error.message };
   return { ok: true, data };
 }
