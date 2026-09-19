@@ -1508,3 +1508,100 @@ export async function checkInAppointment(
   return { ok: true, data: { id: data as string } };
 }
 
+// ---------------------------------------------------------------------------
+// AI dictation (Phase 11A) -- backend only, no UI here. transcribeConsultation calls the
+// transcribe-consultation Edge Function; fetchClinicAiDictationStatus reads the clinics flag a
+// gating UI (11B) will check before showing the mic button; logAiDictationInterest is the demand
+// signal for a clinic that doesn't have the feature yet.
+// ---------------------------------------------------------------------------
+
+export interface TranscribeConsultationInput {
+  audioBase64: string;
+  mimeType: string;
+  durationSeconds: number;
+  patientAge?: number;
+  patientSex?: string;
+}
+
+export interface TranscribeConsultationFields {
+  chief_complaint: string | null;
+  oral_examination: string | null;
+  provisional_diagnosis: string | null;
+  treatment_plan: string | null;
+  advice: string | null;
+}
+
+export interface TranscribeConsultationMedicine {
+  name: string;
+  dosage: string | null;
+  duration: string | null;
+}
+
+export interface TranscribeConsultationOutput {
+  fields: TranscribeConsultationFields;
+  medicines: TranscribeConsultationMedicine[];
+  unmatched_medicines: string[];
+}
+
+// A discriminated union, not ApiResult<T>: 11B needs to switch on the Edge Function's distinct
+// `code` (UNAUTHENTICATED/FORBIDDEN/CLINIC_INACTIVE/NOT_ENABLED/QUOTA_EXCEEDED/BAD_AUDIO/
+// MODEL_ERROR/SERVER_MISCONFIGURED) to show the right message per guard -- same convention as
+// SendPaymentUpdateMessageResult/SendPrescriptionPdfResult above.
+export type TranscribeConsultationResult =
+  | { ok: true; data: TranscribeConsultationOutput }
+  | { ok: false; error: string; code?: string };
+
+export async function transcribeConsultation(
+  input: TranscribeConsultationInput,
+): Promise<TranscribeConsultationResult> {
+  const { data, error } = await supabase.functions.invoke<{
+    ok: true;
+    fields: TranscribeConsultationFields;
+    medicines: TranscribeConsultationMedicine[];
+    unmatched_medicines: string[];
+  }>("transcribe-consultation", {
+    body: {
+      audio_base64: input.audioBase64,
+      mime_type: input.mimeType,
+      duration_seconds: input.durationSeconds,
+      patient_age: input.patientAge,
+      patient_sex: input.patientSex,
+    },
+  });
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const body = await error.context.json();
+        return { ok: false, error: body.message ?? "Request failed", code: body.code };
+      } catch {
+        return { ok: false, error: "Request failed" };
+      }
+    }
+    return { ok: false, error: error instanceof Error ? error.message : "Request failed" };
+  }
+  if (!data) return { ok: false, error: "Empty response from server" };
+  return { ok: true, data: { fields: data.fields, medicines: data.medicines, unmatched_medicines: data.unmatched_medicines } };
+}
+
+/** Same shape as useClinicSubscription's own clinics read (is_active/plan_expires_on) -- the
+ * gating UI a later phase builds around the mic button reads ai_dictation_enabled the same way. */
+export async function fetchClinicAiDictationStatus(clinicId: string): Promise<ApiResult<{ ai_dictation_enabled: boolean }>> {
+  const { data, error } = await supabase
+    .from("clinics")
+    .select("ai_dictation_enabled")
+    .eq("id", clinicId)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Clinic not found or not accessible" };
+  return { ok: true, data: { ai_dictation_enabled: data.ai_dictation_enabled } };
+}
+
+/** Records a demand signal when a clinic without the feature taps "Mujhe chahiye" on the locked
+ * mic button -- clinic/actor are derived server-side (current_clinic_id()/auth.uid()) inside
+ * log_ai_dictation_interest(), never passed from here. Safe to call repeatedly. */
+export async function logAiDictationInterest(): Promise<ApiResult<null>> {
+  const { error } = await (supabase.rpc as any)("log_ai_dictation_interest");
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: null };
+}
+

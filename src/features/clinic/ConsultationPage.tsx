@@ -14,6 +14,7 @@ import {
   Pill,
   Plus,
   Printer,
+  Sparkles,
   Stethoscope,
   Trash2,
   User,
@@ -49,6 +50,10 @@ import {
   type PrescriptionDraft,
 } from "@/features/clinic/PrescriptionSection";
 import { AddPaymentModal } from "@/features/clinic/billing/AddPaymentModal";
+import { DictationMicButton } from "@/features/clinic/dictation/DictationMicButton";
+import { DictationSuggestionChip } from "@/features/clinic/dictation/DictationSuggestionChip";
+import { mergeDictationResult, type AiFillableField } from "@/features/clinic/dictation/mergeDictation";
+import type { TranscribeConsultationOutput } from "@/lib/clinic-api";
 import type { Database } from "@/types/database.types";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -89,6 +94,9 @@ interface MedicationRowEditorProps {
   onChange: (partial: Partial<MedicationRowState>) => void;
   onSelectMedicine: (medicine: MedicineRow) => void;
   onRemove: () => void;
+  /** True when this row was added by a dictation (Phase 11B-1) -- purely cosmetic, never affects
+   * save behaviour. */
+  aiFilled?: boolean;
 }
 
 function MedicationRowEditor({
@@ -99,6 +107,7 @@ function MedicationRowEditor({
   onChange,
   onSelectMedicine,
   onRemove,
+  aiFilled,
 }: MedicationRowEditorProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -194,8 +203,11 @@ function MedicationRowEditor({
           }}
           onBlur={() => setTimeout(() => setPickerOpen(false), 150)}
           onKeyDown={handleKeyDown}
-          className={cn(showWarning && "border-amber-500/70 focus-visible:ring-amber-500/30")}
+          className={cn(showWarning && "border-amber-500/70 focus-visible:ring-amber-500/30", aiFilled && "pr-7")}
         />
+        {aiFilled && (
+          <Sparkles className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" aria-label="Added by AI dictation" />
+        )}
         {showWarning && (
           <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-1 pl-0.5">
             This medicine is already added
@@ -473,6 +485,72 @@ export function ConsultationPage() {
     });
   }
 
+  // --- AI dictation (Phase 11B-1) ---------------------------------------------------------
+  // aiFilledFields tracks which of the 5 narrative fields the AI currently owns -- a field
+  // leaves this set the instant the doctor types into it (handleManualFieldEdit below), which is
+  // what makes the next dictation offer a suggestion for that field instead of silently
+  // overwriting it. aiFilledMedicineNames is the same idea for medication rows, keyed by
+  // lowercased name since rows have no stable id.
+  const [aiFilledFields, setAiFilledFields] = useState<Set<AiFillableField>>(new Set());
+  const [aiFilledMedicineNames, setAiFilledMedicineNames] = useState<Set<string>>(new Set());
+  const [dictationSuggestions, setDictationSuggestions] = useState<Partial<Record<AiFillableField, string>>>({});
+  const [dictationUnmatchedMedicines, setDictationUnmatchedMedicines] = useState<string[]>([]);
+
+  /** The only place a doctor's own edit to one of the 5 AI-fillable fields should flow through --
+   * demotes the field from AI-owned to human-owned the moment they type, per the merge rule. */
+  function handleManualFieldEdit(field: AiFillableField, value: string) {
+    patchRxDraft({ [field]: value });
+    setAiFilledFields((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  }
+
+  function handleDictationResult(result: TranscribeConsultationOutput) {
+    const merge = mergeDictationResult(rxDraft, aiFilledFields, result);
+    setRxDraft((prev) => ({
+      ...prev,
+      ...merge.draftPatch,
+      medications: merge.newMedications.length > 0 ? [...prev.medications, ...merge.newMedications] : prev.medications,
+    }));
+    setAiFilledFields(merge.aiFilledFields);
+    if (merge.newMedicationNames.length > 0) {
+      setAiFilledMedicineNames((prev) => new Set([...prev, ...merge.newMedicationNames]));
+    }
+    // A later dictation's suggestion for the same still-untouched field replaces the earlier one
+    // rather than stacking -- only the most recent unheard suggestion is worth showing.
+    setDictationSuggestions((prev) => ({ ...prev, ...merge.suggestions }));
+    if (merge.unmatchedMedicines.length > 0) {
+      setDictationUnmatchedMedicines((prev) => Array.from(new Set([...prev, ...merge.unmatchedMedicines])));
+    }
+  }
+
+  function acceptDictationSuggestion(field: AiFillableField) {
+    const suggestion = dictationSuggestions[field];
+    if (suggestion === undefined) return;
+    const current = rxDraft[field];
+    patchRxDraft({ [field]: current.trim() ? `${current} ${suggestion}`.trim() : suggestion });
+    setDictationSuggestions((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function dismissDictationSuggestion(field: AiFillableField) {
+    setDictationSuggestions((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function dismissUnmatchedMedicine(name: string) {
+    setDictationUnmatchedMedicines((prev) => prev.filter((n) => n !== name));
+  }
+
   async function attemptPrescriptionSave(forVisitId: string): Promise<{ ok: boolean; prescriptionId: string | null }> {
     // Existing-visit mode: the ToothChart above is the ONLY editable teeth control for this
     // visit too (Phase 15A) -- if the doctor changed it from what's already on the visit, sync
@@ -549,6 +627,11 @@ export function ConsultationPage() {
   async function performSave(): Promise<{ ok: boolean; prescriptionId: string | null }> {
     setErrorMsg(null);
     setSubmitting(true);
+
+    // Soft, non-blocking nudge -- never stops the save, the doctor is the decision-maker here.
+    if (aiFilledFields.size > 0) {
+      toast({ description: "AI se bhare gaye fields ek baar check kar lein.", type: "info" });
+    }
 
     if (!patient) {
       setErrorMsg("Patient not loaded yet.");
@@ -786,6 +869,14 @@ export function ConsultationPage() {
             </p>
           </div>
         </div>
+        {canPrescribe && (
+          <DictationMicButton
+            clinicId={profile?.clinic_id}
+            patientAge={patient?.age ?? undefined}
+            patientSex={patient?.gender ?? undefined}
+            onResult={handleDictationResult}
+          />
+        )}
       </div>
 
       {errorMsg && (
@@ -1017,8 +1108,15 @@ export function ConsultationPage() {
                   className={textareaClass}
                   placeholder="Patient's primary concern or symptoms (e.g. Sharp pain in lower right tooth since 3 days)"
                   value={rxDraft.chief_complaint}
-                  onChange={(e) => patchRxDraft({ chief_complaint: e.target.value })}
+                  onChange={(e) => handleManualFieldEdit("chief_complaint", e.target.value)}
                 />
+                {dictationSuggestions.chief_complaint && (
+                  <DictationSuggestionChip
+                    text={dictationSuggestions.chief_complaint}
+                    onAdd={() => acceptDictationSuggestion("chief_complaint")}
+                    onDismiss={() => dismissDictationSuggestion("chief_complaint")}
+                  />
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -1062,8 +1160,15 @@ export function ConsultationPage() {
                   className={textareaClass}
                   placeholder="Clinical findings (e.g. Deep occlusal caries irt 46, tender to vertical percussion)"
                   value={rxDraft.oral_examination}
-                  onChange={(e) => patchRxDraft({ oral_examination: e.target.value })}
+                  onChange={(e) => handleManualFieldEdit("oral_examination", e.target.value)}
                 />
+                {dictationSuggestions.oral_examination && (
+                  <DictationSuggestionChip
+                    text={dictationSuggestions.oral_examination}
+                    onAdd={() => acceptDictationSuggestion("oral_examination")}
+                    onDismiss={() => dismissDictationSuggestion("oral_examination")}
+                  />
+                )}
               </div>
 
               <div className="flex flex-col gap-2">
@@ -1103,8 +1208,15 @@ export function ConsultationPage() {
                   id="c-diagnosis"
                   placeholder="e.g. Acute apical periodontitis irt 46"
                   value={rxDraft.provisional_diagnosis}
-                  onChange={(e) => patchRxDraft({ provisional_diagnosis: e.target.value })}
+                  onChange={(e) => handleManualFieldEdit("provisional_diagnosis", e.target.value)}
                 />
+                {dictationSuggestions.provisional_diagnosis && (
+                  <DictationSuggestionChip
+                    text={dictationSuggestions.provisional_diagnosis}
+                    onAdd={() => acceptDictationSuggestion("provisional_diagnosis")}
+                    onDismiss={() => dismissDictationSuggestion("provisional_diagnosis")}
+                  />
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1220,8 +1332,15 @@ export function ConsultationPage() {
                   className={textareaClass}
                   placeholder="Proposed treatment course (e.g. Root Canal Treatment irt 46 followed by PFM Crown)"
                   value={rxDraft.treatment_plan}
-                  onChange={(e) => patchRxDraft({ treatment_plan: e.target.value })}
+                  onChange={(e) => handleManualFieldEdit("treatment_plan", e.target.value)}
                 />
+                {dictationSuggestions.treatment_plan && (
+                  <DictationSuggestionChip
+                    text={dictationSuggestions.treatment_plan}
+                    onAdd={() => acceptDictationSuggestion("treatment_plan")}
+                    onDismiss={() => dismissDictationSuggestion("treatment_plan")}
+                  />
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1265,6 +1384,7 @@ export function ConsultationPage() {
                             onChange={(partial) => updateMedicationRow(i, partial)}
                             onSelectMedicine={(medicine) => selectMedicineForRow(i, medicine)}
                             onRemove={() => removeMedicationRow(i)}
+                            aiFilled={aiFilledMedicineNames.has(m.name.trim().toLowerCase())}
                           />
                         ))}
                       </div>
@@ -1273,6 +1393,23 @@ export function ConsultationPage() {
                       <Plus className="h-3.5 w-3.5 mr-1.5" />
                       Add Medicine
                     </Button>
+                    {dictationUnmatchedMedicines.length > 0 && (
+                      <div className="flex flex-col gap-1.5 mt-1">
+                        {dictationUnmatchedMedicines.map((name) => (
+                          <div
+                            key={name}
+                            className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5 text-xs text-foreground"
+                          >
+                            <span className="flex-1">
+                              AI ne ye suna par aapki dawa list me nahi mila: <strong>{name}</strong>. Chahein toh haath se jodein.
+                            </span>
+                            <button type="button" onClick={() => dismissUnmatchedMedicine(name)} className="shrink-0 text-muted-foreground hover:text-foreground">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2 pt-2">
@@ -1290,9 +1427,16 @@ export function ConsultationPage() {
                       <Input
                         id="rx-notes"
                         value={rxDraft.notes}
-                        onChange={(e) => patchRxDraft({ notes: e.target.value })}
+                        onChange={(e) => handleManualFieldEdit("notes", e.target.value)}
                         placeholder="General instructions or precautions for patient"
                       />
+                      {dictationSuggestions.notes && (
+                        <DictationSuggestionChip
+                          text={dictationSuggestions.notes}
+                          onAdd={() => acceptDictationSuggestion("notes")}
+                          onDismiss={() => dismissDictationSuggestion("notes")}
+                        />
+                      )}
                     </div>
                   </div>
                 </div>

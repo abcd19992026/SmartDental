@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       activity_log: {
@@ -80,6 +55,64 @@ export type Database = {
           },
           {
             foreignKeyName: "activity_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_usage_log: {
+        Row: {
+          audio_seconds: number
+          branch_id: string | null
+          clinic_id: string
+          created_at: string
+          fail_reason: string | null
+          id: string
+          model: string | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          audio_seconds: number
+          branch_id?: string | null
+          clinic_id: string
+          created_at?: string
+          fail_reason?: string | null
+          id?: string
+          model?: string | null
+          status: string
+          user_id?: string | null
+        }
+        Update: {
+          audio_seconds?: number
+          branch_id?: string | null
+          clinic_id?: string
+          created_at?: string
+          fail_reason?: string | null
+          id?: string
+          model?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_log_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_usage_log_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_usage_log_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -292,6 +325,8 @@ export type Database = {
       clinics: {
         Row: {
           address: string | null
+          ai_dictation_enabled: boolean
+          ai_dictation_monthly_cap_seconds: number
           branding_domain: string | null
           city: string | null
           created_at: string
@@ -321,6 +356,8 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          ai_dictation_enabled?: boolean
+          ai_dictation_monthly_cap_seconds?: number
           branding_domain?: string | null
           city?: string | null
           created_at?: string
@@ -350,6 +387,8 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          ai_dictation_enabled?: boolean
+          ai_dictation_monthly_cap_seconds?: number
           branding_domain?: string | null
           city?: string | null
           created_at?: string
@@ -1408,6 +1447,7 @@ export type Database = {
         Returns: undefined
       }
       is_super_admin: { Args: never; Returns: boolean }
+      log_ai_dictation_interest: { Args: never; Returns: undefined }
       mark_appointment_no_show: {
         Args: { p_appointment_id: string }
         Returns: string
@@ -1419,6 +1459,10 @@ export type Database = {
         Returns: undefined
       }
       seed_default_treatment_types: {
+        Args: { p_clinic_id: string }
+        Returns: undefined
+      }
+      seed_default_whatsapp_templates: {
         Args: { p_clinic_id: string }
         Returns: undefined
       }
@@ -1550,9 +1594,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },
