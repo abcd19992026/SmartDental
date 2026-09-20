@@ -188,7 +188,7 @@ function MedicationRowEditor({
   const showWarning = isDuplicate || Boolean(duplicateWarning);
 
   return (
-    <div className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] items-start rounded-lg border border-border bg-muted/20 p-2.5">
+    <div className={cn("grid gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] items-start rounded-lg border border-border bg-muted/20 p-2.5 transition-all duration-200", aiFilled && "border-l-4 border-l-primary/80 bg-primary/[0.02] dark:bg-primary/[0.04]")}>
       <div className="relative" ref={containerRef}>
         <Input
           placeholder="Medicine name"
@@ -203,10 +203,13 @@ function MedicationRowEditor({
           }}
           onBlur={() => setTimeout(() => setPickerOpen(false), 150)}
           onKeyDown={handleKeyDown}
-          className={cn(showWarning && "border-amber-500/70 focus-visible:ring-amber-500/30", aiFilled && "pr-7")}
+          className={cn(showWarning && "border-amber-500/70 focus-visible:ring-amber-500/30", aiFilled && "pr-14")}
         />
         {aiFilled && (
-          <Sparkles className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" aria-label="Added by AI dictation" />
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded pointer-events-none transition-all animate-in fade-in">
+            <Sparkles className="h-2.5 w-2.5 text-primary" />
+            AI
+          </span>
         )}
         {showWarning && (
           <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-1 pl-0.5">
@@ -630,7 +633,7 @@ export function ConsultationPage() {
 
     // Soft, non-blocking nudge -- never stops the save, the doctor is the decision-maker here.
     if (aiFilledFields.size > 0) {
-      toast({ description: "AI se bhare gaye fields ek baar check kar lein.", type: "info" });
+      toast({ description: "Please review the AI-filled fields.", type: "info" });
     }
 
     if (!patient) {
@@ -845,9 +848,9 @@ export function ConsultationPage() {
 
   return (
     <div className="flex flex-col gap-6 max-w-7xl mx-auto pb-20 sm:pb-24">
-      {/* Top Header & Breadcrumb */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
-        <div className="flex items-center gap-3">
+      {/* Top Header & Breadcrumb (Sticky so Dictation & navigation stay accessible on scroll) */}
+      <div className="sticky -top-4 sm:-top-6 z-20 bg-background/95 backdrop-blur-md -mt-4 sm:-mt-6 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 border-b border-border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all">
+        <div className="flex items-center gap-3 min-w-0">
           <Button
             variant="outline"
             size="icon"
@@ -857,25 +860,27 @@ export function ConsultationPage() {
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-semibold text-foreground tracking-tight">Clinical Consultation</h1>
               <Badge variant="outline" className="text-xs font-normal">
                 {isExistingVisitMode ? "Add Prescription" : "New Visit & Prescription"}
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5 truncate hidden sm:block">
               Comprehensive patient evaluation, diagnosis, charting, and digital prescription
             </p>
           </div>
         </div>
         {canPrescribe && (
-          <DictationMicButton
-            clinicId={profile?.clinic_id}
-            patientAge={patient?.age ?? undefined}
-            patientSex={patient?.gender ?? undefined}
-            onResult={handleDictationResult}
-          />
+          <div className="shrink-0 flex items-center justify-end">
+            <DictationMicButton
+              clinicId={profile?.clinic_id}
+              patientAge={patient?.age ?? undefined}
+              patientSex={patient?.gender ?? undefined}
+              onResult={handleDictationResult}
+            />
+          </div>
         )}
       </div>
 
@@ -889,7 +894,7 @@ export function ConsultationPage() {
       {/* TWO-COLUMN LAYOUT */}
       <div className="flex flex-col lg:flex-row items-start gap-6">
         {/* LEFT COLUMN (~25-28% width, sticky) */}
-        <div className="w-full lg:w-80 shrink-0 lg:sticky lg:top-4 self-start space-y-4">
+        <div className="w-full lg:w-80 shrink-0 lg:sticky lg:top-16 self-start space-y-4">
           {/* Patient Profile & Clinical Context Card */}
           <Card>
             <CardHeader className="pb-3">
@@ -1101,11 +1106,22 @@ export function ConsultationPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="c-chief-complaint">Chief Complaint</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="c-chief-complaint">Chief Complaint</Label>
+                  {aiFilledFields.has("chief_complaint") && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded transition-all duration-200 animate-in fade-in">
+                      <Sparkles className="h-2.5 w-2.5 text-primary" />
+                      AI filled
+                    </span>
+                  )}
+                </div>
                 <textarea
                   id="c-chief-complaint"
                   rows={2}
-                  className={textareaClass}
+                  className={cn(
+                    textareaClass,
+                    aiFilledFields.has("chief_complaint") && "border-l-4 border-l-primary/80 bg-primary/[0.02] dark:bg-primary/[0.04] focus:border-l-primary"
+                  )}
                   placeholder="Patient's primary concern or symptoms (e.g. Sharp pain in lower right tooth since 3 days)"
                   value={rxDraft.chief_complaint}
                   onChange={(e) => handleManualFieldEdit("chief_complaint", e.target.value)}
@@ -1153,11 +1169,22 @@ export function ConsultationPage() {
             </CardHeader>
             <CardContent className="pt-4 px-5 border-t border-border space-y-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="c-oral-exam">Oral Examination</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="c-oral-exam">Oral Examination</Label>
+                  {aiFilledFields.has("oral_examination") && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded transition-all duration-200 animate-in fade-in">
+                      <Sparkles className="h-2.5 w-2.5 text-primary" />
+                      AI filled
+                    </span>
+                  )}
+                </div>
                 <textarea
                   id="c-oral-exam"
                   rows={2}
-                  className={textareaClass}
+                  className={cn(
+                    textareaClass,
+                    aiFilledFields.has("oral_examination") && "border-l-4 border-l-primary/80 bg-primary/[0.02] dark:bg-primary/[0.04] focus:border-l-primary"
+                  )}
                   placeholder="Clinical findings (e.g. Deep occlusal caries irt 46, tender to vertical percussion)"
                   value={rxDraft.oral_examination}
                   onChange={(e) => handleManualFieldEdit("oral_examination", e.target.value)}
@@ -1203,12 +1230,23 @@ export function ConsultationPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="c-diagnosis">Provisional Diagnosis</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="c-diagnosis">Provisional Diagnosis</Label>
+                  {aiFilledFields.has("provisional_diagnosis") && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded transition-all duration-200 animate-in fade-in">
+                      <Sparkles className="h-2.5 w-2.5 text-primary" />
+                      AI filled
+                    </span>
+                  )}
+                </div>
                 <Input
                   id="c-diagnosis"
                   placeholder="e.g. Acute apical periodontitis irt 46"
                   value={rxDraft.provisional_diagnosis}
                   onChange={(e) => handleManualFieldEdit("provisional_diagnosis", e.target.value)}
+                  className={cn(
+                    aiFilledFields.has("provisional_diagnosis") && "border-l-4 border-l-primary/80 bg-primary/[0.02] dark:bg-primary/[0.04] focus:border-l-primary"
+                  )}
                 />
                 {dictationSuggestions.provisional_diagnosis && (
                   <DictationSuggestionChip
@@ -1325,11 +1363,22 @@ export function ConsultationPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="c-treatment-plan">Treatment Plan</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="c-treatment-plan">Treatment Plan</Label>
+                  {aiFilledFields.has("treatment_plan") && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded transition-all duration-200 animate-in fade-in">
+                      <Sparkles className="h-2.5 w-2.5 text-primary" />
+                      AI filled
+                    </span>
+                  )}
+                </div>
                 <textarea
                   id="c-treatment-plan"
                   rows={2}
-                  className={textareaClass}
+                  className={cn(
+                    textareaClass,
+                    aiFilledFields.has("treatment_plan") && "border-l-4 border-l-primary/80 bg-primary/[0.02] dark:bg-primary/[0.04] focus:border-l-primary"
+                  )}
                   placeholder="Proposed treatment course (e.g. Root Canal Treatment irt 46 followed by PFM Crown)"
                   value={rxDraft.treatment_plan}
                   onChange={(e) => handleManualFieldEdit("treatment_plan", e.target.value)}
@@ -1394,16 +1443,25 @@ export function ConsultationPage() {
                       Add Medicine
                     </Button>
                     {dictationUnmatchedMedicines.length > 0 && (
-                      <div className="flex flex-col gap-1.5 mt-1">
+                      <div className="flex flex-col gap-1.5 mt-2">
                         {dictationUnmatchedMedicines.map((name) => (
                           <div
                             key={name}
-                            className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5 text-xs text-foreground"
+                            className="flex items-center justify-between gap-2 rounded-md border border-sky-500/20 bg-sky-50/50 dark:border-sky-500/20 dark:bg-sky-950/20 px-3 py-2 text-xs text-foreground shadow-xs transition-all animate-in fade-in"
                           >
-                            <span className="flex-1">
-                              AI ne ye suna par aapki dawa list me nahi mila: <strong>{name}</strong>. Chahein toh haath se jodein.
-                            </span>
-                            <button type="button" onClick={() => dismissUnmatchedMedicine(name)} className="shrink-0 text-muted-foreground hover:text-foreground">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <Sparkles className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+                              <p className="text-xs text-muted-foreground leading-relaxed">
+                                AI heard this but couldn't find it in your medicine list: <strong className="font-semibold text-foreground">{name}</strong>. Add it manually if needed.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => dismissUnmatchedMedicine(name)}
+                              className="shrink-0 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                              title="Dismiss note"
+                              aria-label="Dismiss note"
+                            >
                               <X className="h-3.5 w-3.5" />
                             </button>
                           </div>
@@ -1423,12 +1481,23 @@ export function ConsultationPage() {
                       />
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="rx-notes">Prescription Notes / Advice</Label>
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="rx-notes">Prescription Notes / Advice</Label>
+                        {aiFilledFields.has("notes") && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded transition-all duration-200 animate-in fade-in">
+                            <Sparkles className="h-2.5 w-2.5 text-primary" />
+                            AI filled
+                          </span>
+                        )}
+                      </div>
                       <Input
                         id="rx-notes"
                         value={rxDraft.notes}
                         onChange={(e) => handleManualFieldEdit("notes", e.target.value)}
                         placeholder="General instructions or precautions for patient"
+                        className={cn(
+                          aiFilledFields.has("notes") && "border-l-4 border-l-primary/80 bg-primary/[0.02] dark:bg-primary/[0.04] focus:border-l-primary"
+                        )}
                       />
                       {dictationSuggestions.notes && (
                         <DictationSuggestionChip

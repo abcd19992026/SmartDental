@@ -26,30 +26,27 @@ export function isRetryableDictationError(code: DictationErrorCode): boolean {
   return code !== "NOT_ENABLED" && code !== "QUOTA_EXCEEDED" && code !== "CLINIC_INACTIVE";
 }
 
-/** User-facing Hinglish message per code, per the phase spec's table. Codes the spec didn't
- * explicitly script (UNAUTHENTICATED/FORBIDDEN/SERVER_MISCONFIGURED/METHOD_NOT_ALLOWED/
- * NETWORK_ERROR/UNKNOWN) fall through to the same "AI abhi uplabdh nahi hai" upstream-error copy
- * the spec specifies for "any server/upstream error", since none of them are something the
- * doctor did wrong. NOT_ENABLED is handled -- the gate should prevent it from ever firing from
- * inside the recorder, but a stale gate cache during a live recording is a real possibility. */
+/** User-facing English message per code. Codes not explicitly scripted fall through to the
+ * generic upstream error copy ("AI isn't available right now. Please try again in a moment."),
+ * since none of them are something the doctor did wrong. */
 export function dictationErrorMessage(code: DictationErrorCode): string {
   switch (code) {
     case "QUOTA_EXCEEDED":
-      return "AI dictation ki is mahine ki limit poori ho gayi hai. Kripya Nivo Technologies se sampark karein.";
+      return "This month's AI dictation limit has been reached. Please contact Nivo Technologies.";
     case "CLINIC_INACTIVE":
-      return "Aapka plan active nahi hai. Kripya sampark karein.";
+      return "Your plan isn't active. Please contact support.";
     case "NOT_ENABLED":
-      return "Ye feature aapke plan me shamil nahi hai.";
+      return "This feature isn't included in your plan.";
     case "BAD_AUDIO":
-      return "Recording theek se nahi hui. Kripya dobara koshish karein.";
+      return "The recording didn't come through properly. Please try again.";
     case "MIC_PERMISSION_DENIED":
-      return "Microphone ki permission nahi mili. Browser ke address bar me site settings kholkar microphone allow karein.";
+      return "Microphone permission was denied. Please allow microphone access in your browser settings.";
     case "NO_MICROPHONE":
-      return "Is device par koi microphone nahi mila.";
+      return "No microphone was found on this device.";
     case "INSECURE_ORIGIN":
-      return "Microphone sirf secure (HTTPS) connection par kaam karta hai.";
+      return "Microphone requires a secure (HTTPS) connection.";
     case "OFFLINE":
-      return "Internet connection nahi hai.";
+      return "No internet connection.";
     case "UNAUTHENTICATED":
     case "FORBIDDEN":
     case "MODEL_ERROR":
@@ -58,6 +55,7 @@ export function dictationErrorMessage(code: DictationErrorCode): string {
     case "NETWORK_ERROR":
     case "UNKNOWN":
     default:
-      return "AI abhi uplabdh nahi hai. Thodi der baad koshish karein.";
+      return "AI isn't available right now. Please try again in a moment.";
   }
 }
+

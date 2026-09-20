@@ -15,6 +15,7 @@ import {
   KeyRound,
   LogIn,
   Power,
+  Sparkles,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { resetUserPassword, setUserActive } from "@/lib/admin-api";
@@ -289,6 +290,8 @@ export function ClinicDetailPage() {
         included_receptionists: includedReceptionists,
         show_branding: planForm.show_branding,
         branding_domain: planForm.branding_domain?.trim() || null,
+        ai_dictation_enabled: planForm.ai_dictation_enabled ?? false,
+        ai_dictation_monthly_cap_seconds: planForm.ai_dictation_monthly_cap_seconds ?? 18000,
       })
       .eq("id", id);
 
@@ -518,6 +521,11 @@ export function ClinicDetailPage() {
               ) : (
                 <Badge variant="outline" className="border-destructive/30 text-destructive bg-destructive/10">
                   Suspended
+                </Badge>
+              )}
+              {clinic.ai_dictation_enabled && (
+                <Badge variant="outline" className="border-primary/30 text-primary bg-primary/10 gap-1">
+                  <Sparkles className="h-3 w-3" /> AI Dictation
                 </Badge>
               )}
             </div>
@@ -840,6 +848,94 @@ export function ClinicDetailPage() {
                     />
                     <span className="text-xs text-muted-foreground">Leave blank to show the name only.</span>
                   </div>
+                </div>
+
+                {/* AI Clinical Dictation Add-on */}
+                <div className="rounded-lg border border-border bg-muted/30 p-4 mt-2">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      <h4 className="font-medium text-foreground">AI Clinical Voice Dictation</h4>
+                    </div>
+                    {planForm.ai_dictation_enabled ? (
+                      <Badge variant="outline" className="border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400 gap-1">
+                        <Sparkles className="h-3 w-3" /> Enabled
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-muted text-muted-foreground">
+                        Disabled
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="p-ai-dictation-enabled"
+                      checked={planForm.ai_dictation_enabled ?? false}
+                      onChange={(e) => setPlanForm({ ...planForm, ai_dictation_enabled: e.target.checked })}
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                    />
+                    <Label htmlFor="p-ai-dictation-enabled" className="cursor-pointer font-medium">
+                      Enable AI Dictation for this clinic
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 ml-7">
+                    When enabled, doctors can dictate prescriptions using voice and auto-fill clinical notes & medicines.
+                  </p>
+
+                  {planForm.ai_dictation_enabled && (
+                    <div className="grid gap-4 sm:grid-cols-2 mt-4 pt-3 border-t border-border/60 animate-in fade-in">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="p-ai-cap-minutes">Monthly Audio Limit (Minutes)</Label>
+                        <Input
+                          id="p-ai-cap-minutes"
+                          type="number"
+                          min={1}
+                          value={Math.round((planForm.ai_dictation_monthly_cap_seconds ?? 18000) / 60)}
+                          onChange={(e) => {
+                            const mins = Math.max(1, parseInt(e.target.value) || 1);
+                            setPlanForm({ ...planForm, ai_dictation_monthly_cap_seconds: mins * 60 });
+                          }}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {Math.round((planForm.ai_dictation_monthly_cap_seconds ?? 18000) / 60)} minutes ({((planForm.ai_dictation_monthly_cap_seconds ?? 18000) / 3600).toFixed(1)} hours) per calendar month
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1.5 justify-end">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-8"
+                            onClick={() => setPlanForm((prev) => ({ ...prev, ai_dictation_monthly_cap_seconds: 6000 }))}
+                          >
+                            100 mins
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-8"
+                            onClick={() => setPlanForm((prev) => ({ ...prev, ai_dictation_monthly_cap_seconds: 18000 }))}
+                          >
+                            300 mins (5 hrs)
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-8"
+                            onClick={() => setPlanForm((prev) => ({ ...prev, ai_dictation_monthly_cap_seconds: 36000 }))}
+                          >
+                            600 mins (10 hrs)
+                          </Button>
+                        </div>
+                        <span className="text-xs text-muted-foreground">Quick presets for monthly quota</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Active / Suspension Status Card */}
