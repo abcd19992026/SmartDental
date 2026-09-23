@@ -20,7 +20,7 @@
     <title>SmartDentist — Automated WhatsApp Patient Recalls & Dental Practice Software</title>
     <meta
       name="description"
-      content="SmartDentist is India's leading dental practice management software. Automatically send WhatsApp recall reminders based on patient treatment, manage interactive tooth charts, write instant digital prescriptions, and streamline billing."
+      content="Dental clinic software from Patna, India. Sends WhatsApp recall reminders based on each patient's treatment, so patients come back for follow-ups."
     />
     <link rel="canonical" href="https://smartdentist.pages.dev/" />
     <meta property="og:type" content="website" />
@@ -28,7 +28,7 @@
     <meta property="og:title" content="SmartDentist — Stop Losing Dental Patients to Missed Follow-ups" />
     <meta
       property="og:description"
-      content="Automated WhatsApp recall reminders, interactive tooth charting, digital prescriptions & billing built specifically for dental clinics in India."
+      content="Automatic WhatsApp recall reminders, FDI tooth chart, prescriptions and billing for dental clinics in India, based in Patna."
     />
     <script type="application/ld+json">
       {
@@ -36,7 +36,7 @@
         "@type": "SoftwareApplication",
         "name": "SmartDentist",
         "url": "https://smartdentist.pages.dev/",
-        "description": "Smart dental clinic management software in India. Automatically sends WhatsApp recall reminders based on treatment type, featuring tooth charting, digital prescriptions, billing, and multi-branch support.",
+        "description": "Dental clinic management software for dental clinics in India, based in Patna. Automatically sends WhatsApp recall reminders based on treatment type, with an FDI tooth chart, prescriptions, billing, and multi-branch support.",
         "applicationCategory": "BusinessApplication",
         "applicationSubCategory": "Dental Practice Management",
         "operatingSystem": "Web"
@@ -96,7 +96,7 @@
         box-sizing: border-box;
       }
 
-      #landing h1, #landing h2, #landing h3, #landing h4, #landing p, #landing ul, #landing ol {
+      #landing h1, #landing h2, #landing h3, #landing h4, #landing .mock-title, #landing p, #landing ul, #landing ol {
         margin: 0;
       }
       #landing ul, #landing ol {
@@ -107,7 +107,9 @@
         color: inherit;
         text-decoration: none;
       }
-      #landing h1, #landing h2, #landing h3, #landing h4 {
+      /* .mock-title: labels inside the app-preview illustration. Styled like headings but kept
+         out of the heading outline, since they are captions of a picture, not page sections. */
+      #landing h1, #landing h2, #landing h3, #landing h4, #landing .mock-title {
         font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
         font-weight: 700;
         letter-spacing: -0.025em;
@@ -386,7 +388,7 @@
         justify-content: space-between;
         margin-bottom: 16px;
       }
-      #landing .col-header h4 {
+      #landing .col-header h4, #landing .col-header .mock-title {
         font-size: 14px;
         font-weight: 600;
         color: #fff;
@@ -1106,14 +1108,12 @@
           <nav class="nav-links">
             <a href="#features">Features</a>
             <a href="#how-it-works">How It Works</a>
-            <a href="#roi">ROI Calculator</a>
-            <a href="#testimonials">Reviews</a>
             <a href="#faq">FAQ</a>
           </nav>
 
           <div class="nav-actions">
-            <a class="btn btn-ghost" href="/app">Doctor Login</a>
-            <a class="btn btn-primary" href="#demo">Request Free Demo</a>
+            <a class="btn btn-ghost" href="/app">Login</a>
+            <a class="btn btn-primary" href="#demo">Request a Demo</a>
           </div>
         </div>
       </header>
@@ -1122,11 +1122,6 @@
         <!-- Hero Section -->
         <section class="hero">
           <div class="wrap hero-content">
-            <div class="glow-badge">
-              <span class="dot"></span>
-              <span>India's #1 Automated Dental Recall Software</span>
-            </div>
-
             <h1>
               Never Lose A Patient To A Missed Follow-up.
               <br />
@@ -1134,29 +1129,20 @@
             </h1>
 
             <p class="lede">
-              SmartDentist turns routine treatments into lifelong clinic retention. Automatically calculate
-              and trigger personalized WhatsApp recall reminders based on each patient's procedure — zero manual calling,
-              higher clinic revenue, and full EMR charting in one fast system.
+              SmartDentist is clinic management software for dental clinics in India, starting in Patna. Record the
+              treatment, and SmartDentist sets the patient's recall date from that treatment type and sends them WhatsApp
+              reminders when they are due — no follow-up register to keep and no calling patients one by one. Patient
+              records, tooth chart, prescriptions and billing are in the same app.
             </p>
 
             <div class="hero-actions">
               <a class="btn btn-primary btn-lg" href="#demo">
-                <span>Book 1-on-1 Free Demo</span>
+                <span>Request a Demo</span>
                 <span>→</span>
               </a>
               <a class="btn btn-ghost btn-lg" href="#features">
                 <span>Explore Features</span>
               </a>
-            </div>
-
-            <div class="hero-trust">
-              <span>⚡ <strong>98%</strong> WhatsApp Open Rate</span>
-              <span>•</span>
-              <span>📈 <strong>+35%</strong> Repeat Retention</span>
-              <span>•</span>
-              <span>⏱️ <strong>Zero</strong> Manual Calling</span>
-              <span>•</span>
-              <span>🇮🇳 <strong>Made for</strong> Indian Clinics</span>
             </div>
 
             <!-- Interactive App Preview Window -->
@@ -1166,39 +1152,39 @@
                   <div class="window-dots">
                     <span></span><span></span><span></span>
                   </div>
-                  <div class="window-title">smartdentist.app / clinic / live-dashboard</div>
-                  <div style="font-size: 11px; color: #2dd4bf; font-weight: 600;">● Live Clinic Stream</div>
+                  <div class="window-title">smartdentist.pages.dev / app</div>
+                  <div style="font-size: 11px; color: #2dd4bf; font-weight: 600;">Sample preview</div>
                 </div>
 
                 <div class="preview-grid">
                   <!-- Left: DaySheet Queue -->
                   <div class="preview-col">
                     <div class="col-header">
-                      <h4>Today's Queue</h4>
+                      <div class="mock-title">Today's Queue</div>
                       <span class="chip">6 Patients</span>
                     </div>
 
                     <div class="queue-card active">
                       <div class="name">
-                        <span>Priya Sharma</span>
-                        <span style="color: #2dd4bf; font-size: 12px;">Chair #1</span>
+                        <span>Patient Name</span>
+                        <span style="color: #2dd4bf; font-size: 12px;">10:45 AM</span>
                       </div>
                       <div class="meta">RCT Follow-up • Tooth 36</div>
-                      <span class="badge badge-chair">In Consultation</span>
+                      <span class="badge badge-chair">In Chair</span>
                     </div>
 
                     <div class="queue-card">
                       <div class="name">
-                        <span>Rajesh Verma</span>
+                        <span>Patient Name</span>
                         <span style="color: #94a3b8; font-size: 12px;">11:30 AM</span>
                       </div>
-                      <div class="meta">Ultrasonic Scaling & Polish</div>
-                      <span class="badge badge-recall">WhatsApp Recall Return</span>
+                      <div class="meta">Scaling / Cleaning</div>
+                      <span class="badge badge-recall">Booked from Recall</span>
                     </div>
 
                     <div class="queue-card">
                       <div class="name">
-                        <span>Ananya Gupta</span>
+                        <span>Patient Name</span>
                         <span style="color: #94a3b8; font-size: 12px;">12:15 PM</span>
                       </div>
                       <div class="meta">Crown Cementation • Tooth 16</div>
@@ -1210,10 +1196,10 @@
                   <div class="chart-view">
                     <div class="chart-header">
                       <div>
-                        <h4 style="font-size: 14px; margin: 0;">Interactive FDI Tooth Chart</h4>
-                        <span style="font-size: 11px; color: var(--text-muted);">Patient: Priya Sharma (F, 29)</span>
+                        <div class="mock-title" style="font-size: 14px; margin: 0;">Interactive FDI Tooth Chart</div>
+                        <span style="font-size: 11px; color: var(--text-muted);">Patient: Patient Name</span>
                       </div>
-                      <span class="chip" style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Autosaved</span>
+                      <span class="chip" style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Adult teeth</span>
                     </div>
 
                     <div class="tooth-grid">
@@ -1236,14 +1222,14 @@
                     </div>
 
                     <div class="rx-quick-view">
-                      <div style="font-weight: 600; color: #fff; margin-bottom: 6px;">1-Click Digital Rx & Letterhead Print</div>
+                      <div style="font-weight: 600; color: #fff; margin-bottom: 6px;">Prescription on Your Letterhead</div>
                       <div class="rx-item">
-                        <span>Tab. Augmentin 625mg (1-0-1 x 5 days)</span>
-                        <span style="color: var(--teal-accent);">Post-Meal</span>
+                        <span>Medicine Name</span>
+                        <span style="color: var(--teal-accent);">Dosage · Duration</span>
                       </div>
                       <div class="rx-item">
-                        <span>Tab. Ketorol-DT (SOS for acute pain)</span>
-                        <span style="color: var(--teal-accent);">Dissolve in water</span>
+                        <span>Medicine Name</span>
+                        <span style="color: var(--teal-accent);">Dosage · Duration</span>
                       </div>
                     </div>
                   </div>
@@ -1251,48 +1237,24 @@
                   <!-- Right: WhatsApp Automation Trigger -->
                   <div class="wa-panel">
                     <div class="col-header">
-                      <h4>Automated Recall Bot</h4>
-                      <span class="chip" style="background: #25d366; color: #064e3b;">WhatsApp API</span>
+                      <div class="mock-title">Automatic Recall Reminder</div>
+                      <span class="chip" style="background: #25d366; color: #064e3b;">WhatsApp</span>
                     </div>
 
                     <div class="wa-bubble">
                       <div class="wa-header">
-                        <span>💬 SmartDentist Recall Trigger</span>
+                        <span>💬 Sample recall reminder</span>
                       </div>
                       <p>
-                        "Namaste Priya ji! 🙏<br><br>
-                        This is a gentle reminder from <strong>Dr. Sharma's Dental Clinic</strong>. Your 6-month routine Scaling & Checkup is due this week for healthy gums & teeth.<br><br>
-                        Would you like us to reserve your preferred appointment slot?"
+                        Hello Patient Name,<br><br>
+                        This is a reminder from <strong>Your Clinic Name</strong>. Your follow-up for Scaling / Cleaning is due.<br><br>
+                        Please reply to this message or call the clinic to book your visit.
                       </p>
-                      <div class="wa-btn-mock">📅 Reply '1' to Confirm Slot</div>
-                      <div class="wa-time">Today, 09:00 AM • Delivered ✓✓</div>
+                      <div class="wa-btn-mock">↩ Patient replies appear under “Replies Waiting”</div>
+                      <div class="wa-time">Delivered ✓✓</div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Stats Bar -->
-        <section class="stats-bar">
-          <div class="wrap">
-            <div class="stats-grid">
-              <div>
-                <div class="stat-num text-gradient-teal">+38%</div>
-                <div class="stat-label">Average Repeat Revenue</div>
-              </div>
-              <div>
-                <div class="stat-num">98%</div>
-                <div class="stat-label">WhatsApp Message Read Rate</div>
-              </div>
-              <div>
-                <div class="stat-num text-gradient">0 Mins</div>
-                <div class="stat-label">Staff Time Spent Calling</div>
-              </div>
-              <div>
-                <div class="stat-num text-gradient-teal">5.0 ★</div>
-                <div class="stat-label">Doctor & Patient Satisfaction</div>
               </div>
             </div>
           </div>
@@ -1302,9 +1264,9 @@
         <section class="band" id="why-smartdentist">
           <div class="wrap">
             <div class="section-header">
-              <div class="glow-badge">Why Clinics Switch</div>
-              <h2>Why Traditional Dental Registers Cost You Lakhs Every Year</h2>
-              <p>Manual reminder diaries fail because staff get busy. SmartDentist puts your patient follow-ups on 100% automated autopilot.</p>
+              <div class="glow-badge">The Problem</div>
+              <h2>Why Manual Follow-up Registers Miss Patients</h2>
+              <p>Manual reminder diaries fail because staff get busy. SmartDentist sends the reminders automatically, based on the treatment recorded at the visit.</p>
             </div>
 
             <div class="comparison-grid">
@@ -1314,10 +1276,6 @@
                   <span style="font-size: 24px;">❌</span> The Old Manual Way
                 </h3>
                 <ul class="comp-list">
-                  <li>
-                    <span class="comp-icon">✕</span>
-                    <span><strong>Lost Follow-ups:</strong> 60% of scaling and RCT follow-up patients forget to return because nobody called them on time.</span>
-                  </li>
                   <li>
                     <span class="comp-icon">✕</span>
                     <span><strong>Phone Calls Ignored:</strong> Patients don't answer unknown clinic phone calls while at work or driving.</span>
@@ -1341,19 +1299,19 @@
                 <ul class="comp-list">
                   <li>
                     <span class="comp-icon">✓</span>
-                    <span><strong>100% Automatic Triggers:</strong> Recall intervals are assigned directly upon treatment completion (e.g. 6 mos for cleaning, 3 mos for ortho).</span>
+                    <span><strong>Automatic Recall Dates:</strong> Every treatment type has its own recall interval, set by your clinic. The due date is set as soon as the visit is recorded.</span>
                   </li>
                   <li>
                     <span class="comp-icon">✓</span>
-                    <span><strong>WhatsApp Delivery:</strong> Reminders land on the app patients check 50+ times a day with verified clinic branding.</span>
+                    <span><strong>WhatsApp Delivery:</strong> Reminders go straight to the patient's WhatsApp, so nobody has to dial a number.</span>
                   </li>
                   <li>
                     <span class="comp-icon">✓</span>
-                    <span><strong>Digital EMR & Tooth Chart:</strong> Entire treatment history, photos, prescriptions, and past payments accessible in 2 clicks.</span>
+                    <span><strong>Records & Tooth Chart:</strong> Visit and treatment history, tooth chart, prescriptions and payments are all on the patient's record.</span>
                   </li>
                   <li>
                     <span class="comp-icon">✓</span>
-                    <span><strong>Predictable Recurring Income:</strong> Filled appointment schedule week after week from guaranteed return patients.</span>
+                    <span><strong>Replies Come Back to You:</strong> When a patient replies on WhatsApp, it shows up under “Replies Waiting” for your staff to act on.</span>
                   </li>
                 </ul>
               </div>
@@ -1374,19 +1332,19 @@
               <div class="step-card">
                 <div class="step-number">01</div>
                 <h3>Record the Treatment</h3>
-                <p>During or after the consultation, tap the procedure done (e.g., Root Canal, Ultrasonic Scaling, Crown, Composite Filling).</p>
+                <p>When you add the visit, pick the treatment done (e.g. Scaling / Cleaning, Filling, RCT, Extraction) and tap the teeth treated on the tooth chart.</p>
               </div>
 
               <div class="step-card">
                 <div class="step-number">02</div>
                 <h3>Recall Date Sets Automatically</h3>
-                <p>SmartDentist calculates the exact follow-up timeline based on clinical guidelines (or your custom clinic preferences).</p>
+                <p>SmartDentist sets the recall date using the interval your clinic has set for that treatment type. Each treatment starts with a suggested interval that you can change.</p>
               </div>
 
               <div class="step-card">
                 <div class="step-number">03</div>
-                <h3>Patient Returns via WhatsApp</h3>
-                <p>When the due date arrives, a polite, personalized WhatsApp message is sent to the patient with 1-click booking confirmation.</p>
+                <h3>Patient Is Reminded on WhatsApp</h3>
+                <p>A WhatsApp reminder goes out the day before the due date and a follow-up the day after. If an appointment time is set, another goes out 2 hours before it. Patient replies show up for your staff under “Replies Waiting”.</p>
               </div>
             </div>
           </div>
@@ -1396,153 +1354,82 @@
         <section class="band" id="features">
           <div class="wrap">
             <div class="section-header">
-              <div class="glow-badge">All-In-One Practice OS</div>
-              <h2>Everything Your Dental Clinic Needs To Scale</h2>
-              <p>Designed specifically for dental surgeons, periodontists, orthodontists, and multi-chair clinics across India.</p>
+              <div class="glow-badge">What's Built In</div>
+              <h2>Features Built For Dental Clinics</h2>
+              <p>For dentists and dental clinics, from a single clinic to several branches.</p>
             </div>
 
             <div class="features-grid">
               <div class="feature-card">
                 <div class="feature-icon">💬</div>
-                <h3>Automated WhatsApp Recalls</h3>
-                <p>Customizable recall intervals per treatment. Patients receive friendly reminders in English or Hindi on autopilot.</p>
+                <h3>Automatic WhatsApp Recall Reminders</h3>
+                <p>Every treatment type has its own recall interval, set by your clinic. When a patient is due, the WhatsApp reminder goes out on its own, with no follow-up list to maintain.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">🔁</div>
+                <h3>Three Reminders, Not Just One</h3>
+                <p>A reminder the day before the due date, one 2 hours before the appointment time (when a time is set), and a follow-up the day after.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">↩️</div>
+                <h3>Patient Replies Reach Your Staff</h3>
+                <p>When a patient replies on WhatsApp, the reply appears on your Today page under “Replies Waiting”, so staff can call back or book the visit.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">🔕</div>
+                <h3>Do Not Disturb, Per Patient</h3>
+                <p>Turn on Do Not Disturb for any patient who doesn't want messages, and SmartDentist won't send them WhatsApp reminders or messages.</p>
               </div>
 
               <div class="feature-card">
                 <div class="feature-icon">🦷</div>
-                <h3>Visual Tooth Charting & EMR</h3>
-                <p>Interactive FDI tooth notation. Mark caries, root canals, implants, and crowns visually with past visit history.</p>
+                <h3>FDI Tooth Chart, Adult & Child</h3>
+                <p>Tap the teeth treated on an FDI-numbered tooth chart. Children get a milk-teeth chart. The selected teeth are saved with the visit and the prescription.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">📋</div>
+                <h3>Patient Records & Medical History</h3>
+                <p>Visit and treatment history in one place. Medical history (diabetes, hypertension, allergies and more) is entered once and carried onto prescriptions, and allergies are flagged in red on the patient's page.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">🗓️</div>
+                <h3>Appointments, Walk-ins & Check-in</h3>
+                <p>Book appointments ahead or add walk-ins, record vitals and chief complaint at check-in, and see who is waiting, in the chair or done. Mark no-shows in one step.</p>
               </div>
 
               <div class="feature-card">
                 <div class="feature-icon">📄</div>
-                <h3>1-Click Digital Prescriptions</h3>
-                <p>Pre-configured dental drug dosages. Print on clinic letterhead or send PDF prescriptions straight to patient's WhatsApp.</p>
+                <h3>Prescriptions on Your Letterhead</h3>
+                <p>Print prescriptions on your own clinic letterhead with your logo, address and timings, or send them to the patient as a PDF on WhatsApp.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">💊</div>
+                <h3>Your Medicine List, Your Dosages</h3>
+                <p>Keep your clinic's own medicine list with your usual dosage and duration. They fill in automatically when you prescribe.</p>
               </div>
 
               <div class="feature-card">
                 <div class="feature-icon">💳</div>
-                <h3>Chairside Billing & Receipts</h3>
-                <p>Generate transparent treatment estimates, record advance payments, and send instant WhatsApp payment receipts.</p>
+                <h3>Billing & Balance Due</h3>
+                <p>Record the fee and any discount per visit, take payments by cash, UPI, card or bank transfer, and see what each patient has paid and still owes.</p>
               </div>
 
               <div class="feature-card">
                 <div class="feature-icon">🏥</div>
-                <h3>Multi-Branch & Staff Roles</h3>
-                <p>Manage multiple clinic branches from a single login. Restrict receptionist vs doctor access with secure permissions.</p>
+                <h3>Multi-Branch, Owner & Receptionist Logins</h3>
+                <p>Run several branches from one account. The clinic owner sees every branch; each receptionist sees only their own branch's patients.</p>
               </div>
 
               <div class="feature-card">
                 <div class="feature-icon">📊</div>
-                <h3>Recall Analytics & ROI Reports</h3>
-                <p>Track how many patients returned, conversion percentages, and total clinic revenue generated from recall messages.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Interactive ROI Calculator -->
-        <section class="band" id="roi" style="background: rgba(13, 21, 39, 0.4);">
-          <div class="wrap">
-            <div class="section-header">
-              <div class="glow-badge">Revenue Calculator</div>
-              <h2>Calculate Your Clinic's Lost Revenue</h2>
-              <p>See how much additional revenue SmartDentist will recover for your clinic each month.</p>
-            </div>
-
-            <div class="roi-box">
-              <div class="roi-grid">
-                <div>
-                  <div class="roi-control">
-                    <div class="roi-label">
-                      <span>Monthly Patients Treated:</span>
-                      <span id="patient-count-val" style="color: var(--teal-accent); font-size: 16px;">150 Patients</span>
-                    </div>
-                    <input type="range" min="30" max="600" step="10" value="150" class="roi-slider" id="patient-slider" oninput="updateROI()" />
-                  </div>
-
-                  <div class="roi-control">
-                    <div class="roi-label">
-                      <span>Average Treatment Value:</span>
-                      <span id="treatment-val" style="color: var(--teal-accent); font-size: 16px;">₹1,500</span>
-                    </div>
-                    <input type="range" min="500" max="8000" step="250" value="1500" class="roi-slider" id="fee-slider" oninput="updateROI()" />
-                  </div>
-
-                  <p style="font-size: 13px; color: var(--text-muted); margin-top: 16px;">
-                    *Based on an industry-proven 25% recall return rate through automated WhatsApp triggers.
-                  </p>
-                </div>
-
-                <div class="roi-result-card">
-                  <div style="font-size: 14px; font-weight: 600; color: var(--text-sub);">Estimated Extra Monthly Revenue:</div>
-                  <div class="roi-recovered" id="recovered-amount">₹56,250</div>
-                  <div style="font-size: 13px; color: var(--text-muted);">Recovered from missed follow-ups & recurring cleanings</div>
-                  <a class="btn btn-primary" href="#demo" style="margin-top: 20px; width: 100%;">
-                    Start Recovering Lost Revenue →
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Testimonials -->
-        <section class="band" id="testimonials">
-          <div class="wrap">
-            <div class="section-header">
-              <div class="glow-badge">Doctor Testimonials</div>
-              <h2>Trusted By Leading Dental Practices</h2>
-              <p>Hear how dentists in Patna and across India transformed their patient retention.</p>
-            </div>
-
-            <div class="reviews-grid">
-              <div class="review-card">
-                <div>
-                  <div class="review-stars">★★★★★</div>
-                  <p class="review-text">
-                    "Before SmartDentist, we relied on physical registers and our receptionist never had time to call old patients. Now, 30-40 patients return every month automatically via WhatsApp for cleaning and crown checks."
-                  </p>
-                </div>
-                <div class="review-author">
-                  <div class="author-avatar">AK</div>
-                  <div>
-                    <div class="author-name">Dr. Amit Kumar, MDS</div>
-                    <div class="author-clinic">Advanced Dental Care, Patna</div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="review-card">
-                <div>
-                  <div class="review-stars">★★★★★</div>
-                  <p class="review-text">
-                    "The tooth chart and instant WhatsApp digital prescriptions are brilliant. Patients love getting their prescription directly on WhatsApp, and the interface is super clean and fast."
-                  </p>
-                </div>
-                <div class="review-author">
-                  <div class="author-avatar" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">PS</div>
-                  <div>
-                    <div class="author-name">Dr. Priya Singh, BDS</div>
-                    <div class="author-clinic">Smile Dental Clinic, Kankarbagh</div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="review-card">
-                <div>
-                  <div class="review-stars">★★★★★</div>
-                  <p class="review-text">
-                    "We run 2 branches in Patna. Managing receptionists, doctor notes, and patient billing from a single dashboard has made our operations completely hassle-free."
-                  </p>
-                </div>
-                <div class="review-author">
-                  <div class="author-avatar" style="background: linear-gradient(135deg, #f59e0b, #ef4444);">RS</div>
-                  <div>
-                    <div class="author-name">Dr. Rajesh Sinha</div>
-                    <div class="author-clinic">City Dental Hospital, Boring Road</div>
-                  </div>
-                </div>
+                <h3>Recall Report</h3>
+                <p>See how many reminders were sent, delivered and replied to, how many patients came back, and how much was collected from those return visits.</p>
               </div>
             </div>
           </div>
@@ -1556,22 +1443,14 @@
               <div class="glow-badge" style="margin-bottom: 16px;">Get Started Today</div>
               <h2>See SmartDentist In Action For Your Clinic</h2>
               <p style="color: var(--text-muted); font-size: 16px; margin-top: 14px; line-height: 1.6;">
-                Book a personalized 15-minute live demonstration. We'll show you how automated WhatsApp recalls,
-                instant digital Rx, and visual tooth charting will boost your clinic's patient flow.
+                Request a demo and we'll show you how WhatsApp recall reminders, prescriptions, the tooth chart
+                and billing work for your clinic.
               </p>
 
               <div class="demo-perks">
                 <div class="demo-perk">
                   <div class="demo-perk-icon">✓</div>
-                  <span><strong>15-Minute 1-on-1 Walkthrough:</strong> Custom demonstration for your clinic workflow.</span>
-                </div>
-                <div class="demo-perk">
-                  <div class="demo-perk-icon">✓</div>
-                  <span><strong>100% Free Setup & Onboarding:</strong> We help import your existing patient records.</span>
-                </div>
-                <div class="demo-perk">
-                  <div class="demo-perk-icon">✓</div>
-                  <span><strong>Zero Hardware Required:</strong> Runs smoothly in any browser (laptop, tablet, phone).</span>
+                  <span><strong>No Installation Needed:</strong> Runs in the web browser on a laptop, tablet or phone.</span>
                 </div>
               </div>
 
@@ -1581,7 +1460,7 @@
                   Email us directly: <a href="mailto:alokkumar.in91@gmail.com">alokkumar.in91@gmail.com</a>
                 </div>
                 <div style="margin-top: 4px; font-size: 13px; color: var(--text-muted);">
-                  Patna, Bihar, India • Quick 24h Response
+                  Patna, Bihar, India
                 </div>
               </div>
             </div>
@@ -1589,7 +1468,7 @@
             <!-- Right Column: Demo Request Form -->
             <div class="demo-form-wrapper">
               <div style="margin-bottom: 20px;">
-                <h3 style="font-size: 20px;">Request Your Free Demo</h3>
+                <h3 style="font-size: 20px;">Request a Demo</h3>
                 <p style="font-size: 13.5px; color: var(--text-muted); margin-top: 4px;">Fill out this form and our team will get in touch shortly.</p>
               </div>
 
@@ -1633,12 +1512,8 @@
                 </label>
 
                 <button class="btn btn-primary btn-submit" type="submit">
-                  <span>🚀 Request My Free Demo</span>
+                  <span>Request a Demo</span>
                 </button>
-
-                <div style="text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 6px;">
-                  🔒 100% Privacy Protected. No spam guaranteed.
-                </div>
               </form>
             </div>
           </div>
@@ -1657,9 +1532,10 @@
               <details class="faq-item" open>
                 <summary>How does the automated WhatsApp recall reminder work?</summary>
                 <p>
-                  When you record a treatment for a patient (like Scaling, RCT, Extraction, or Ortho), SmartDentist automatically
-                  assigns the clinically recommended recall interval (e.g. 6 months for scaling). When that date arrives, our automated system
-                  sends a polite, branded reminder to the patient's WhatsApp without your staff having to dial a single number.
+                  When you record a treatment for a patient (like Scaling, RCT, Extraction, or Ortho), SmartDentist sets the recall
+                  date using the recall interval your clinic has set for that treatment type. The patient gets a WhatsApp reminder the
+                  day before the due date and a follow-up the day after, plus one 2 hours before the appointment if a time is set, without
+                  your staff having to dial a single number. If the patient replies, the reply appears under “Replies Waiting”.
                 </p>
               </details>
 
@@ -1672,26 +1548,29 @@
               </details>
 
               <details class="faq-item">
-                <summary>Can my receptionist and associate doctors use it simultaneously?</summary>
+                <summary>Can my receptionist use it too?</summary>
                 <p>
-                  Yes. SmartDentist has built-in role-based access control. Receptionists can handle appointments, walk-ins, and payments,
-                  while doctors can write clinical notes, tooth charting, and prescriptions. Everything updates in real time.
+                  Yes. There are two kinds of login: the clinic owner, who sees every branch, and receptionists, who each see only their
+                  own branch's patients. Receptionists can register patients, book appointments, check patients in and record payments.
+                  Settings and the recall report are for the owner only.
                 </p>
               </details>
 
               <details class="faq-item">
-                <summary>Can we customize the recall intervals and message templates?</summary>
+                <summary>Can we set our own recall intervals?</summary>
                 <p>
-                  Absolutely. Every clinic can customize recall time periods for specific procedures (e.g. 3 months, 6 months, 1 year)
-                  and personalize WhatsApp message greetings in English or Hindi.
+                  Yes. Each treatment type has its own recall interval in days, which you can change in Settings. New clinics start
+                  with suggested intervals (for example 180 days after scaling, 7 days after an extraction), and you can add your own
+                  treatment types. Reminders are sent in English using a WhatsApp message template approved by Meta.
                 </p>
               </details>
 
               <details class="faq-item">
                 <summary>Is our patient data safe and confidential?</summary>
                 <p>
-                  Yes, your data is encrypted in transit and at rest using enterprise-grade cloud security. Your clinic's records remain
-                  private, strictly protected by row-level security, and never shared.
+                  Your data is stored in a cloud database that is encrypted in transit and at rest. Database access rules mean each
+                  clinic can only see its own records, and receptionists only their own branch's patients. A patient's name and number
+                  are sent to WhatsApp only to deliver that patient's messages.
                 </p>
               </details>
             </div>
@@ -1703,11 +1582,10 @@
           <div class="wrap">
             <div class="final-cta-card">
               <div class="glow-badge" style="margin-bottom: 16px;">Transform Your Clinic</div>
-              <h2>Ready To Fill Your Clinic Chairs With Automated Recalls?</h2>
-              <p>Join dentists who are increasing patient retention and saving hours of administrative work every week.</p>
+              <h2>Ready To Automate Your Patient Recalls?</h2>
               <div style="display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;">
-                <a class="btn btn-primary btn-lg" href="#demo">Request Free Demo Now →</a>
-                <a class="btn btn-ghost btn-lg" href="/app">Doctor Login</a>
+                <a class="btn btn-primary btn-lg" href="#demo">Request a Demo →</a>
+                <a class="btn btn-ghost btn-lg" href="/app">Login</a>
               </div>
             </div>
           </div>
@@ -1726,7 +1604,6 @@
             <div class="footer-links">
               <a href="#features">Features</a>
               <a href="#how-it-works">How It Works</a>
-              <a href="#roi">ROI Calculator</a>
               <a href="#demo">Demo</a>
               <a href="/app">Sign In</a>
             </div>
@@ -1742,29 +1619,6 @@
         </div>
       </footer>
     </div>
-
-    <!-- Client-side Interactive ROI Calculator Script -->
-    <script>
-      function updateROI() {
-        var pSlider = document.getElementById('patient-slider');
-        var fSlider = document.getElementById('fee-slider');
-        var pVal = document.getElementById('patient-count-val');
-        var fVal = document.getElementById('treatment-val');
-        var recVal = document.getElementById('recovered-amount');
-
-        if (!pSlider || !fSlider || !recVal) return;
-
-        var patients = parseInt(pSlider.value, 10);
-        var fee = parseInt(fSlider.value, 10);
-
-        if (pVal) pVal.textContent = patients + " Patients";
-        if (fVal) fVal.textContent = "₹" + fee.toLocaleString('en-IN');
-
-        // Estimate: 25% recall return rate
-        var extraRevenue = Math.round(patients * 0.25 * fee);
-        recVal.textContent = "₹" + extraRevenue.toLocaleString('en-IN');
-      }
-    </script>
 
     <!-- React App Entry Point -->
     <script type="module" src="/src/main.tsx"></script>

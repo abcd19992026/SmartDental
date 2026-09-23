@@ -7,13 +7,26 @@
 - Dentists and dental clinics in India (currently focused on Patna).
 - Single clinics and clinics with more than one branch.
 
-## Key features
+## Recall reminders
 
-- Automatic WhatsApp recall reminders: each treatment type has a recall interval set by the clinic; when a patient's recall date comes, they are sent a reminder on WhatsApp.
-- Patient records: patient details, visit and treatment history, and a tooth chart.
-- Prescriptions: written during the consultation; can be printed on the clinic's letterhead or sent to the patient as a PDF on WhatsApp.
-- Billing: record payments against each patient and view payment history.
-- Multi-branch support: clinics with more than one branch manage them from one account.
+- Each treatment type has a recall interval in days, set by the clinic. New clinics start with suggested intervals (for example 180 days after scaling, 7 days after an extraction), which the clinic can change.
+- When a visit is recorded, the recall date is set from that treatment type's interval.
+- Up to three WhatsApp reminders per recall: the day before the due date, 2 hours before the appointment time (only when a time is set), and a follow-up the day after.
+- Patient replies on WhatsApp are shown to clinic staff under "Replies Waiting" on the Today page, for staff to act on. Replies do not book appointments automatically.
+- Staff can pause, resume or decline a recall.
+- Do Not Disturb can be turned on per patient; SmartDentist then sends that patient no WhatsApp messages.
+- Reminders are sent in English using a Meta-approved WhatsApp message template.
+
+## Other features
+
+- Patient records: visit and treatment history, and medical history (e.g. diabetes, hypertension, allergies) entered once and carried onto prescriptions. Allergies are flagged on the patient's page.
+- FDI-numbered tooth chart for selecting the teeth treated, with separate adult and child (milk teeth) charts.
+- Appointments and walk-ins: book ahead or add walk-ins, record vitals and chief complaint at check-in, track waiting / in chair / done, and mark no-shows.
+- Prescriptions: printed on the clinic's own letterhead (logo, address, timings) or sent to the patient as a PDF on WhatsApp.
+- Clinic medicine list with default dosage and duration that fill in automatically when prescribing.
+- Billing: fee and optional discount per visit, payments by cash, UPI, card or bank transfer, and each patient's total paid and balance due.
+- Multi-branch: one account for several branches. The clinic owner sees every branch; each receptionist sees only their own branch's patients.
+- Recall report (owner only): reminders sent, delivered and replied to, patients who came back, and amount collected from those return visits.
 
 ## Details
 
