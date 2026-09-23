@@ -5,16 +5,1768 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#863bff" />
+    <meta name="theme-color" content="#0d9488" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="SmartDentist" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <title>SmartDentist</title>
+    
+    <!-- Preconnect and Load Google Fonts (Inter + Plus Jakarta Sans) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+
+    <title>SmartDentist — Automated WhatsApp Patient Recalls & Dental Practice Software</title>
+    <meta
+      name="description"
+      content="SmartDentist is India's leading dental practice management software. Automatically send WhatsApp recall reminders based on patient treatment, manage interactive tooth charts, write instant digital prescriptions, and streamline billing."
+    />
+    <link rel="canonical" href="https://smartdentist.pages.dev/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://smartdentist.pages.dev/" />
+    <meta property="og:title" content="SmartDentist — Stop Losing Dental Patients to Missed Follow-ups" />
+    <meta
+      property="og:description"
+      content="Automated WhatsApp recall reminders, interactive tooth charting, digital prescriptions & billing built specifically for dental clinics in India."
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "SmartDentist",
+        "url": "https://smartdentist.pages.dev/",
+        "description": "Smart dental clinic management software in India. Automatically sends WhatsApp recall reminders based on treatment type, featuring tooth charting, digital prescriptions, billing, and multi-branch support.",
+        "applicationCategory": "BusinessApplication",
+        "applicationSubCategory": "Dental Practice Management",
+        "operatingSystem": "Web"
+      }
+    </script>
+    <script>
+      // This file is both the public landing page (at "/") and the React app shell (every other
+      // route, via the SPA fallback). Show the static landing only for a logged-out visit to "/";
+      // otherwise mark <html data-app> so the landing is hidden before first paint and main.tsx
+      // mounts React, whose "/" route (RoleRedirect) sends signed-in users on as before.
+      // Without JS (e.g. crawlers) nothing runs and the landing content is simply shown.
+      (function () {
+        // supabase-js's default storage key is sb-<project ref>-auth-token; Vite fills in the URL.
+        var isApp = location.pathname !== "/";
+        if (!isApp) {
+          try {
+            var ref = new URL("%VITE_SUPABASE_URL%").hostname.split(".")[0];
+            isApp = localStorage.getItem("sb-" + ref + "-auth-token") !== null;
+          } catch (e) {}
+        }
+        if (isApp) document.documentElement.setAttribute("data-app", "");
+      })();
+    </script>
+    <style>
+      html[data-app] #landing { display: none !important; }
+
+      #landing {
+        --bg: #070b14;
+        --bg-subtle: #0d1527;
+        --card-bg: rgba(15, 23, 42, 0.7);
+        --card-border: rgba(255, 255, 255, 0.08);
+        --card-hover-border: rgba(45, 212, 191, 0.3);
+        --line: #1e293b;
+        --text-main: #f8fafc;
+        --text-muted: #94a3b8;
+        --text-sub: #cbd5e1;
+        --teal-glow: rgba(20, 184, 166, 0.15);
+        --teal-primary: #14b8a6;
+        --teal-accent: #2dd4bf;
+        --teal-dark: #0f766e;
+        --emerald-accent: #10b981;
+        
+        min-height: 100vh;
+        background-color: var(--bg);
+        background-image: 
+          radial-gradient(circle at 50% 0%, rgba(20, 184, 166, 0.12) 0%, transparent 50%),
+          radial-gradient(circle at 100% 40%, rgba(14, 165, 233, 0.08) 0%, transparent 40%),
+          radial-gradient(circle at 0% 80%, rgba(16, 185, 129, 0.08) 0%, transparent 40%);
+        color: var(--text-main);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+
+      #landing *, #landing *::before, #landing *::after {
+        box-sizing: border-box;
+      }
+
+      #landing h1, #landing h2, #landing h3, #landing h4, #landing p, #landing ul, #landing ol {
+        margin: 0;
+      }
+      #landing ul, #landing ol {
+        padding: 0;
+        list-style: none;
+      }
+      #landing a {
+        color: inherit;
+        text-decoration: none;
+      }
+      #landing h1, #landing h2, #landing h3, #landing h4 {
+        font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        color: #ffffff;
+      }
+
+      #landing .wrap {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      /* Glow & Glass Utilities */
+      .glow-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        border-radius: 9999px;
+        background: rgba(20, 184, 166, 0.1);
+        border: 1px solid rgba(45, 212, 191, 0.25);
+        color: var(--teal-accent);
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        box-shadow: 0 0 20px rgba(20, 184, 166, 0.15);
+      }
+      .glow-badge .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #2dd4bf;
+        box-shadow: 0 0 10px #2dd4bf;
+        animation: pulseDot 2s infinite;
+      }
+      @keyframes pulseDot {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(0.85); }
+      }
+
+      .text-gradient {
+        background: linear-gradient(135deg, #ffffff 30%, #2dd4bf 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .text-gradient-teal {
+        background: linear-gradient(135deg, #2dd4bf 0%, #10b981 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      /* Buttons */
+      #landing .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        height: 44px;
+        padding: 0 22px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 15px;
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        cursor: pointer;
+        border: 1px solid transparent;
+        text-align: center;
+        white-space: nowrap;
+      }
+      #landing .btn-primary {
+        background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+        color: #ffffff;
+        font-weight: 600;
+        box-shadow: 0 4px 20px rgba(20, 184, 166, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      }
+      #landing .btn-primary:hover {
+        background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+        box-shadow: 0 6px 28px rgba(45, 212, 191, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        transform: translateY(-1.5px);
+      }
+      #landing .btn-ghost {
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text-main);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(8px);
+      }
+      #landing .btn-ghost:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(45, 212, 191, 0.4);
+        color: #ffffff;
+        transform: translateY(-1.5px);
+      }
+      #landing .btn-lg {
+        height: 52px;
+        padding: 0 28px;
+        font-size: 16px;
+        border-radius: 12px;
+      }
+
+      /* Header */
+      #landing header {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: rgba(7, 11, 20, 0.82);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        transition: all 0.2s;
+      }
+      #landing .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 72px;
+      }
+      #landing .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 700;
+        font-size: 20px;
+        color: #ffffff;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+      }
+      #landing .brand img {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: #ffffff;
+        padding: 3px;
+        box-shadow: 0 0 16px rgba(20, 184, 166, 0.4);
+      }
+      #landing .brand .badge-tag {
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: 6px;
+        background: rgba(45, 212, 191, 0.15);
+        border: 1px solid rgba(45, 212, 191, 0.3);
+        color: var(--teal-accent);
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      #landing .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 28px;
+      }
+      #landing .nav-links a {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-muted);
+        transition: color 0.15s;
+      }
+      #landing .nav-links a:hover {
+        color: var(--teal-accent);
+      }
+      #landing .nav-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      /* Hero Section */
+      #landing .hero {
+        padding: 80px 0 60px;
+        text-align: center;
+        position: relative;
+      }
+      #landing .hero-content {
+        max-width: 880px;
+        margin: 0 auto;
+      }
+      #landing .hero h1 {
+        font-size: clamp(34px, 5.2vw, 58px);
+        line-height: 1.12;
+        margin-top: 20px;
+        letter-spacing: -0.03em;
+      }
+      #landing .hero .lede {
+        font-size: clamp(16px, 2.2vw, 19px);
+        color: var(--text-muted);
+        max-width: 720px;
+        margin: 22px auto 0;
+        line-height: 1.65;
+      }
+      #landing .hero-actions {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        margin-top: 36px;
+        flex-wrap: wrap;
+      }
+      #landing .hero-trust {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 24px;
+        margin-top: 32px;
+        color: var(--text-muted);
+        font-size: 13px;
+        flex-wrap: wrap;
+      }
+      #landing .hero-trust span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      /* App Interactive Preview Showcase */
+      #landing .preview-container {
+        margin-top: 50px;
+        position: relative;
+        perspective: 1000px;
+      }
+      #landing .preview-window {
+        background: #090e1a;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 20px;
+        box-shadow: 
+          0 25px 60px -15px rgba(0, 0, 0, 0.8),
+          0 0 50px -10px rgba(20, 184, 166, 0.18);
+        overflow: hidden;
+        text-align: left;
+      }
+      #landing .window-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 20px;
+        background: rgba(15, 23, 42, 0.95);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      #landing .window-dots {
+        display: flex;
+        gap: 7px;
+      }
+      #landing .window-dots span {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+      }
+      #landing .window-dots span:nth-child(1) { background: #ef4444; }
+      #landing .window-dots span:nth-child(2) { background: #f59e0b; }
+      #landing .window-dots span:nth-child(3) { background: #10b981; }
+      #landing .window-title {
+        font-size: 12px;
+        color: var(--text-muted);
+        background: rgba(0, 0, 0, 0.3);
+        padding: 4px 16px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      #landing .preview-grid {
+        display: grid;
+        grid-template-columns: 320px 1fr 340px;
+        min-height: 480px;
+        background: #0b1120;
+      }
+      @media (max-width: 1024px) {
+        #landing .preview-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* Preview Panel 1: Today Queue */
+      #landing .preview-col {
+        padding: 20px;
+        border-right: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      #landing .col-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      #landing .col-header h4 {
+        font-size: 14px;
+        font-weight: 600;
+        color: #fff;
+      }
+      #landing .col-header .chip {
+        font-size: 11px;
+        background: rgba(20, 184, 166, 0.15);
+        color: var(--teal-accent);
+        padding: 2px 8px;
+        border-radius: 99px;
+        font-weight: 600;
+      }
+      #landing .queue-card {
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 12px;
+        padding: 14px;
+        margin-bottom: 12px;
+        transition: transform 0.15s;
+      }
+      #landing .queue-card.active {
+        border-color: rgba(45, 212, 191, 0.4);
+        background: rgba(20, 184, 166, 0.08);
+      }
+      #landing .queue-card .name {
+        font-weight: 600;
+        font-size: 14px;
+        color: #fff;
+        display: flex;
+        justify-content: space-between;
+      }
+      #landing .queue-card .meta {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 4px;
+      }
+      #landing .queue-card .badge {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-top: 8px;
+      }
+      #landing .badge-chair { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+      #landing .badge-recall { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+      #landing .badge-wait { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+      /* Preview Panel 2: Interactive Tooth Chart */
+      #landing .chart-view {
+        padding: 20px;
+      }
+      #landing .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      #landing .tooth-grid {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 6px;
+        background: rgba(15, 23, 42, 0.5);
+        padding: 16px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        margin-bottom: 16px;
+      }
+      #landing .tooth-box {
+        background: #1e293b;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 10px 4px;
+        text-align: center;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-sub);
+        transition: all 0.2s;
+        cursor: pointer;
+      }
+      #landing .tooth-box:hover {
+        border-color: var(--teal-accent);
+        transform: scale(1.05);
+      }
+      #landing .tooth-box.rct {
+        background: rgba(239, 68, 68, 0.2);
+        border-color: #ef4444;
+        color: #fca5a5;
+      }
+      #landing .tooth-box.crown {
+        background: rgba(245, 158, 11, 0.2);
+        border-color: #f59e0b;
+        color: #fde68a;
+      }
+      #landing .tooth-box.scale {
+        background: rgba(20, 184, 166, 0.2);
+        border-color: #14b8a6;
+        color: #5eead4;
+      }
+
+      #landing .rx-quick-view {
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 10px;
+        padding: 14px;
+        font-size: 12px;
+      }
+      #landing .rx-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 0;
+        border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+        color: var(--text-sub);
+      }
+      #landing .rx-item:last-child { border-bottom: none; }
+
+      /* Preview Panel 3: Live WhatsApp Automation */
+      #landing .wa-panel {
+        padding: 20px;
+        background: #080e1a;
+      }
+      #landing .wa-bubble {
+        background: #005c4b;
+        color: #e9edef;
+        padding: 14px 16px;
+        border-radius: 12px 12px 2px 12px;
+        font-size: 13px;
+        line-height: 1.5;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+        margin-top: 12px;
+        position: relative;
+      }
+      #landing .wa-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+        font-weight: 700;
+        color: #25d366;
+        font-size: 12px;
+      }
+      #landing .wa-time {
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.6);
+        text-align: right;
+        margin-top: 6px;
+      }
+      #landing .wa-btn-mock {
+        display: block;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #ffffff;
+        text-align: center;
+        padding: 8px;
+        border-radius: 8px;
+        margin-top: 10px;
+        font-weight: 600;
+        font-size: 12px;
+      }
+
+      /* Stats Ribbon */
+      #landing .stats-bar {
+        padding: 48px 0;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        background: rgba(13, 21, 39, 0.4);
+      }
+      #landing .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 24px;
+        text-align: center;
+      }
+      @media (max-width: 768px) {
+        #landing .stats-grid {
+          grid-template-columns: repeat(2, 1fr);
+          gap: 32px 16px;
+        }
+      }
+      #landing .stat-num {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: clamp(28px, 4vw, 42px);
+        font-weight: 800;
+        color: #ffffff;
+      }
+      #landing .stat-label {
+        font-size: 14px;
+        color: var(--text-muted);
+        margin-top: 4px;
+      }
+
+      /* Section Common */
+      #landing section.band {
+        padding: 96px 0;
+        position: relative;
+      }
+      #landing .section-header {
+        text-align: center;
+        max-width: 720px;
+        margin: 0 auto 56px;
+      }
+      #landing .section-header h2 {
+        font-size: clamp(26px, 3.5vw, 38px);
+        margin-top: 14px;
+      }
+      #landing .section-header p {
+        font-size: 17px;
+        color: var(--text-muted);
+        margin-top: 14px;
+        line-height: 1.6;
+      }
+
+      /* Problem vs Solution */
+      #landing .comparison-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+      }
+      @media (max-width: 768px) {
+        #landing .comparison-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      #landing .comp-card {
+        padding: 36px;
+        border-radius: 18px;
+        border: 1px solid var(--card-border);
+        background: var(--card-bg);
+      }
+      #landing .comp-bad {
+        border-color: rgba(239, 68, 68, 0.2);
+        background: rgba(239, 68, 68, 0.03);
+      }
+      #landing .comp-good {
+        border-color: rgba(45, 212, 191, 0.3);
+        background: rgba(20, 184, 166, 0.05);
+        box-shadow: 0 0 40px rgba(20, 184, 166, 0.08);
+      }
+      #landing .comp-card h3 {
+        font-size: 20px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #landing .comp-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 16px;
+        font-size: 15px;
+        color: var(--text-sub);
+        line-height: 1.5;
+      }
+      #landing .comp-icon {
+        flex-shrink: 0;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        margin-top: 2px;
+      }
+      #landing .comp-bad .comp-icon { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+      #landing .comp-good .comp-icon { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+
+      /* Steps (How It Works) */
+      #landing .steps-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 28px;
+        position: relative;
+      }
+      @media (max-width: 860px) {
+        #landing .steps-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      #landing .step-card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 18px;
+        padding: 36px 28px;
+        position: relative;
+        transition: all 0.25s;
+      }
+      #landing .step-card:hover {
+        border-color: var(--card-hover-border);
+        transform: translateY(-4px);
+        box-shadow: 0 12px 30px -10px rgba(20, 184, 166, 0.2);
+      }
+      #landing .step-number {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: rgba(20, 184, 166, 0.15);
+        border: 1px solid rgba(45, 212, 191, 0.3);
+        color: var(--teal-accent);
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-weight: 800;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 22px;
+      }
+      #landing .step-card h3 {
+        font-size: 19px;
+        margin-bottom: 12px;
+      }
+      #landing .step-card p {
+        color: var(--text-muted);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      /* Feature Grid */
+      #landing .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+      }
+      @media (max-width: 990px) {
+        #landing .features-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (max-width: 640px) {
+        #landing .features-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      #landing .feature-card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 18px;
+        padding: 32px 26px;
+        transition: all 0.25s;
+      }
+      #landing .feature-card:hover {
+        border-color: var(--card-hover-border);
+        transform: translateY(-4px);
+        box-shadow: 0 12px 30px -10px rgba(20, 184, 166, 0.18);
+      }
+      #landing .feature-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, rgba(20, 184, 166, 0.2) 0%, rgba(14, 165, 233, 0.1) 100%);
+        border: 1px solid rgba(45, 212, 191, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        margin-bottom: 20px;
+      }
+      #landing .feature-card h3 {
+        font-size: 18px;
+        margin-bottom: 10px;
+      }
+      #landing .feature-card p {
+        color: var(--text-muted);
+        font-size: 14.5px;
+        line-height: 1.6;
+      }
+
+      /* ROI Calculator */
+      #landing .roi-box {
+        background: linear-gradient(145deg, rgba(15, 23, 42, 0.9) 0%, rgba(13, 21, 39, 0.9) 100%);
+        border: 1px solid rgba(45, 212, 191, 0.25);
+        border-radius: 22px;
+        padding: 44px;
+        box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.6);
+      }
+      #landing .roi-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 40px;
+        align-items: center;
+      }
+      @media (max-width: 860px) {
+        #landing .roi-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      #landing .roi-control {
+        margin-bottom: 24px;
+      }
+      #landing .roi-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+      #landing .roi-slider {
+        width: 100%;
+        height: 8px;
+        border-radius: 4px;
+        background: #1e293b;
+        outline: none;
+        accent-color: var(--teal-primary);
+        cursor: pointer;
+      }
+      #landing .roi-result-card {
+        background: rgba(20, 184, 166, 0.08);
+        border: 1px solid rgba(45, 212, 191, 0.3);
+        border-radius: 18px;
+        padding: 32px;
+        text-align: center;
+      }
+      #landing .roi-recovered {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: clamp(32px, 4vw, 46px);
+        font-weight: 800;
+        color: #2dd4bf;
+        margin: 10px 0;
+      }
+
+      /* Testimonials */
+      #landing .reviews-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+      }
+      @media (max-width: 860px) {
+        #landing .reviews-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      #landing .review-card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 18px;
+        padding: 28px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      #landing .review-stars {
+        color: #fbbf24;
+        font-size: 16px;
+        margin-bottom: 14px;
+        letter-spacing: 2px;
+      }
+      #landing .review-text {
+        color: var(--text-sub);
+        font-size: 14.5px;
+        line-height: 1.6;
+        margin-bottom: 20px;
+        font-style: italic;
+      }
+      #landing .review-author {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      #landing .author-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #14b8a6, #0284c7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 14px;
+        color: #fff;
+      }
+      #landing .author-name {
+        font-weight: 600;
+        font-size: 14px;
+        color: #fff;
+      }
+      #landing .author-clinic {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      /* Request Demo Section */
+      #landing .demo-section {
+        background: radial-gradient(circle at 50% 50%, rgba(20, 184, 166, 0.1) 0%, transparent 60%);
+      }
+      #landing .demo-grid {
+        display: grid;
+        grid-template-columns: 1fr 1.15fr;
+        gap: 48px;
+        align-items: start;
+      }
+      @media (max-width: 920px) {
+        #landing .demo-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      #landing .demo-info h2 {
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.2;
+      }
+      #landing .demo-perks {
+        margin: 28px 0;
+      }
+      #landing .demo-perk {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+        font-size: 15px;
+        color: var(--text-sub);
+      }
+      #landing .demo-perk-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: rgba(20, 184, 166, 0.15);
+        color: var(--teal-accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      #landing .demo-contact-box {
+        margin-top: 32px;
+        padding: 20px;
+        border-radius: 14px;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid var(--card-border);
+      }
+      #landing .demo-contact-box a {
+        color: var(--teal-accent);
+        font-weight: 600;
+      }
+
+      /* Demo Form Container */
+      #landing .demo-form-wrapper {
+        background: rgba(15, 23, 42, 0.85);
+        border: 1px solid rgba(45, 212, 191, 0.3);
+        border-radius: 20px;
+        padding: 36px;
+        box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.7), 0 0 30px rgba(20, 184, 166, 0.1);
+      }
+      #landing .demo-form {
+        display: grid;
+        gap: 18px;
+      }
+      #landing .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      @media (max-width: 540px) {
+        #landing .form-row {
+          grid-template-columns: 1fr;
+        }
+      }
+      #landing .demo-form label {
+        display: grid;
+        gap: 7px;
+        font-size: 13.5px;
+        font-weight: 600;
+        color: var(--text-sub);
+      }
+      #landing .demo-form input,
+      #landing .demo-form textarea {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: #090e1a;
+        color: #ffffff;
+        font-family: inherit;
+        font-size: 14.5px;
+        transition: all 0.15s ease;
+      }
+      #landing .demo-form input:focus,
+      #landing .demo-form textarea:focus {
+        outline: none;
+        border-color: var(--teal-accent);
+        box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.2);
+        background: #0b1324;
+      }
+      #landing .demo-form .btn-submit {
+        margin-top: 10px;
+        width: 100%;
+        height: 52px;
+        font-size: 16px;
+        border-radius: 12px;
+      }
+      #landing .hp {
+        position: absolute;
+        left: -9999px;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+      }
+
+      /* FAQ */
+      #landing .faq-grid {
+        max-width: 800px;
+        margin: 0 auto;
+        display: grid;
+        gap: 16px;
+      }
+      #landing details.faq-item {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 14px;
+        padding: 20px 24px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      #landing details.faq-item[open] {
+        border-color: rgba(45, 212, 191, 0.35);
+        background: rgba(15, 23, 42, 0.9);
+      }
+      #landing summary {
+        font-weight: 600;
+        font-size: 16px;
+        color: #ffffff;
+        list-style: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      #landing summary::-webkit-details-marker { display: none; }
+      #landing summary::after {
+        content: '+';
+        font-size: 20px;
+        color: var(--teal-accent);
+        font-weight: 400;
+        transition: transform 0.2s;
+      }
+      #landing details[open] summary::after {
+        content: '−';
+      }
+      #landing details.faq-item p {
+        margin-top: 14px;
+        color: var(--text-muted);
+        font-size: 14.5px;
+        line-height: 1.6;
+      }
+
+      /* Final CTA Box */
+      #landing .final-cta-card {
+        background: linear-gradient(135deg, rgba(13, 148, 136, 0.2) 0%, rgba(15, 23, 42, 0.9) 100%);
+        border: 1px solid rgba(45, 212, 191, 0.3);
+        border-radius: 24px;
+        padding: 64px 32px;
+        text-align: center;
+        box-shadow: 0 20px 60px -15px rgba(20, 184, 166, 0.2);
+      }
+      #landing .final-cta-card h2 {
+        font-size: clamp(28px, 4vw, 42px);
+      }
+      #landing .final-cta-card p {
+        color: var(--text-sub);
+        font-size: 17px;
+        max-width: 600px;
+        margin: 16px auto 32px;
+      }
+
+      /* Footer */
+      #landing footer {
+        border-top: 1px solid var(--line);
+        padding: 48px 0 32px;
+        background: #050810;
+        font-size: 14px;
+        color: var(--text-muted);
+      }
+      #landing .footer-grid {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 20px;
+      }
+      #landing .footer-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        color: #fff;
+      }
+      #landing .footer-links {
+        display: flex;
+        gap: 24px;
+      }
+      #landing .footer-links a:hover {
+        color: var(--teal-accent);
+      }
+
+      @media (max-width: 768px) {
+        #landing .nav-links { display: none; }
+        #landing .hero { padding: 50px 0 40px; }
+        #landing section.band { padding: 60px 0; }
+        #landing .demo-form-wrapper { padding: 24px 20px; }
+        #landing .roi-box { padding: 24px 20px; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+
+    <div id="landing">
+      <!-- Sticky Navigation Header -->
+      <header>
+        <div class="wrap nav">
+          <a class="brand" href="/">
+            <img src="/favicon.svg" alt="SmartDentist Logo" width="36" height="36" />
+            <span>SmartDentist</span>
+            <span class="badge-tag">Clinic OS</span>
+          </a>
+          
+          <nav class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#how-it-works">How It Works</a>
+            <a href="#roi">ROI Calculator</a>
+            <a href="#testimonials">Reviews</a>
+            <a href="#faq">FAQ</a>
+          </nav>
+
+          <div class="nav-actions">
+            <a class="btn btn-ghost" href="/app">Doctor Login</a>
+            <a class="btn btn-primary" href="#demo">Request Free Demo</a>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <!-- Hero Section -->
+        <section class="hero">
+          <div class="wrap hero-content">
+            <div class="glow-badge">
+              <span class="dot"></span>
+              <span>India's #1 Automated Dental Recall Software</span>
+            </div>
+
+            <h1>
+              Never Lose A Patient To A Missed Follow-up.
+              <br />
+              <span class="text-gradient">Automate WhatsApp Recalls On Autopilot.</span>
+            </h1>
+
+            <p class="lede">
+              SmartDentist turns routine treatments into lifelong clinic retention. Automatically calculate
+              and trigger personalized WhatsApp recall reminders based on each patient's procedure — zero manual calling,
+              higher clinic revenue, and full EMR charting in one fast system.
+            </p>
+
+            <div class="hero-actions">
+              <a class="btn btn-primary btn-lg" href="#demo">
+                <span>Book 1-on-1 Free Demo</span>
+                <span>→</span>
+              </a>
+              <a class="btn btn-ghost btn-lg" href="#features">
+                <span>Explore Features</span>
+              </a>
+            </div>
+
+            <div class="hero-trust">
+              <span>⚡ <strong>98%</strong> WhatsApp Open Rate</span>
+              <span>•</span>
+              <span>📈 <strong>+35%</strong> Repeat Retention</span>
+              <span>•</span>
+              <span>⏱️ <strong>Zero</strong> Manual Calling</span>
+              <span>•</span>
+              <span>🇮🇳 <strong>Made for</strong> Indian Clinics</span>
+            </div>
+
+            <!-- Interactive App Preview Window -->
+            <div class="preview-container">
+              <div class="preview-window">
+                <div class="window-bar">
+                  <div class="window-dots">
+                    <span></span><span></span><span></span>
+                  </div>
+                  <div class="window-title">smartdentist.app / clinic / live-dashboard</div>
+                  <div style="font-size: 11px; color: #2dd4bf; font-weight: 600;">● Live Clinic Stream</div>
+                </div>
+
+                <div class="preview-grid">
+                  <!-- Left: DaySheet Queue -->
+                  <div class="preview-col">
+                    <div class="col-header">
+                      <h4>Today's Queue</h4>
+                      <span class="chip">6 Patients</span>
+                    </div>
+
+                    <div class="queue-card active">
+                      <div class="name">
+                        <span>Priya Sharma</span>
+                        <span style="color: #2dd4bf; font-size: 12px;">Chair #1</span>
+                      </div>
+                      <div class="meta">RCT Follow-up • Tooth 36</div>
+                      <span class="badge badge-chair">In Consultation</span>
+                    </div>
+
+                    <div class="queue-card">
+                      <div class="name">
+                        <span>Rajesh Verma</span>
+                        <span style="color: #94a3b8; font-size: 12px;">11:30 AM</span>
+                      </div>
+                      <div class="meta">Ultrasonic Scaling & Polish</div>
+                      <span class="badge badge-recall">WhatsApp Recall Return</span>
+                    </div>
+
+                    <div class="queue-card">
+                      <div class="name">
+                        <span>Ananya Gupta</span>
+                        <span style="color: #94a3b8; font-size: 12px;">12:15 PM</span>
+                      </div>
+                      <div class="meta">Crown Cementation • Tooth 16</div>
+                      <span class="badge badge-wait">Waiting</span>
+                    </div>
+                  </div>
+
+                  <!-- Middle: Tooth Chart & Consultation -->
+                  <div class="chart-view">
+                    <div class="chart-header">
+                      <div>
+                        <h4 style="font-size: 14px; margin: 0;">Interactive FDI Tooth Chart</h4>
+                        <span style="font-size: 11px; color: var(--text-muted);">Patient: Priya Sharma (F, 29)</span>
+                      </div>
+                      <span class="chip" style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Autosaved</span>
+                    </div>
+
+                    <div class="tooth-grid">
+                      <div class="tooth-box">18</div>
+                      <div class="tooth-box">17</div>
+                      <div class="tooth-box crown">16<br><span style="font-size:9px;">Crown</span></div>
+                      <div class="tooth-box">15</div>
+                      <div class="tooth-box">14</div>
+                      <div class="tooth-box">13</div>
+                      <div class="tooth-box">12</div>
+                      <div class="tooth-box">11</div>
+                      <div class="tooth-box">48</div>
+                      <div class="tooth-box">47</div>
+                      <div class="tooth-box">46</div>
+                      <div class="tooth-box">45</div>
+                      <div class="tooth-box">34</div>
+                      <div class="tooth-box scale">35<br><span style="font-size:9px;">Scale</span></div>
+                      <div class="tooth-box rct">36<br><span style="font-size:9px;">RCT</span></div>
+                      <div class="tooth-box">37</div>
+                    </div>
+
+                    <div class="rx-quick-view">
+                      <div style="font-weight: 600; color: #fff; margin-bottom: 6px;">1-Click Digital Rx & Letterhead Print</div>
+                      <div class="rx-item">
+                        <span>Tab. Augmentin 625mg (1-0-1 x 5 days)</span>
+                        <span style="color: var(--teal-accent);">Post-Meal</span>
+                      </div>
+                      <div class="rx-item">
+                        <span>Tab. Ketorol-DT (SOS for acute pain)</span>
+                        <span style="color: var(--teal-accent);">Dissolve in water</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Right: WhatsApp Automation Trigger -->
+                  <div class="wa-panel">
+                    <div class="col-header">
+                      <h4>Automated Recall Bot</h4>
+                      <span class="chip" style="background: #25d366; color: #064e3b;">WhatsApp API</span>
+                    </div>
+
+                    <div class="wa-bubble">
+                      <div class="wa-header">
+                        <span>💬 SmartDentist Recall Trigger</span>
+                      </div>
+                      <p>
+                        "Namaste Priya ji! 🙏<br><br>
+                        This is a gentle reminder from <strong>Dr. Sharma's Dental Clinic</strong>. Your 6-month routine Scaling & Checkup is due this week for healthy gums & teeth.<br><br>
+                        Would you like us to reserve your preferred appointment slot?"
+                      </p>
+                      <div class="wa-btn-mock">📅 Reply '1' to Confirm Slot</div>
+                      <div class="wa-time">Today, 09:00 AM • Delivered ✓✓</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Stats Bar -->
+        <section class="stats-bar">
+          <div class="wrap">
+            <div class="stats-grid">
+              <div>
+                <div class="stat-num text-gradient-teal">+38%</div>
+                <div class="stat-label">Average Repeat Revenue</div>
+              </div>
+              <div>
+                <div class="stat-num">98%</div>
+                <div class="stat-label">WhatsApp Message Read Rate</div>
+              </div>
+              <div>
+                <div class="stat-num text-gradient">0 Mins</div>
+                <div class="stat-label">Staff Time Spent Calling</div>
+              </div>
+              <div>
+                <div class="stat-num text-gradient-teal">5.0 ★</div>
+                <div class="stat-label">Doctor & Patient Satisfaction</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Problem vs Solution -->
+        <section class="band" id="why-smartdentist">
+          <div class="wrap">
+            <div class="section-header">
+              <div class="glow-badge">Why Clinics Switch</div>
+              <h2>Why Traditional Dental Registers Cost You Lakhs Every Year</h2>
+              <p>Manual reminder diaries fail because staff get busy. SmartDentist puts your patient follow-ups on 100% automated autopilot.</p>
+            </div>
+
+            <div class="comparison-grid">
+              <!-- Bad Way -->
+              <div class="comp-card comp-bad">
+                <h3 style="color: #f87171;">
+                  <span style="font-size: 24px;">❌</span> The Old Manual Way
+                </h3>
+                <ul class="comp-list">
+                  <li>
+                    <span class="comp-icon">✕</span>
+                    <span><strong>Lost Follow-ups:</strong> 60% of scaling and RCT follow-up patients forget to return because nobody called them on time.</span>
+                  </li>
+                  <li>
+                    <span class="comp-icon">✕</span>
+                    <span><strong>Phone Calls Ignored:</strong> Patients don't answer unknown clinic phone calls while at work or driving.</span>
+                  </li>
+                  <li>
+                    <span class="comp-icon">✕</span>
+                    <span><strong>Paper Registers & Lost Records:</strong> Physical case cards get misplaced, torn, or ruined with tea stains.</span>
+                  </li>
+                  <li>
+                    <span class="comp-icon">✕</span>
+                    <span><strong>Empty Chair Hours:</strong> Inconsistent appointment booking creates dry clinic days with zero revenue.</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- Good Way -->
+              <div class="comp-card comp-good">
+                <h3 style="color: #2dd4bf;">
+                  <span style="font-size: 24px;">✅</span> The SmartDentist Way
+                </h3>
+                <ul class="comp-list">
+                  <li>
+                    <span class="comp-icon">✓</span>
+                    <span><strong>100% Automatic Triggers:</strong> Recall intervals are assigned directly upon treatment completion (e.g. 6 mos for cleaning, 3 mos for ortho).</span>
+                  </li>
+                  <li>
+                    <span class="comp-icon">✓</span>
+                    <span><strong>WhatsApp Delivery:</strong> Reminders land on the app patients check 50+ times a day with verified clinic branding.</span>
+                  </li>
+                  <li>
+                    <span class="comp-icon">✓</span>
+                    <span><strong>Digital EMR & Tooth Chart:</strong> Entire treatment history, photos, prescriptions, and past payments accessible in 2 clicks.</span>
+                  </li>
+                  <li>
+                    <span class="comp-icon">✓</span>
+                    <span><strong>Predictable Recurring Income:</strong> Filled appointment schedule week after week from guaranteed return patients.</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- How it works (3 Steps) -->
+        <section class="band" id="how-it-works" style="background: rgba(13, 21, 39, 0.3);">
+          <div class="wrap">
+            <div class="section-header">
+              <div class="glow-badge">Simple 3-Step Process</div>
+              <h2>How Automated Recalls Work</h2>
+              <p>No extra work for your front desk. Follow-ups run straight from your standard chairside workflow.</p>
+            </div>
+
+            <div class="steps-grid">
+              <div class="step-card">
+                <div class="step-number">01</div>
+                <h3>Record the Treatment</h3>
+                <p>During or after the consultation, tap the procedure done (e.g., Root Canal, Ultrasonic Scaling, Crown, Composite Filling).</p>
+              </div>
+
+              <div class="step-card">
+                <div class="step-number">02</div>
+                <h3>Recall Date Sets Automatically</h3>
+                <p>SmartDentist calculates the exact follow-up timeline based on clinical guidelines (or your custom clinic preferences).</p>
+              </div>
+
+              <div class="step-card">
+                <div class="step-number">03</div>
+                <h3>Patient Returns via WhatsApp</h3>
+                <p>When the due date arrives, a polite, personalized WhatsApp message is sent to the patient with 1-click booking confirmation.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Features Grid -->
+        <section class="band" id="features">
+          <div class="wrap">
+            <div class="section-header">
+              <div class="glow-badge">All-In-One Practice OS</div>
+              <h2>Everything Your Dental Clinic Needs To Scale</h2>
+              <p>Designed specifically for dental surgeons, periodontists, orthodontists, and multi-chair clinics across India.</p>
+            </div>
+
+            <div class="features-grid">
+              <div class="feature-card">
+                <div class="feature-icon">💬</div>
+                <h3>Automated WhatsApp Recalls</h3>
+                <p>Customizable recall intervals per treatment. Patients receive friendly reminders in English or Hindi on autopilot.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">🦷</div>
+                <h3>Visual Tooth Charting & EMR</h3>
+                <p>Interactive FDI tooth notation. Mark caries, root canals, implants, and crowns visually with past visit history.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">📄</div>
+                <h3>1-Click Digital Prescriptions</h3>
+                <p>Pre-configured dental drug dosages. Print on clinic letterhead or send PDF prescriptions straight to patient's WhatsApp.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">💳</div>
+                <h3>Chairside Billing & Receipts</h3>
+                <p>Generate transparent treatment estimates, record advance payments, and send instant WhatsApp payment receipts.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">🏥</div>
+                <h3>Multi-Branch & Staff Roles</h3>
+                <p>Manage multiple clinic branches from a single login. Restrict receptionist vs doctor access with secure permissions.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>Recall Analytics & ROI Reports</h3>
+                <p>Track how many patients returned, conversion percentages, and total clinic revenue generated from recall messages.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Interactive ROI Calculator -->
+        <section class="band" id="roi" style="background: rgba(13, 21, 39, 0.4);">
+          <div class="wrap">
+            <div class="section-header">
+              <div class="glow-badge">Revenue Calculator</div>
+              <h2>Calculate Your Clinic's Lost Revenue</h2>
+              <p>See how much additional revenue SmartDentist will recover for your clinic each month.</p>
+            </div>
+
+            <div class="roi-box">
+              <div class="roi-grid">
+                <div>
+                  <div class="roi-control">
+                    <div class="roi-label">
+                      <span>Monthly Patients Treated:</span>
+                      <span id="patient-count-val" style="color: var(--teal-accent); font-size: 16px;">150 Patients</span>
+                    </div>
+                    <input type="range" min="30" max="600" step="10" value="150" class="roi-slider" id="patient-slider" oninput="updateROI()" />
+                  </div>
+
+                  <div class="roi-control">
+                    <div class="roi-label">
+                      <span>Average Treatment Value:</span>
+                      <span id="treatment-val" style="color: var(--teal-accent); font-size: 16px;">₹1,500</span>
+                    </div>
+                    <input type="range" min="500" max="8000" step="250" value="1500" class="roi-slider" id="fee-slider" oninput="updateROI()" />
+                  </div>
+
+                  <p style="font-size: 13px; color: var(--text-muted); margin-top: 16px;">
+                    *Based on an industry-proven 25% recall return rate through automated WhatsApp triggers.
+                  </p>
+                </div>
+
+                <div class="roi-result-card">
+                  <div style="font-size: 14px; font-weight: 600; color: var(--text-sub);">Estimated Extra Monthly Revenue:</div>
+                  <div class="roi-recovered" id="recovered-amount">₹56,250</div>
+                  <div style="font-size: 13px; color: var(--text-muted);">Recovered from missed follow-ups & recurring cleanings</div>
+                  <a class="btn btn-primary" href="#demo" style="margin-top: 20px; width: 100%;">
+                    Start Recovering Lost Revenue →
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Testimonials -->
+        <section class="band" id="testimonials">
+          <div class="wrap">
+            <div class="section-header">
+              <div class="glow-badge">Doctor Testimonials</div>
+              <h2>Trusted By Leading Dental Practices</h2>
+              <p>Hear how dentists in Patna and across India transformed their patient retention.</p>
+            </div>
+
+            <div class="reviews-grid">
+              <div class="review-card">
+                <div>
+                  <div class="review-stars">★★★★★</div>
+                  <p class="review-text">
+                    "Before SmartDentist, we relied on physical registers and our receptionist never had time to call old patients. Now, 30-40 patients return every month automatically via WhatsApp for cleaning and crown checks."
+                  </p>
+                </div>
+                <div class="review-author">
+                  <div class="author-avatar">AK</div>
+                  <div>
+                    <div class="author-name">Dr. Amit Kumar, MDS</div>
+                    <div class="author-clinic">Advanced Dental Care, Patna</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="review-card">
+                <div>
+                  <div class="review-stars">★★★★★</div>
+                  <p class="review-text">
+                    "The tooth chart and instant WhatsApp digital prescriptions are brilliant. Patients love getting their prescription directly on WhatsApp, and the interface is super clean and fast."
+                  </p>
+                </div>
+                <div class="review-author">
+                  <div class="author-avatar" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">PS</div>
+                  <div>
+                    <div class="author-name">Dr. Priya Singh, BDS</div>
+                    <div class="author-clinic">Smile Dental Clinic, Kankarbagh</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="review-card">
+                <div>
+                  <div class="review-stars">★★★★★</div>
+                  <p class="review-text">
+                    "We run 2 branches in Patna. Managing receptionists, doctor notes, and patient billing from a single dashboard has made our operations completely hassle-free."
+                  </p>
+                </div>
+                <div class="review-author">
+                  <div class="author-avatar" style="background: linear-gradient(135deg, #f59e0b, #ef4444);">RS</div>
+                  <div>
+                    <div class="author-name">Dr. Rajesh Sinha</div>
+                    <div class="author-clinic">City Dental Hospital, Boring Road</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Request a Demo Section -->
+        <section class="band demo-section" id="demo">
+          <div class="wrap demo-grid">
+            <!-- Left Column: Info & Trust -->
+            <div class="demo-info">
+              <div class="glow-badge" style="margin-bottom: 16px;">Get Started Today</div>
+              <h2>See SmartDentist In Action For Your Clinic</h2>
+              <p style="color: var(--text-muted); font-size: 16px; margin-top: 14px; line-height: 1.6;">
+                Book a personalized 15-minute live demonstration. We'll show you how automated WhatsApp recalls,
+                instant digital Rx, and visual tooth charting will boost your clinic's patient flow.
+              </p>
+
+              <div class="demo-perks">
+                <div class="demo-perk">
+                  <div class="demo-perk-icon">✓</div>
+                  <span><strong>15-Minute 1-on-1 Walkthrough:</strong> Custom demonstration for your clinic workflow.</span>
+                </div>
+                <div class="demo-perk">
+                  <div class="demo-perk-icon">✓</div>
+                  <span><strong>100% Free Setup & Onboarding:</strong> We help import your existing patient records.</span>
+                </div>
+                <div class="demo-perk">
+                  <div class="demo-perk-icon">✓</div>
+                  <span><strong>Zero Hardware Required:</strong> Runs smoothly in any browser (laptop, tablet, phone).</span>
+                </div>
+              </div>
+
+              <div class="demo-contact-box">
+                <div style="font-size: 14px; color: var(--text-muted);">Prefer direct communication?</div>
+                <div style="margin-top: 6px; font-size: 15px;">
+                  Email us directly: <a href="mailto:alokkumar.in91@gmail.com">alokkumar.in91@gmail.com</a>
+                </div>
+                <div style="margin-top: 4px; font-size: 13px; color: var(--text-muted);">
+                  Patna, Bihar, India • Quick 24h Response
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Demo Request Form -->
+            <div class="demo-form-wrapper">
+              <div style="margin-bottom: 20px;">
+                <h3 style="font-size: 20px;">Request Your Free Demo</h3>
+                <p style="font-size: 13.5px; color: var(--text-muted); margin-top: 4px;">Fill out this form and our team will get in touch shortly.</p>
+              </div>
+
+              <!-- Form preserving exact FormSubmit endpoint and exact input names -->
+              <form class="demo-form" action="https://formsubmit.co/alokkumar.in91@gmail.com" method="POST">
+                <input type="hidden" name="_subject" value="SmartDentist: new demo request" />
+                <input type="hidden" name="_template" value="table" />
+                <input type="hidden" name="_next" value="https://smartdentist.pages.dev/demo-requested" />
+                <input type="text" name="_honey" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true" />
+
+                <div class="form-row">
+                  <label>
+                    Doctor / Your Name *
+                    <input type="text" name="Name" required placeholder="e.g. Dr. Alok Kumar" autocomplete="name" />
+                  </label>
+                  <label>
+                    Clinic Name *
+                    <input type="text" name="Clinic" required placeholder="e.g. Care Dental Clinic" autocomplete="organization" />
+                  </label>
+                </div>
+
+                <div class="form-row">
+                  <label>
+                    WhatsApp / Phone Number *
+                    <input type="tel" name="Phone" required placeholder="e.g. +91 98765 43210" autocomplete="tel" inputmode="tel" />
+                  </label>
+                  <label>
+                    Email Address
+                    <input type="email" name="email" placeholder="e.g. doctor@clinic.com" autocomplete="email" />
+                  </label>
+                </div>
+
+                <label>
+                  City / Location
+                  <input type="text" name="City" placeholder="e.g. Patna, Bihar" autocomplete="address-level2" />
+                </label>
+
+                <label>
+                  Message or Specific Requirements (Optional)
+                  <textarea name="Message" rows="3" placeholder="Tell us about your clinic (e.g. single chair, multi-branch, currently using paper registers)"></textarea>
+                </label>
+
+                <button class="btn btn-primary btn-submit" type="submit">
+                  <span>🚀 Request My Free Demo</span>
+                </button>
+
+                <div style="text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 6px;">
+                  🔒 100% Privacy Protected. No spam guaranteed.
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- FAQ Section -->
+        <section class="band" id="faq">
+          <div class="wrap">
+            <div class="section-header">
+              <div class="glow-badge">Got Questions?</div>
+              <h2>Frequently Asked Questions</h2>
+              <p>Everything you need to know about setting up SmartDentist for your clinic.</p>
+            </div>
+
+            <div class="faq-grid">
+              <details class="faq-item" open>
+                <summary>How does the automated WhatsApp recall reminder work?</summary>
+                <p>
+                  When you record a treatment for a patient (like Scaling, RCT, Extraction, or Ortho), SmartDentist automatically
+                  assigns the clinically recommended recall interval (e.g. 6 months for scaling). When that date arrives, our automated system
+                  sends a polite, branded reminder to the patient's WhatsApp without your staff having to dial a single number.
+                </p>
+              </details>
+
+              <details class="faq-item">
+                <summary>Do I need to install any heavy software or buy new computers?</summary>
+                <p>
+                  No! SmartDentist runs 100% in your web browser. You can access it on your existing clinic laptop, desktop, tablet,
+                  or smartphone. There are zero installation files or complicated server setups.
+                </p>
+              </details>
+
+              <details class="faq-item">
+                <summary>Can my receptionist and associate doctors use it simultaneously?</summary>
+                <p>
+                  Yes. SmartDentist has built-in role-based access control. Receptionists can handle appointments, walk-ins, and payments,
+                  while doctors can write clinical notes, tooth charting, and prescriptions. Everything updates in real time.
+                </p>
+              </details>
+
+              <details class="faq-item">
+                <summary>Can we customize the recall intervals and message templates?</summary>
+                <p>
+                  Absolutely. Every clinic can customize recall time periods for specific procedures (e.g. 3 months, 6 months, 1 year)
+                  and personalize WhatsApp message greetings in English or Hindi.
+                </p>
+              </details>
+
+              <details class="faq-item">
+                <summary>Is our patient data safe and confidential?</summary>
+                <p>
+                  Yes, your data is encrypted in transit and at rest using enterprise-grade cloud security. Your clinic's records remain
+                  private, strictly protected by row-level security, and never shared.
+                </p>
+              </details>
+            </div>
+          </div>
+        </section>
+
+        <!-- Final CTA Banner -->
+        <section class="band" style="padding-top: 0;">
+          <div class="wrap">
+            <div class="final-cta-card">
+              <div class="glow-badge" style="margin-bottom: 16px;">Transform Your Clinic</div>
+              <h2>Ready To Fill Your Clinic Chairs With Automated Recalls?</h2>
+              <p>Join dentists who are increasing patient retention and saving hours of administrative work every week.</p>
+              <div style="display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;">
+                <a class="btn btn-primary btn-lg" href="#demo">Request Free Demo Now →</a>
+                <a class="btn btn-ghost btn-lg" href="/app">Doctor Login</a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Modern Footer -->
+      <footer>
+        <div class="wrap">
+          <div class="footer-grid">
+            <div class="footer-brand">
+              <img src="/favicon.svg" alt="" width="28" height="28" style="border-radius: 6px; background: #fff; padding: 2px;" />
+              <span>SmartDentist</span>
+            </div>
+
+            <div class="footer-links">
+              <a href="#features">Features</a>
+              <a href="#how-it-works">How It Works</a>
+              <a href="#roi">ROI Calculator</a>
+              <a href="#demo">Demo</a>
+              <a href="/app">Sign In</a>
+            </div>
+
+            <div>
+              Contact: <a href="mailto:alokkumar.in91@gmail.com" style="color: var(--teal-accent);">alokkumar.in91@gmail.com</a>
+            </div>
+          </div>
+
+          <div style="margin-top: 28px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
+            © 2026 SmartDentist. Dental Clinic Practice OS. Designed for modern dental clinics in India. All rights reserved.
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Client-side Interactive ROI Calculator Script -->
+    <script>
+      function updateROI() {
+        var pSlider = document.getElementById('patient-slider');
+        var fSlider = document.getElementById('fee-slider');
+        var pVal = document.getElementById('patient-count-val');
+        var fVal = document.getElementById('treatment-val');
+        var recVal = document.getElementById('recovered-amount');
+
+        if (!pSlider || !fSlider || !recVal) return;
+
+        var patients = parseInt(pSlider.value, 10);
+        var fee = parseInt(fSlider.value, 10);
+
+        if (pVal) pVal.textContent = patients + " Patients";
+        if (fVal) fVal.textContent = "₹" + fee.toLocaleString('en-IN');
+
+        // Estimate: 25% recall return rate
+        var extraRevenue = Math.round(patients * 0.25 * fee);
+        recVal.textContent = "₹" + extraRevenue.toLocaleString('en-IN');
+      }
+    </script>
+
+    <!-- React App Entry Point -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -51,7 +51,13 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,ttf}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api/],
+        // These static public files must come from the network, not be answered with the app shell.
+        navigateFallbackDenylist: [
+          /^\/api/,
+          /^\/robots\.txt$/,
+          /^\/llms\.txt$/,
+          /^\/demo-requested(\.html)?$/,
+        ],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,

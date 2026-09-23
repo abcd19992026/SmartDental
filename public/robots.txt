@@ -1,0 +1,29 @@
+# SmartDentist — https://smartdentist.pages.dev/
+# The public landing page ("/") and llms.txt may be crawled.
+# /app, /admin and /login are the login-gated clinic application, not content.
+
+User-agent: Googlebot
+User-agent: Bingbot
+User-agent: GPTBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: Claude-Web
+User-agent: PerplexityBot
+User-agent: CCBot
+User-agent: Google-Extended
+Allow: /
+Disallow: /app$
+Disallow: /app/
+Disallow: /admin$
+Disallow: /admin/
+Disallow: /login
+Disallow: /demo-requested
+
+User-agent: *
+Allow: /
+Disallow: /app$
+Disallow: /app/
+Disallow: /admin$
+Disallow: /admin/
+Disallow: /login
+Disallow: /demo-requested

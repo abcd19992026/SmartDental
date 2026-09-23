@@ -1,0 +1,25 @@
+# SmartDentist
+
+> SmartDentist is dental clinic management software for dental clinics in India, currently focused on Patna, Bihar. It automatically sends WhatsApp recall reminders to patients based on the treatment they received, so patients come back for follow-ups without clinic staff manually tracking dates or calling anyone.
+
+## Who it is for
+
+- Dentists and dental clinics in India (currently focused on Patna).
+- Single clinics and clinics with more than one branch.
+
+## Key features
+
+- Automatic WhatsApp recall reminders: each treatment type has a recall interval set by the clinic; when a patient's recall date comes, they are sent a reminder on WhatsApp.
+- Patient records: patient details, visit and treatment history, and a tooth chart.
+- Prescriptions: written during the consultation; can be printed on the clinic's letterhead or sent to the patient as a PDF on WhatsApp.
+- Billing: record payments against each patient and view payment history.
+- Multi-branch support: clinics with more than one branch manage them from one account.
+
+## Details
+
+- Runs in the web browser (web application); no installation needed.
+- Based in Patna, India.
+- Website: https://smartdentist.pages.dev/
+- Contact: alokkumar.in91@gmail.com
+- Demo: clinics can request a demo using the form at https://smartdentist.pages.dev/#demo
+- The clinic application itself (/app) requires a login and is not public content.

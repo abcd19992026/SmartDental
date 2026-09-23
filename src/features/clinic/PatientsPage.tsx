@@ -666,6 +666,7 @@ export function PatientsPage() {
                 {/* Prescriptions */}
                 <PrescriptionsCard
                   patientId={selectedPatient.id}
+                  patientName={selectedPatient.name}
                   refreshKey={prescriptionsRefreshKey}
                   dentitionType={(selectedPatient.dentition_type as "adult" | "child") || "adult"}
                 />

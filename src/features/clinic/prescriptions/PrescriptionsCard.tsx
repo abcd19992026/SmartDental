@@ -11,13 +11,14 @@ import { EditPrescriptionModal } from "@/features/clinic/prescriptions/EditPresc
 
 interface PrescriptionsCardProps {
   patientId: string;
+  patientName?: string;
   /** Bumped by the parent (e.g. after AddVisitModal's onSuccess) to trigger a reload. */
   refreshKey?: number;
   /** For the edit modal's tooth chart layout. Defaults to "adult" when unknown. */
   dentitionType?: "adult" | "child";
 }
 
-export function PrescriptionsCard({ patientId, refreshKey, dentitionType }: PrescriptionsCardProps) {
+export function PrescriptionsCard({ patientId, patientName, refreshKey, dentitionType }: PrescriptionsCardProps) {
   const { profile } = useAuth();
   // Matches AddVisitModal's canPrescribe gate -- editing a prescription is owner/super_admin
   // only (prescriptions_update RLS), so a receptionist never sees a button that would just fail.
@@ -96,7 +97,12 @@ export function PrescriptionsCard({ patientId, refreshKey, dentitionType }: Pres
                       Edit
                     </Button>
                   )}
-                  <SendPrescriptionButton prescriptionId={p.id} />
+                  <SendPrescriptionButton
+                    prescriptionId={p.id}
+                    patientName={patientName}
+                    prescribedOn={p.prescribed_on}
+                    doctorName={p.doctor_name}
+                  />
                 </div>
               </div>
             ))}

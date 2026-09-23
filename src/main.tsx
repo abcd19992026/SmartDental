@@ -8,8 +8,12 @@ import App from './App.tsx'
 
 registerSW({ immediate: true })
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// index.html's inline script sets data-app on every route except a logged-out visit to "/",
+// where the static landing page in index.html is shown instead and React stays unmounted.
+if (document.documentElement.hasAttribute('data-app')) {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+}
