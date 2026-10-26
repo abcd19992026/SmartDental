@@ -13,7 +13,7 @@ import { useAuth } from "@/auth/useAuth";
 import { todayIST } from "@/lib/dates";
 import type { Database } from "@/types/database.types";
 import { useToast } from "@/components/ui/toast";
-import { startWhatsAppSignup } from "@/lib/whatsapp-embedded-signup";
+import { startWhatsAppSignup, useFacebookSdkStatus } from "@/lib/whatsapp-embedded-signup";
 import {
   connectWhatsApp,
   disconnectWhatsApp,
@@ -59,6 +59,9 @@ export function WhatsAppTab() {
   const [connectStep, setConnectStep] = useState<"idle" | "popup" | "connecting">("idle");
   const [connectError, setConnectError] = useState<string | null>(null);
   const [connectInfo, setConnectInfo] = useState<string | null>(null);
+  // Loads + initialises the Facebook SDK as soon as this tab mounts, so FB.login can run inside the
+  // click itself (a popup opened after any wait is blocked by the browser).
+  const sdkStatus = useFacebookSdkStatus();
 
   // Disconnect confirmation modal state
   const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
@@ -66,6 +69,10 @@ export function WhatsAppTab() {
 
   // Existing Form State
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
+  // The whatsapp_enabled value this page last read FROM THE SERVER. Connecting/disconnecting changes it
+  // server-side (connect switches automatic sending off), so Save compares against it and never writes
+  // a stale checkbox value back.
+  const loadedEnabledRef = useRef(false);
   const [testPhoneNumber, setTestPhoneNumber] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
 
@@ -78,6 +85,22 @@ export function WhatsAppTab() {
     if (res.ok) {
       setWaStatus(res.data);
     }
+  }
+
+  /** Re-reads the clinic row (and so whatsapp_enabled) without the full-page skeleton. Used after
+   * connect/disconnect, which change whatsapp_enabled on the server. */
+  async function refreshClinicState() {
+    if (!profile?.clinic_id) return;
+    const { data, error } = await supabase.from("clinics").select("*").eq("id", profile.clinic_id).single();
+    if (error || !data) return;
+    setClinic(data);
+    const enabled = data.whatsapp_enabled ?? false;
+    loadedEnabledRef.current = enabled;
+    setWhatsappEnabled(enabled);
+  }
+
+  async function refreshAfterConnectionChange() {
+    await Promise.all([loadStatus(), refreshClinicState()]);
   }
 
   async function loadAllData() {
@@ -123,6 +146,7 @@ export function WhatsAppTab() {
     }
 
     setClinic(cRes.data);
+    loadedEnabledRef.current = cRes.data.whatsapp_enabled ?? false;
     setWhatsappEnabled(cRes.data.whatsapp_enabled ?? false);
     setDefaultTemplate(tRes.data || null);
 
@@ -209,7 +233,7 @@ export function WhatsAppTab() {
           }
 
           success("WhatsApp number safaltapoorvak connect ho gaya!");
-          await loadStatus();
+          await refreshAfterConnectionChange();
         } catch {
           setConnectError("Connect nahi ho paya, dobara try karein.");
         } finally {
@@ -236,7 +260,7 @@ export function WhatsAppTab() {
     }
 
     success("WhatsApp disconnect ho gaya.");
-    await loadStatus();
+    await refreshAfterConnectionChange();
   }
 
   async function handleSaveSettings(e: FormEvent) {
@@ -245,6 +269,30 @@ export function WhatsAppTab() {
 
     setSubmitting(true);
     setErrorMsg(null);
+
+    // Never write a stale value: if the server's whatsapp_enabled is no longer what this page loaded
+    // (e.g. connecting a number just switched automatic sending off), show the real value and stop.
+    const { data: fresh, error: freshError } = await supabase
+      .from("clinics")
+      .select("whatsapp_enabled")
+      .eq("id", clinic.id)
+      .single();
+    if (freshError || !fresh) {
+      setErrorMsg(freshError?.message || "Could not check the current WhatsApp setting. Please try again.");
+      setSubmitting(false);
+      return;
+    }
+    const serverEnabled = fresh.whatsapp_enabled ?? false;
+    if (serverEnabled !== loadedEnabledRef.current) {
+      loadedEnabledRef.current = serverEnabled;
+      setWhatsappEnabled(serverEnabled);
+      toast({
+        description: "Setting server par badal chuki thi. Ab sahi value dikha di hai, dobara check karke Save karein.",
+        type: "info",
+      });
+      setSubmitting(false);
+      return;
+    }
 
     const { error } = await supabase
       .from("clinics")
@@ -312,6 +360,7 @@ export function WhatsAppTab() {
   const isNeverOrDisconnected = !waStatus || status === "disconnected";
 
   const isConnecting = connectStep !== "idle";
+  const sdkLoading = sdkStatus === "loading";
 
   const isPhoneSet = Boolean(waStatus?.phone_number_id || clinic?.waba_phone_number_id?.trim());
   const isTemplateApproved = Boolean(defaultTemplate);
@@ -412,7 +461,7 @@ export function WhatsAppTab() {
                 variant="outline"
                 size="sm"
                 onClick={handleConnect}
-                disabled={isConnecting}
+                disabled={isConnecting || sdkLoading}
                 className="shrink-0 h-7 text-xs border-destructive/40 hover:bg-destructive/10"
               >
                 Dobara try karein
@@ -440,7 +489,7 @@ export function WhatsAppTab() {
                 <Button
                   type="button"
                   onClick={handleConnect}
-                  disabled={isConnecting}
+                  disabled={isConnecting || sdkLoading}
                   className="w-full sm:w-auto"
                 >
                   {connectStep === "popup" ? (
@@ -452,6 +501,11 @@ export function WhatsAppTab() {
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       Connect ho raha hai...
+                    </>
+                  ) : sdkLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Meta ready ho raha hai...
                     </>
                   ) : (
                     "Connect WhatsApp"
@@ -568,7 +622,7 @@ export function WhatsAppTab() {
                 <Button
                   type="button"
                   onClick={handleConnect}
-                  disabled={isConnecting}
+                  disabled={isConnecting || sdkLoading}
                   className="w-full sm:w-auto"
                 >
                   {connectStep === "popup" ? (
@@ -580,6 +634,11 @@ export function WhatsAppTab() {
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       Connect ho raha hai...
+                    </>
+                  ) : sdkLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Meta ready ho raha hai...
                     </>
                   ) : (
                     "Reconnect"
@@ -605,7 +664,7 @@ export function WhatsAppTab() {
                 <Button
                   type="button"
                   onClick={handleConnect}
-                  disabled={isConnecting}
+                  disabled={isConnecting || sdkLoading}
                   className="w-full sm:w-auto"
                 >
                   {connectStep === "popup" ? (
@@ -617,6 +676,11 @@ export function WhatsAppTab() {
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       Connect ho raha hai...
+                    </>
+                  ) : sdkLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Meta ready ho raha hai...
                     </>
                   ) : (
                     "Reconnect"
@@ -679,6 +743,7 @@ export function WhatsAppTab() {
                   id="c-wa-enabled"
                   checked={whatsappEnabled}
                   onChange={(e) => setWhatsappEnabled(e.target.checked)}
+                  disabled={isConnecting || disconnecting}
                   className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                 />
                 <Label htmlFor="c-wa-enabled" className="cursor-pointer font-medium text-sm">
@@ -703,7 +768,7 @@ export function WhatsAppTab() {
             </div>
 
             <div className="flex justify-end">
-              <Button type="submit" size="sm" disabled={submitting}>
+              <Button type="submit" size="sm" disabled={submitting || isConnecting || disconnecting}>
                 {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
                 Save Settings
               </Button>
