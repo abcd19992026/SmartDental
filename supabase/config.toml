@@ -382,6 +382,11 @@ verify_jwt = false
 [functions.whatsapp-webhook]
 verify_jwt = false
 
+# refresh-whatsapp-tokens is invoked by pg_cron (no user JWT) and authenticates with X-Cron-Secret,
+# exactly like send-recall-messages.
+[functions.refresh-whatsapp-tokens]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

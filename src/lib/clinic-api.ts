@@ -1605,3 +1605,104 @@ export async function logAiDictationInterest(): Promise<ApiResult<null>> {
   return { ok: true, data: null };
 }
 
+
+// ---------------------------------------------------------------------------
+// WhatsApp Embedded Signup -- the clinic owner connects their OWN WhatsApp number.
+// connect-whatsapp / disconnect-whatsapp are owner-only Edge Functions; the clinic is always taken
+// from the caller's own profile server-side, so nothing here passes a clinic_id. The browser half
+// (FB popup) lives in whatsapp-embedded-signup.ts.
+// ---------------------------------------------------------------------------
+
+export interface ConnectWhatsAppInput {
+  /** One-time code from FB.login (valid 30 s) -- call this immediately after startWhatsAppSignup(). */
+  code: string;
+  waba_id: string;
+  phone_number_id: string;
+  business_id?: string;
+  /** Embedded Signup finish event (e.g. FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING). A hint only. */
+  event?: string;
+}
+
+export interface ConnectWhatsAppOutput {
+  status: "connected";
+  phone_number_id: string;
+  waba_id: string;
+  /** ISO timestamp, or null when Meta says the token never expires. */
+  token_expires_at: string | null;
+}
+
+export type ConnectWhatsAppResult =
+  | { ok: true; data: ConnectWhatsAppOutput }
+  // `reason` (when present) is one of: code_invalid (replayed/expired code), waba_not_authorized,
+  // phone_not_in_waba, already_connected (this number/WABA belongs to another clinic).
+  // `error` is always a readable message that can be shown as-is.
+  | { ok: false; error: string; reason?: string };
+
+const WHATSAPP_ALREADY_CONNECTED_MESSAGE =
+  "This WhatsApp number is already connected to another clinic. Please use a different number or contact support.";
+
+export async function connectWhatsApp(input: ConnectWhatsAppInput): Promise<ConnectWhatsAppResult> {
+  const { data, error } = await supabase.functions.invoke<ConnectWhatsAppOutput>("connect-whatsapp", {
+    body: input,
+  });
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const body = await error.context.json();
+        const message: string = body.error ?? "Request failed";
+        // A unique-violation (23505) that leaked through as raw text is still the "already connected" case.
+        if (body.reason === "already_connected" || message.includes("23505") || /already connected/i.test(message)) {
+          return { ok: false, error: WHATSAPP_ALREADY_CONNECTED_MESSAGE, reason: "already_connected" };
+        }
+        return { ok: false, error: message, reason: body.reason };
+      } catch {
+        return { ok: false, error: "Request failed" };
+      }
+    }
+    return { ok: false, error: error instanceof Error ? error.message : "Request failed" };
+  }
+  if (!data) return { ok: false, error: "Empty response from server" };
+  return { ok: true, data };
+}
+
+export async function disconnectWhatsApp(): Promise<ApiResult<{ status: "disconnected" }>> {
+  const { data, error } = await supabase.functions.invoke<{ status: "disconnected" }>("disconnect-whatsapp", {
+    body: {},
+  });
+  if (error) return toFunctionError(error);
+  if (!data) return { ok: false, error: "Empty response from server" };
+  return { ok: true, data };
+}
+
+export type WhatsAppConnectionStatus = "connected" | "needs_reconnect" | "disconnected" | "error";
+
+export interface WhatsAppStatus {
+  status: WhatsAppConnectionStatus;
+  phone_number_id: string;
+  waba_id: string;
+  token_expires_at: string | null;
+  connected_at: string | null;
+  last_checked_at: string | null;
+  /** Readable problem text (never a token). May be set while status is still "connected" (e.g. the
+   * contacts/history sync could not be requested). */
+  last_error: string | null;
+  /** True when the clinic keeps using the WhatsApp Business app on the same number. */
+  coexistence: boolean;
+  /** Always "unknown": the Graph API has no documented field that says whether the clinic's payment
+   * method is attached. Show WHATSAPP_PAYMENT_UNKNOWN_MESSAGE instead of guessing. */
+  payment_status: "unknown";
+}
+
+export const WHATSAPP_PAYMENT_UNKNOWN_MESSAGE = "Payment status unknown — WhatsApp Manager me check karein";
+
+/** The caller's own clinic connection (RLS: an owner sees only their own row, a receptionist none).
+ * `data: null` means "no connection yet" -- including a clinic still on the shared test number. */
+export async function getWhatsAppStatus(): Promise<ApiResult<WhatsAppStatus | null>> {
+  const { data, error } = await supabase
+    .from("clinic_whatsapp_status")
+    .select("status, phone_number_id, waba_id, token_expires_at, connected_at, last_checked_at, last_error, coexistence, payment_status")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: true, data: null };
+  return { ok: true, data: data as unknown as WhatsAppStatus };
+}

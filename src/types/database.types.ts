@@ -10,7 +10,32 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -322,6 +347,78 @@ export type Database = {
           },
         ]
       }
+      clinic_whatsapp_connections: {
+        Row: {
+          business_id: string | null
+          clinic_id: string
+          coexistence: boolean
+          connected_at: string | null
+          created_at: string
+          created_by: string | null
+          last_checked_at: string | null
+          last_error: string | null
+          phone_number_id: string
+          pin_secret_id: string | null
+          status: string
+          sync_requested_at: string | null
+          token_expires_at: string | null
+          token_secret_id: string | null
+          updated_at: string
+          waba_id: string
+        }
+        Insert: {
+          business_id?: string | null
+          clinic_id: string
+          coexistence?: boolean
+          connected_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          last_checked_at?: string | null
+          last_error?: string | null
+          phone_number_id: string
+          pin_secret_id?: string | null
+          status: string
+          sync_requested_at?: string | null
+          token_expires_at?: string | null
+          token_secret_id?: string | null
+          updated_at?: string
+          waba_id: string
+        }
+        Update: {
+          business_id?: string | null
+          clinic_id?: string
+          coexistence?: boolean
+          connected_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          last_checked_at?: string | null
+          last_error?: string | null
+          phone_number_id?: string
+          pin_secret_id?: string | null
+          status?: string
+          sync_requested_at?: string | null
+          token_expires_at?: string | null
+          token_secret_id?: string | null
+          updated_at?: string
+          waba_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_whatsapp_connections_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: true
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clinic_whatsapp_connections_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clinics: {
         Row: {
           address: string | null
@@ -415,6 +512,21 @@ export type Database = {
           waba_business_id?: string | null
           waba_phone_number_id?: string | null
           whatsapp_enabled?: boolean
+        }
+        Relationships: []
+      }
+      lily_monitor_key: {
+        Row: {
+          id: number
+          key_hash: string
+        }
+        Insert: {
+          id?: number
+          key_hash: string
+        }
+        Update: {
+          id?: number
+          key_hash?: string
         }
         Relationships: []
       }
@@ -1280,6 +1392,53 @@ export type Database = {
       }
     }
     Views: {
+      clinic_whatsapp_status: {
+        Row: {
+          clinic_id: string | null
+          coexistence: boolean | null
+          connected_at: string | null
+          last_checked_at: string | null
+          last_error: string | null
+          payment_status: string | null
+          phone_number_id: string | null
+          status: string | null
+          token_expires_at: string | null
+          waba_id: string | null
+        }
+        Insert: {
+          clinic_id?: string | null
+          coexistence?: boolean | null
+          connected_at?: string | null
+          last_checked_at?: string | null
+          last_error?: string | null
+          payment_status?: never
+          phone_number_id?: string | null
+          status?: string | null
+          token_expires_at?: string | null
+          waba_id?: string | null
+        }
+        Update: {
+          clinic_id?: string | null
+          coexistence?: boolean | null
+          connected_at?: string | null
+          last_checked_at?: string | null
+          last_error?: string | null
+          payment_status?: never
+          phone_number_id?: string | null
+          status?: string | null
+          token_expires_at?: string | null
+          waba_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_whatsapp_connections_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: true
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patient_billing_summary: {
         Row: {
           clinic_id: string | null
@@ -1405,6 +1564,10 @@ export type Database = {
         Args: { p_clinic_id: string }
         Returns: undefined
       }
+      delete_clinic_whatsapp_secrets: {
+        Args: { p_clinic_id: string }
+        Returns: undefined
+      }
       find_orphaned_clinics: {
         Args: never
         Returns: {
@@ -1427,6 +1590,10 @@ export type Database = {
           scheduled_at: string
         }[]
       }
+      get_clinic_whatsapp_token: {
+        Args: { p_clinic_id: string }
+        Returns: string
+      }
       get_clinics_list: {
         Args: never
         Returns: {
@@ -1447,6 +1614,10 @@ export type Database = {
         Returns: undefined
       }
       is_super_admin: { Args: never; Returns: boolean }
+      lily_check_key: { Args: never; Returns: undefined }
+      lily_query: { Args: { max_rows?: number; q: string }; Returns: Json }
+      lily_schema: { Args: never; Returns: Json }
+      lily_stats: { Args: never; Returns: Json }
       log_ai_dictation_interest: { Args: never; Returns: undefined }
       mark_appointment_no_show: {
         Args: { p_appointment_id: string }
@@ -1465,6 +1636,10 @@ export type Database = {
       seed_default_whatsapp_templates: {
         Args: { p_clinic_id: string }
         Returns: undefined
+      }
+      store_clinic_whatsapp_secret: {
+        Args: { p_clinic_id: string; p_kind: string; p_secret: string }
+        Returns: string
       }
     }
     Enums: {
@@ -1594,6 +1769,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

@@ -92,3 +92,27 @@ Until a clinic has a real WABA phone number, point a throwaway demo clinic row's
 - A template must be `approved` before it can be sent. Meta's pre-approved `hello_world` template (no variables) proves the pipeline works before a real recall template clears approval — seed a `whatsapp_templates` row with `meta_template_name = 'hello_world'`, `is_default = true`, `approval_status = 'approved'`, and a null/empty `variable_mapping`.
 
 **`hello_world` is a demo-only stand-in, not production configuration** — swap in the clinic's real approved recall template (with its `variable_mapping`) before go-live.
+
+## 8. Phase W1-A — WhatsApp Embedded Signup (each clinic connects its own number)
+
+Edge Functions: `connect-whatsapp`, `disconnect-whatsapp` (owner only, JWT required) and `refresh-whatsapp-tokens` (cron only, `verify_jwt = false`, `X-Cron-Secret`).
+
+Secrets (Edge Function secrets, never `VITE_*`): `META_APP_ID` (new), `META_APP_SECRET` (existing), `CRON_SECRET` (existing). Optional: `WHATSAPP_TOKEN_REFRESH_ENABLED=true` — leave unset until the refresh has been proven on a real connected token (see below).
+
+Frontend (public values, build time): `VITE_META_APP_ID`, `VITE_WA_ES_CONFIG_ID` — also set them in the Cloudflare Pages project.
+
+One-time per environment (the URL is not committed):
+```sql
+select vault.create_secret('https://<project-ref>.supabase.co/functions/v1/refresh-whatsapp-tokens', 'refresh_whatsapp_tokens_url');
+```
+
+Meta app → WhatsApp → Configuration → Webhook fields must include `account_update`, `history`, `smb_app_state_sync` and `smb_message_echoes` (the webhook acknowledges and ignores the last three; coexistence chat history is deliberately not stored).
+
+Probing the token refresh once on a real connection (the secret stays inside the database):
+```sql
+select net.http_post(
+  url := (select decrypted_secret from vault.decrypted_secrets where name = 'refresh_whatsapp_tokens_url'),
+  headers := jsonb_build_object('Content-Type','application/json','X-Cron-Secret',(select decrypted_secret from vault.decrypted_secrets where name='cron_secret')),
+  body := jsonb_build_object('probe_clinic_id','<clinic uuid>'));
+select content from net._http_response order by id desc limit 1;
+```

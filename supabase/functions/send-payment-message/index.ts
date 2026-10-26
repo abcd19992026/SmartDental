@@ -3,6 +3,7 @@ import { corsHeadersForRequest } from "../_shared/cors.ts";
 import { json } from "../_shared/response.ts";
 import { getIstNow, combineIstInstant } from "../_shared/ist-time.ts";
 import { buildTemplateMessage, callGraphApi, type WhatsappTemplate } from "../_shared/whatsapp-graph-api.ts";
+import { describeCredentialFailure, noteGraphAuthFailure, resolveWhatsappCredentials } from "../_shared/whatsapp-connection.ts";
 import { incrementMessagesSent, getMonthlyMessagesSent, countMessagesSentToday } from "../_shared/clinic-usage.ts";
 import { fetchPatientBilling, formatAmountForWhatsapp } from "../send-recall-messages/send.ts";
 import { validateSendPaymentMessageRequest, type SendPaymentMessageRequest } from "./validate.ts";
@@ -97,12 +98,6 @@ Deno.serve(async (req) => {
     return json({ error: "This patient has do-not-disturb enabled", error_code: "PATIENT_DND" }, 400, cors);
   }
 
-  const accessToken = Deno.env.get("META_ACCESS_TOKEN");
-  if (!accessToken) {
-    console.error("META_ACCESS_TOKEN is not configured");
-    return json({ error: "Server misconfigured" }, 500, cors);
-  }
-
   const { data: clinic, error: clinicError } = await serviceClient
     .from("clinics")
     .select("id, name, phone, waba_phone_number_id, whatsapp_enabled, is_active, plan_expires_on, daily_message_cap, monthly_message_quota")
@@ -126,6 +121,14 @@ Deno.serve(async (req) => {
 
   if (!clinic.waba_phone_number_id) {
     return json({ error: "This clinic has no WABA phone number configured" }, 400, cors);
+  }
+
+  // Own token + number for a clinic with a connected WhatsApp account, the shared META_ACCESS_TOKEN
+  // otherwise (see resolveWhatsappCredentials). Resolved after the clinic row is loaded.
+  const creds = await resolveWhatsappCredentials(serviceClient, clinic.id, clinic.waba_phone_number_id);
+  if (!creds.ok) {
+    const failure = describeCredentialFailure(creds);
+    return json(failure.body, failure.status, cors);
   }
 
   // Guard 4/6: DAILY_CAP_EXCEEDED -- counted directly from message_log for the current IST
@@ -216,7 +219,7 @@ Deno.serve(async (req) => {
     return json({ error: "Failed to record the send attempt" }, 500, cors);
   }
 
-  const result = await callGraphApi(clinic.waba_phone_number_id, accessToken, message);
+  const result = await callGraphApi(creds.phoneNumberId, creds.accessToken, message);
   const nowIso = new Date().toISOString();
 
   if (result.ok) {
@@ -234,6 +237,8 @@ Deno.serve(async (req) => {
     .from("message_log")
     .update({ status: "failed", error_code: result.errorCode, error_message: result.errorMessage })
     .eq("id", logRow.id);
+
+  await noteGraphAuthFailure(serviceClient, clinic.id, creds.source, result.errorCode);
 
   // Meta's exact error is returned unmodified, same convention as send-recall-now/send-test-message.
   return json(

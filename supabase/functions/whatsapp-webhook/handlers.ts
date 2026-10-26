@@ -8,18 +8,35 @@ interface MetaStatus {
 
 interface MetaMessage {
   from?: string;
+  /** Unix seconds, as a string -- when the patient sent it. */
+  timestamp?: string;
   text?: { body?: string };
 }
+
+/** A patient's message only counts as a recall REPLY if we sent them a recall message within this
+ * many days. With coexistence the clinic also chats with patients on the same number, and ordinary
+ * chat must not mark a recall "contacted" (which stops the reminder ladder). */
+export const RECALL_REPLY_WINDOW_DAYS = 7;
 
 interface MetaValue {
   metadata?: { phone_number_id?: string };
   statuses?: MetaStatus[];
   messages?: MetaMessage[];
+  // account_update fields
+  event?: string;
+  waba_info?: { waba_id?: string; partner_app_id?: string };
+  ban_info?: { waba_ban_state?: string };
 }
 
 interface MetaWebhookPayload {
-  entry?: Array<{ changes?: Array<{ value?: MetaValue }> }>;
+  entry?: Array<{ id?: string; changes?: Array<{ field?: string; value?: MetaValue }> }>;
 }
+
+// account_update events that mean our access to the clinic's WABA is gone or must be redone.
+// Names are exactly as listed in Meta's account_update webhook reference.
+const RECONNECT_EVENTS = new Set(["PARTNER_REMOVED", "PARTNER_APP_UNINSTALLED", "ACCOUNT_OFFBOARDED"]);
+const DISCONNECT_EVENTS = new Set(["ACCOUNT_DELETED"]);
+const ERROR_EVENTS = new Set(["DISABLED_UPDATE"]);
 
 // Ordering used to guard against out-of-order delivery: a 'sent' event arriving after a 'read'
 // event must never move message_log.status backwards.
@@ -119,6 +136,37 @@ async function handleInboundMessage(serviceClient: SupabaseClient, clinicId: str
   }
   console.log(`Webhook: matched patient ${patient.id}`);
 
+  // Recall-reply gate: only a message that arrives within RECALL_REPLY_WINDOW_DAYS of a recall
+  // message we actually sent this patient is a reply. Measured from the patient's own message time
+  // (Meta's timestamp) so a late or replayed webhook is judged by when the patient wrote, falling
+  // back to "now" when it is missing. Payment/prescription messages, test sends and failed sends
+  // are not recall messages, so they do not open the window.
+  const messageTimeMs = message.timestamp && /^\d+$/.test(message.timestamp) ? Number(message.timestamp) * 1000 : Date.now();
+  const windowStartIso = new Date(messageTimeMs - RECALL_REPLY_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { data: recentRecallMessage, error: recentRecallError } = await serviceClient
+    .from("message_log")
+    .select("id")
+    .eq("clinic_id", clinicId)
+    .eq("patient_id", patient.id)
+    .eq("message_type", "recall")
+    .eq("is_test", false)
+    .not("recall_id", "is", null)
+    .in("status", ["sent", "delivered", "read"])
+    .gte("sent_at", windowStartIso)
+    .limit(1);
+  if (recentRecallError) {
+    // Fail closed: if we cannot tell, do not change a recall on a guess.
+    console.log(`Webhook: recall-message lookup errored: ${recentRecallError.message}, ignoring message`);
+    return;
+  }
+  if (!recentRecallMessage || recentRecallMessage.length === 0) {
+    console.log(
+      `Webhook: message from patient ${patient.id} is not within ${RECALL_REPLY_WINDOW_DAYS} days of a recall message, ` +
+        `treating as normal chat and ignoring`,
+    );
+    return;
+  }
+
   const replyText = message.text?.body ?? null;
 
   // Prefer the recall currently awaiting contact (pending/sent), most recently created.
@@ -190,11 +238,97 @@ async function handleInboundMessage(serviceClient: SupabaseClient, clinicId: str
   console.log(`Webhook: recall ${recall.id} update ${updateError ? `FAILED: ${updateError.message}` : "OK"}`);
 }
 
+/** account_update: the WABA is read from waba_info.waba_id when present -- for partner events
+ * entry.id is NOT the customer's WABA id (Meta's own PARTNER_ADDED example shows two different ids)
+ * -- and only falls back to entry.id when waba_info is absent. Unknown events are logged and ignored. */
+async function handleAccountUpdate(serviceClient: SupabaseClient, entryId: string | undefined, value: MetaValue | undefined): Promise<void> {
+  const event = value?.event;
+  const wabaId = value?.waba_info?.waba_id ?? entryId;
+  console.log(`Webhook: account_update -- event=${event}, waba_id=${wabaId}`);
+  if (!event || !wabaId) return;
+
+  const { data: conn } = await serviceClient
+    .from("clinic_whatsapp_connections")
+    .select("clinic_id, status")
+    .eq("waba_id", wabaId)
+    .neq("status", "disconnected")
+    .maybeSingle();
+  if (!conn) {
+    console.log(`Webhook: account_update for waba_id ${wabaId} matches no connected clinic, ignoring`);
+    return;
+  }
+
+  // PARTNER_APP_UNINSTALLED names the app that was removed: only act when it is OUR app.
+  const ourAppId = Deno.env.get("META_APP_ID");
+  const partnerAppId = value?.waba_info?.partner_app_id;
+  const aboutOtherApp = event === "PARTNER_APP_UNINSTALLED" && !!partnerAppId && !!ourAppId && partnerAppId !== ourAppId;
+
+  let newStatus: "needs_reconnect" | "disconnected" | "error" | null = null;
+  let lastError: string | null = null;
+  if (!aboutOtherApp) {
+    if (RECONNECT_EVENTS.has(event)) {
+      newStatus = "needs_reconnect";
+      lastError = "WhatsApp access was removed on the WhatsApp side. Please reconnect WhatsApp.";
+    } else if (DISCONNECT_EVENTS.has(event)) {
+      newStatus = "disconnected";
+    } else if (ERROR_EVENTS.has(event)) {
+      newStatus = "error";
+      lastError = "Meta reports this WhatsApp account is disabled.";
+    }
+  }
+
+  // Only a still-live connection is moved; an already-flagged one is not overwritten.
+  if (newStatus && (conn.status === "connected" || (newStatus === "disconnected" && conn.status !== "disconnected"))) {
+    const update: Record<string, unknown> = { status: newStatus, last_error: lastError };
+    if (newStatus === "disconnected") {
+      update.token_secret_id = null;
+      update.pin_secret_id = null;
+      update.token_expires_at = null;
+    }
+    const { error } = await serviceClient.from("clinic_whatsapp_connections").update(update).eq("clinic_id", conn.clinic_id);
+    if (error) console.log(`Webhook: could not update connection for clinic ${conn.clinic_id}: ${error.message}`);
+    if (!error && newStatus === "disconnected") {
+      await serviceClient.rpc("delete_clinic_whatsapp_secrets", { p_clinic_id: conn.clinic_id });
+      await serviceClient
+        .from("clinics")
+        .update({ waba_phone_number_id: null, waba_business_id: null, whatsapp_enabled: false })
+        .eq("id", conn.clinic_id);
+    }
+  }
+
+  await serviceClient.from("activity_log").insert({
+    clinic_id: conn.clinic_id,
+    user_id: null,
+    action: "whatsapp_account_update",
+    entity_type: "whatsapp_connection",
+    entity_id: conn.clinic_id,
+    meta: { actor_type: "system", event, waba_id: wabaId, status_set: newStatus, ignored_other_app: aboutOtherApp },
+  });
+}
+
 export async function processWebhookPayload(serviceClient: SupabaseClient, payload: MetaWebhookPayload): Promise<void> {
   console.log(`Webhook: processing payload with ${payload.entry?.length ?? 0} entries`);
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const value = change.value;
+
+      // Coexistence adds fields (history, smb_app_state_sync, smb_message_echoes, ...) that carry the
+      // clinic's old chats and contacts. We deliberately do not store any of it: acknowledge and move
+      // on. An unknown field must never break message/status processing below, so everything that is
+      // not `messages` (or a change with no field at all, kept for compatibility) is skipped here.
+      if (change.field === "account_update") {
+        try {
+          await handleAccountUpdate(serviceClient, entry.id, value);
+        } catch (err) {
+          console.log(`Webhook: account_update handling errored: ${err instanceof Error ? err.message : "unknown"}`);
+        }
+        continue;
+      }
+      if (change.field !== undefined && change.field !== "messages") {
+        console.log(`Webhook: ignoring unhandled field "${change.field}"`);
+        continue;
+      }
+
       const phoneNumberId = value?.metadata?.phone_number_id;
       console.log(
         `Webhook: change -- phone_number_id=${phoneNumberId}, ` +

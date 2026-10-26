@@ -3,6 +3,7 @@ import { corsHeadersForRequest } from "../_shared/cors.ts";
 import { json } from "../_shared/response.ts";
 import { getIstNow } from "../_shared/ist-time.ts";
 import { sendOneRecallMessage, type ClinicForSend, type RecallRow } from "../send-recall-messages/send.ts";
+import { describeCredentialFailure, resolveWhatsappCredentials } from "../_shared/whatsapp-connection.ts";
 import { validateSendRecallNowRequest, type SendRecallNowRequest } from "./validate.ts";
 
 Deno.serve(async (req) => {
@@ -73,12 +74,6 @@ Deno.serve(async (req) => {
     return json({ error: "This patient has do-not-disturb enabled" }, 400, cors);
   }
 
-  const accessToken = Deno.env.get("META_ACCESS_TOKEN");
-  if (!accessToken) {
-    console.error("META_ACCESS_TOKEN is not configured");
-    return json({ error: "Server misconfigured" }, 500, cors);
-  }
-
   const { data: clinic, error: clinicLoadError } = await serviceClient
     .from("clinics")
     .select("id, name, phone, waba_phone_number_id, whatsapp_enabled, is_active, plan_expires_on, monthly_message_quota")
@@ -99,6 +94,14 @@ Deno.serve(async (req) => {
   }
   if (!clinic.waba_phone_number_id) {
     return json({ error: "This clinic has no WABA phone number configured" }, 400, cors);
+  }
+
+  // Own token + number for a clinic with a connected WhatsApp account, the shared META_ACCESS_TOKEN
+  // otherwise (see resolveWhatsappCredentials). Resolved after the clinic row is loaded.
+  const creds = await resolveWhatsappCredentials(serviceClient, clinic.id, clinic.waba_phone_number_id);
+  if (!creds.ok) {
+    const failure = describeCredentialFailure(creds);
+    return json(failure.body, failure.status, cors);
   }
 
   const { data: template, error: templateError } = await serviceClient
@@ -137,7 +140,8 @@ Deno.serve(async (req) => {
     id: clinic.id,
     name: clinic.name,
     phone: clinic.phone,
-    waba_phone_number_id: clinic.waba_phone_number_id,
+    waba_phone_number_id: creds.phoneNumberId,
+    wa_source: creds.source,
   };
   const result = await sendOneRecallMessage(
     serviceClient,
@@ -145,7 +149,7 @@ Deno.serve(async (req) => {
     template,
     recall as unknown as RecallRow,
     null,
-    accessToken,
+    creds.accessToken,
     monthStart,
   );
 

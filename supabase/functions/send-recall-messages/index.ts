@@ -23,12 +23,6 @@ Deno.serve(async (req) => {
     return json({ error: "Unauthorized" }, 401);
   }
 
-  const accessToken = Deno.env.get("META_ACCESS_TOKEN");
-  if (!accessToken) {
-    console.error("META_ACCESS_TOKEN is not configured");
-    return json({ error: "Server misconfigured" }, 500);
-  }
-
   const serviceClient = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -71,7 +65,7 @@ Deno.serve(async (req) => {
   for (const clinic of clinics ?? []) {
     const clinicSendHour = parseInt(String(clinic.send_time).split(":")[0], 10);
     try {
-      results.push(await processClinic(serviceClient, clinic, dateStr, hour, clinicSendHour, accessToken));
+      results.push(await processClinic(serviceClient, clinic, dateStr, hour, clinicSendHour));
     } catch (err) {
       console.error(`Unhandled error processing clinic ${clinic.id}`, err);
       results.push({ clinic_id: clinic.id, clinic_name: clinic.name, sent: 0, failed: 0, skipped_reason: "unhandled_error" });

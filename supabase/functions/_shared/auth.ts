@@ -134,6 +134,30 @@ export async function authorizeOwnerOrSuperAdmin(req: Request): Promise<OwnerOrS
   };
 }
 
+export interface ClinicOwnerAuthOk {
+  ok: true;
+  userId: string;
+  /** The caller's own clinic_id -- the ONLY clinic this route may act on. Never read it from the body. */
+  clinicId: string;
+  serviceClient: SupabaseClient;
+}
+
+export type ClinicOwnerAuth = ClinicOwnerAuthOk | SuperAdminAuthErr;
+
+/**
+ * Step 3 for routes only a clinic's own owner may use (connecting/disconnecting WhatsApp):
+ * role must be exactly 'owner' with is_active = true and a clinic. A receptionist, an inactive
+ * user, and a super_admin (who has no clinic of their own) are all refused -- 403.
+ */
+export async function authorizeClinicOwner(req: Request): Promise<ClinicOwnerAuth> {
+  const auth = await authorizeOwnerOrSuperAdmin(req);
+  if (!auth.ok) return auth;
+  if (auth.role !== "owner" || !auth.clinicId) {
+    return { ok: false, status: 403, error: "Forbidden: clinic owner access required" };
+  }
+  return { ok: true, userId: auth.userId, clinicId: auth.clinicId, serviceClient: auth.serviceClient };
+}
+
 export interface OwnerOrReceptionistAuthOk {
   ok: true;
   userId: string;

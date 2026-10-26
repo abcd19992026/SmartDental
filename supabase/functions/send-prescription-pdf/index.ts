@@ -8,6 +8,7 @@ import {
   uploadMediaToGraphApi,
   type WhatsappTemplate,
 } from "../_shared/whatsapp-graph-api.ts";
+import { describeCredentialFailure, noteGraphAuthFailure, resolveWhatsappCredentials } from "../_shared/whatsapp-connection.ts";
 import { incrementMessagesSent, getMonthlyMessagesSent, countMessagesSentToday } from "../_shared/clinic-usage.ts";
 import { buildPrescriptionPdf } from "./pdf.ts";
 import { validateSendPrescriptionPdfRequest, type SendPrescriptionPdfRequest } from "./validate.ts";
@@ -98,12 +99,6 @@ Deno.serve(async (req) => {
     return json({ error: "This patient has do-not-disturb enabled", error_code: "PATIENT_DND" }, 400, cors);
   }
 
-  const accessToken = Deno.env.get("META_ACCESS_TOKEN");
-  if (!accessToken) {
-    console.error("META_ACCESS_TOKEN is not configured");
-    return json({ error: "Server misconfigured" }, 500, cors);
-  }
-
   const { data: clinic, error: clinicError } = await serviceClient
     .from("clinics")
     .select(
@@ -127,6 +122,14 @@ Deno.serve(async (req) => {
 
   if (!clinic.waba_phone_number_id) {
     return json({ error: "This clinic has no WABA phone number configured" }, 400, cors);
+  }
+
+  // Own token + number for a clinic with a connected WhatsApp account, the shared META_ACCESS_TOKEN
+  // otherwise (see resolveWhatsappCredentials). Resolved after the clinic row is loaded.
+  const creds = await resolveWhatsappCredentials(serviceClient, clinic.id, clinic.waba_phone_number_id);
+  if (!creds.ok) {
+    const failure = describeCredentialFailure(creds);
+    return json(failure.body, failure.status, cors);
   }
 
   const todayStartIso = combineIstInstant(dateStr, "00:00:00").toISOString();
@@ -199,9 +202,10 @@ Deno.serve(async (req) => {
 
   const filename = `Prescription_${patient.name.replace(/[^a-zA-Z0-9]+/g, "_")}_${prescription.prescribed_on}.pdf`;
 
-  const uploadResult = await uploadMediaToGraphApi(clinic.waba_phone_number_id, accessToken, pdfBytes, filename, "application/pdf");
+  const uploadResult = await uploadMediaToGraphApi(creds.phoneNumberId, creds.accessToken, pdfBytes, filename, "application/pdf");
   if (!uploadResult.ok) {
     console.error(`Failed to upload prescription PDF to Meta for prescription ${prescription.id}`, uploadResult.errorMessage);
+    await noteGraphAuthFailure(serviceClient, clinic.id, creds.source, uploadResult.errorCode);
     return json(
       { success: false, error_code: uploadResult.errorCode, error_message: uploadResult.errorMessage, prescription_id: prescription.id },
       200,
@@ -250,7 +254,7 @@ Deno.serve(async (req) => {
     return json({ error: "Failed to record the send attempt" }, 500, cors);
   }
 
-  const result = await callGraphApi(clinic.waba_phone_number_id, accessToken, message);
+  const result = await callGraphApi(creds.phoneNumberId, creds.accessToken, message);
   const nowIso = new Date().toISOString();
 
   if (result.ok) {
@@ -268,6 +272,8 @@ Deno.serve(async (req) => {
     .from("message_log")
     .update({ status: "failed", error_code: result.errorCode, error_message: result.errorMessage })
     .eq("id", logRow.id);
+
+  await noteGraphAuthFailure(serviceClient, clinic.id, creds.source, result.errorCode);
 
   return json(
     { success: false, error_code: result.errorCode, error_message: result.errorMessage, prescription_id: prescription.id },

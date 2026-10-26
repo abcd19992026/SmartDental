@@ -1,11 +1,27 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { MessageSquare, AlertCircle, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { useEffect, useState, useRef, type FormEvent } from "react";
+import {
+  MessageSquare,
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  ExternalLink,
+  Info,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/auth/useAuth";
 import { todayIST } from "@/lib/dates";
 import type { Database } from "@/types/database.types";
 import { useToast } from "@/components/ui/toast";
-import { sendTestMessage } from "@/lib/clinic-api";
+import { startWhatsAppSignup } from "@/lib/whatsapp-embedded-signup";
+import {
+  connectWhatsApp,
+  disconnectWhatsApp,
+  getWhatsAppStatus,
+  sendTestMessage,
+  WHATSAPP_PAYMENT_UNKNOWN_MESSAGE,
+  type WhatsAppStatus,
+} from "@/lib/clinic-api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +29,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const MOBILE_RE = /^\d{10}$/;
 
@@ -21,25 +44,43 @@ type TemplateRow = Database["public"]["Tables"]["whatsapp_templates"]["Row"];
 
 export function WhatsAppTab() {
   const { profile } = useAuth();
-  const { success, error: toastError } = useToast();
+  const { success, error: toastError, toast } = useToast();
 
   const [clinic, setClinic] = useState<ClinicRow | null>(null);
+  const [waStatus, setWaStatus] = useState<WhatsAppStatus | null>(null);
   const [defaultTemplate, setDefaultTemplate] = useState<TemplateRow | null>(null);
   const [messagesSentThisMonth, setMessagesSentThisMonth] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Form State
+  // Connect flow states
+  const inFlightRef = useRef(false);
+  const [connectStep, setConnectStep] = useState<"idle" | "popup" | "connecting">("idle");
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [connectInfo, setConnectInfo] = useState<string | null>(null);
+
+  // Disconnect confirmation modal state
+  const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+
+  // Existing Form State
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
   const [testPhoneNumber, setTestPhoneNumber] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
 
   useEffect(() => {
-    loadWhatsappSettings();
+    loadAllData();
   }, [profile?.clinic_id]);
 
-  async function loadWhatsappSettings() {
+  async function loadStatus() {
+    const res = await getWhatsAppStatus();
+    if (res.ok) {
+      setWaStatus(res.data);
+    }
+  }
+
+  async function loadAllData() {
     if (!profile?.clinic_id) return;
     setLoading(true);
     setErrorMsg(null);
@@ -47,7 +88,8 @@ export function WhatsAppTab() {
     const todayStr = todayIST();
     const currentMonthStart = `${todayStr.substring(0, 7)}-01`;
 
-    const [cRes, tRes, uRes, mRes] = await Promise.all([
+    const [statusRes, cRes, tRes, uRes, mRes] = await Promise.all([
+      getWhatsAppStatus(),
       supabase.from("clinics").select("*").eq("id", profile.clinic_id).single(),
       supabase
         .from("whatsapp_templates")
@@ -70,6 +112,10 @@ export function WhatsAppTab() {
         .gte("created_at", `${currentMonthStart}T00:00:00`),
     ]);
 
+    if (statusRes.ok) {
+      setWaStatus(statusRes.data);
+    }
+
     if (cRes.error || !cRes.data) {
       setErrorMsg(cRes.error?.message || "Failed to load clinic settings");
       setLoading(false);
@@ -80,12 +126,117 @@ export function WhatsAppTab() {
     setWhatsappEnabled(cRes.data.whatsapp_enabled ?? false);
     setDefaultTemplate(tRes.data || null);
 
-    // Calculate monthly messages sent: use clinic_usage count or message_log fallback count
     const usageCount = uRes.data?.messages_sent ?? 0;
     const logCount = mRes.count ?? 0;
     setMessagesSentThisMonth(Math.max(usageCount, logCount));
 
     setLoading(false);
+  }
+
+  // Connect WhatsApp handler
+  // Call startWhatsAppSignup() DIRECTLY without any preceding await/delay so the popup is not blocked
+  const handleConnect = () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+
+    setConnectError(null);
+    setConnectInfo(null);
+    setConnectStep("popup");
+
+    const signupPromise = startWhatsAppSignup();
+
+    signupPromise
+      .then(async (result) => {
+        if (!result.ok) {
+          inFlightRef.current = false;
+          setConnectStep("idle");
+
+          if (result.error === "cancelled") {
+            setConnectInfo("Connect cancel kiya.");
+            toast({ description: "Connect cancel kiya.", type: "info" });
+            return;
+          }
+
+          if (result.error === "timeout") {
+            setConnectError("Signup time out ho gaya. Dobara try karein.");
+            return;
+          }
+
+          const msg = result.message || "";
+          if (msg.includes("not configured")) {
+            setConnectError("WhatsApp signup configure nahi hai (Meta App ID missing).");
+          } else if (msg.includes("without a WhatsApp phone number")) {
+            setConnectError("Signup me koi WhatsApp phone number select nahi hua. Kripya number add karein.");
+          } else if (msg.includes("ad-blocker") || msg.includes("SDK")) {
+            setConnectError("Meta SDK load nahi ho paya. Ad-blocker check karein ya page refresh karein.");
+          } else {
+            setConnectError("Connect nahi ho paya, dobara try karein.");
+          }
+          return;
+        }
+
+        // Code expires in 30 seconds - immediately call connectWhatsApp
+        setConnectStep("connecting");
+        try {
+          const connectRes = await connectWhatsApp({
+            code: result.data.code,
+            waba_id: result.data.waba_id,
+            phone_number_id: result.data.phone_number_id,
+            business_id: result.data.business_id,
+            event: result.data.event,
+          });
+
+          if (!connectRes.ok) {
+            const errReason = connectRes.reason;
+            const errMsg = connectRes.error || "";
+
+            if (
+              errReason === "already_connected" ||
+              errMsg.includes("already connected") ||
+              errMsg.includes("23505")
+            ) {
+              setConnectError("Ye number pehle se kisi aur clinic se juda hai.");
+            } else if (errReason === "code_invalid") {
+              setConnectError("Code expire ho gaya. Kripya dobara try karein.");
+            } else if (errReason === "waba_not_authorized") {
+              setConnectError("WhatsApp account authorize nahi ho paya. Dobara try karein.");
+            } else if (errReason === "phone_not_in_waba") {
+              setConnectError("Chuna gaya number WhatsApp account me nahi mila.");
+            } else {
+              setConnectError("Connect nahi ho paya, dobara try karein.");
+            }
+            return;
+          }
+
+          success("WhatsApp number safaltapoorvak connect ho gaya!");
+          await loadStatus();
+        } catch {
+          setConnectError("Connect nahi ho paya, dobara try karein.");
+        } finally {
+          inFlightRef.current = false;
+          setConnectStep("idle");
+        }
+      })
+      .catch(() => {
+        inFlightRef.current = false;
+        setConnectStep("idle");
+        setConnectError("Connect nahi ho paya, dobara try karein.");
+      });
+  };
+
+  async function handleDisconnect() {
+    setDisconnecting(true);
+    const res = await disconnectWhatsApp();
+    setDisconnecting(false);
+    setDisconnectDialogOpen(false);
+
+    if (!res.ok) {
+      toastError(res.error || "Disconnect nahi ho paya.", "Disconnect Failed");
+      return;
+    }
+
+    success("WhatsApp disconnect ho gaya.");
+    await loadStatus();
   }
 
   async function handleSaveSettings(e: FormEvent) {
@@ -109,7 +260,7 @@ export function WhatsAppTab() {
 
     success("WhatsApp settings updated.");
     setSubmitting(false);
-    loadWhatsappSettings();
+    loadAllData();
   }
 
   async function handleSendTestMessage() {
@@ -124,33 +275,46 @@ export function WhatsAppTab() {
       return;
     }
     if (!result.data.success) {
-      // A real Meta error, surfaced verbatim -- not a generic failure message.
       toastError(result.data.error_message || "Unknown error from Meta", `Send Failed (${result.data.error_code ?? "no code"})`);
       return;
     }
     success(`Test message sent to ${testPhoneNumber}.`);
   }
 
+  function formatConnectedDate(isoString: string | null | undefined): string {
+    if (!isoString) return "";
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString;
+      return d.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return isoString;
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-44 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
     );
   }
 
-  // Prerequisite checks
-  const isPhoneSet = Boolean(clinic?.waba_phone_number_id?.trim());
+  const status = waStatus?.status;
+  const isConnected = status === "connected";
+  const isNeedsReconnect = status === "needs_reconnect";
+  const isError = status === "error";
+  const isNeverOrDisconnected = !waStatus || status === "disconnected";
+
+  const isConnecting = connectStep !== "idle";
+
+  const isPhoneSet = Boolean(waStatus?.phone_number_id || clinic?.waba_phone_number_id?.trim());
   const isTemplateApproved = Boolean(defaultTemplate);
-  const isEnabled = Boolean(whatsappEnabled);
-
-  const missingRequirements: string[] = [];
-  if (!isPhoneSet) missingRequirements.push("WABA Phone Number ID is not configured");
-  if (!isTemplateApproved) missingRequirements.push("An approved default WhatsApp template is missing");
-  if (!isEnabled) missingRequirements.push("Automated WhatsApp sending is turned off");
-
-  const isFullyConnected = isPhoneSet && isTemplateApproved && isEnabled;
 
   const quota = clinic?.monthly_message_quota ?? 3000;
 
@@ -174,97 +338,331 @@ export function WhatsAppTab() {
             </span>
           </p>
         </div>
-
-        <div>
-          {isFullyConnected ? (
-            <Badge variant="outline" className="border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
-              <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-700 dark:text-emerald-400" />
-              Automated Sending Active
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
-              <AlertCircle className="h-3.5 w-3.5 mr-1 text-amber-700 dark:text-amber-400" />
-              Setup Incomplete
-            </Badge>
-          )}
-        </div>
       </div>
 
-      {/* Connection State Readiness Card */}
-      <Card className={isFullyConnected ? "border-emerald-600/30 bg-emerald-50/20 dark:bg-emerald-950/10" : "border-amber-600/30 bg-amber-50/20 dark:bg-amber-950/10"}>
+      {/* Main WhatsApp Connection Card */}
+      <Card>
         <CardHeader>
-          <CardTitle className="text-base font-medium flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-primary" />
-            WhatsApp Connection Status
-          </CardTitle>
-          <CardDescription>
-            Automated recall messages require all 3 configuration requirements to be active.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3">
-            {/* Requirement 1: Phone Number ID */}
-            <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-3">
-              {isPhoneSet ? (
-                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-              ) : (
-                <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-              )}
-              <div className="space-y-0.5">
-                <span className="text-xs font-medium text-foreground block">1. WABA Phone Number ID</span>
-                <span className="text-xs text-muted-foreground block">
-                  {isPhoneSet ? `ID: ${clinic?.waba_phone_number_id}` : "Not set (Requires platform setup)"}
-                </span>
-              </div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <CardTitle className="text-base font-medium flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-primary" />
+                WhatsApp
+              </CardTitle>
+              <CardDescription className="mt-0.5">
+                Meta Embedded Signup dwara apna WhatsApp business number connect karein
+              </CardDescription>
             </div>
 
-            {/* Requirement 2: Default Template */}
-            <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-3">
-              {isTemplateApproved ? (
-                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-              ) : (
-                <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-              )}
-              <div className="space-y-0.5">
-                <span className="text-xs font-medium text-foreground block">2. Approved Default Template</span>
-                <span className="text-xs text-muted-foreground block">
-                  {isTemplateApproved && defaultTemplate ? defaultTemplate.meta_template_name : "No approved default template"}
-                </span>
-              </div>
-            </div>
-
-            {/* Requirement 3: WhatsApp Enabled */}
-            <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-3">
-              {isEnabled ? (
-                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-              ) : (
-                <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-              )}
-              <div className="space-y-0.5">
-                <span className="text-xs font-medium text-foreground block">3. Automated Sending</span>
-                <span className="text-xs text-muted-foreground block">
-                  {isEnabled ? "Enabled" : "Disabled in clinic settings"}
-                </span>
-              </div>
-            </div>
+            {isConnected && (
+              <Badge variant="outline" className="border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400 w-fit">
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-700 dark:text-emerald-400" />
+                Connected
+              </Badge>
+            )}
+            {isNeedsReconnect && (
+              <Badge variant="outline" className="border-amber-200 text-amber-800 bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400 w-fit">
+                <AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-700 dark:text-amber-400" />
+                Needs Reconnect
+              </Badge>
+            )}
+            {isError && (
+              <Badge variant="outline" className="border-destructive/30 text-destructive bg-destructive/10 w-fit">
+                <AlertCircle className="h-3.5 w-3.5 mr-1 text-destructive" />
+                Error
+              </Badge>
+            )}
           </div>
+        </CardHeader>
 
-          {/* Missing Requirements Alert Banner */}
-          {missingRequirements.length > 0 && (
-            <div className="rounded-lg border border-amber-600/30 bg-amber-50 dark:bg-amber-950/40 p-4 text-xs text-amber-900 dark:text-amber-200">
-              <div className="flex items-center gap-2 font-medium mb-1 text-sm">
-                <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                Automated messaging will not run until resolved:
+        <CardContent className="space-y-4">
+          {/* Active Flow Banner: popup open */}
+          {connectStep === "popup" && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-foreground flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+              <span>Meta window khuli hai... Kripya Meta popup me login karein aur apna number verify karein.</span>
+            </div>
+          )}
+
+          {/* Active Flow Banner: connecting code */}
+          {connectStep === "connecting" && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-foreground flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+              <span>Connect ho raha hai... Clinic se WhatsApp joda ja raha hai.</span>
+            </div>
+          )}
+
+          {/* Neutral Info Banner (e.g. cancelled) */}
+          {connectInfo && (
+            <div className="rounded-lg border border-border bg-muted/50 p-3 text-xs text-muted-foreground flex items-center gap-2">
+              <Info className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span>{connectInfo}</span>
+            </div>
+          )}
+
+          {/* Connect Flow Error with Retry Button */}
+          {connectError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3.5 text-xs text-destructive flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{connectError}</span>
               </div>
-              <ul className="list-disc list-inside space-y-1 ml-1 text-muted-foreground dark:text-amber-200/80">
-                {missingRequirements.map((req, idx) => (
-                  <li key={idx}>{req}</li>
-                ))}
-              </ul>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleConnect}
+                disabled={isConnecting}
+                className="shrink-0 h-7 text-xs border-destructive/40 hover:bg-destructive/10"
+              >
+                Dobara try karein
+              </Button>
+            </div>
+          )}
+
+          {/* 1. Never connected / disconnected */}
+          {isNeverOrDisconnected && (
+            <div className="space-y-4">
+              <p className="text-sm text-foreground">
+                Apne clinic ka WhatsApp number jodo. Reminder isi number se patients ko jayenge.
+              </p>
+
+              <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-2">
+                <span className="text-xs font-medium text-foreground block">Aage kya hoga:</span>
+                <ol className="list-decimal list-inside space-y-1.5 text-xs text-muted-foreground">
+                  <li>Meta ki window khulegi</li>
+                  <li>Apna number chuno aur verify karo</li>
+                  <li>Wapas yahan aao</li>
+                </ol>
+              </div>
+
+              <div>
+                <Button
+                  type="button"
+                  onClick={handleConnect}
+                  disabled={isConnecting}
+                  className="w-full sm:w-auto"
+                >
+                  {connectStep === "popup" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Meta window khuli hai...
+                    </>
+                  ) : connectStep === "connecting" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Connect ho raha hai...
+                    </>
+                  ) : (
+                    "Connect WhatsApp"
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* 2. Connected */}
+          {isConnected && (
+            <div className="space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="border-emerald-200 text-emerald-800 bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-700 dark:text-emerald-400" />
+                    Connected
+                  </Badge>
+                  {waStatus?.connected_at && (
+                    <span className="text-xs text-muted-foreground">
+                      Connected on {formatConnectedDate(waStatus.connected_at)}
+                    </span>
+                  )}
+                </div>
+
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setDisconnectDialogOpen(true)}
+                  disabled={disconnecting || isConnecting}
+                  className="w-full sm:w-auto"
+                >
+                  Disconnect
+                </Button>
+              </div>
+
+              {/* Number/IDs ONLY if getWhatsAppStatus() returns them */}
+              {(waStatus?.phone_number_id || waStatus?.waba_id) && (
+                <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                  {waStatus.phone_number_id && (
+                    <div className="rounded-lg border border-border bg-card p-3 space-y-0.5">
+                      <span className="text-muted-foreground block text-[11px]">Phone Number ID</span>
+                      <span className="font-mono font-medium text-foreground text-xs break-all">
+                        {waStatus.phone_number_id}
+                      </span>
+                    </div>
+                  )}
+                  {waStatus.waba_id && (
+                    <div className="rounded-lg border border-border bg-card p-3 space-y-0.5">
+                      <span className="text-muted-foreground block text-[11px]">WhatsApp Business Account (WABA) ID</span>
+                      <span className="font-mono font-medium text-foreground text-xs break-all">
+                        {waStatus.waba_id}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 5. Payment note (always visible when connected) */}
+              <div className="rounded-lg border border-border bg-muted/40 p-3.5 space-y-1.5 text-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <span className="font-medium text-foreground">{WHATSAPP_PAYMENT_UNKNOWN_MESSAGE}</span>
+                  <a
+                    href="https://business.facebook.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-primary hover:underline font-medium w-fit"
+                  >
+                    Open WhatsApp Manager
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                <p className="text-muted-foreground">
+                  Meta me message bhejne ke liye payment method jodna zaroori hai.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 3. needs_reconnect */}
+          {isNeedsReconnect && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-amber-600/30 bg-amber-50/50 dark:bg-amber-950/20 p-4 text-sm text-amber-900 dark:text-amber-200 flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <div>
+                  <p className="font-medium">WhatsApp dobara connect karna padega</p>
+                </div>
+              </div>
+
+              {/* Show existing IDs if available */}
+              {(waStatus?.phone_number_id || waStatus?.waba_id) && (
+                <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                  {waStatus.phone_number_id && (
+                    <div className="rounded-lg border border-border bg-card p-3 space-y-0.5">
+                      <span className="text-muted-foreground block text-[11px]">Phone Number ID</span>
+                      <span className="font-mono font-medium text-foreground text-xs break-all">
+                        {waStatus.phone_number_id}
+                      </span>
+                    </div>
+                  )}
+                  {waStatus.waba_id && (
+                    <div className="rounded-lg border border-border bg-card p-3 space-y-0.5">
+                      <span className="text-muted-foreground block text-[11px]">WhatsApp Business Account (WABA) ID</span>
+                      <span className="font-mono font-medium text-foreground text-xs break-all">
+                        {waStatus.waba_id}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <Button
+                  type="button"
+                  onClick={handleConnect}
+                  disabled={isConnecting}
+                  className="w-full sm:w-auto"
+                >
+                  {connectStep === "popup" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Meta window khuli hai...
+                    </>
+                  ) : connectStep === "connecting" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Connect ho raha hai...
+                    </>
+                  ) : (
+                    "Reconnect"
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* 4. error */}
+          {isError && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 shrink-0 text-destructive mt-0.5" />
+                <div>
+                  <p className="font-medium">
+                    {waStatus?.last_error ? waStatus.last_error : "WhatsApp connection me error aaya hai."}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <Button
+                  type="button"
+                  onClick={handleConnect}
+                  disabled={isConnecting}
+                  className="w-full sm:w-auto"
+                >
+                  {connectStep === "popup" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Meta window khuli hai...
+                    </>
+                  ) : connectStep === "connecting" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Connect ho raha hai...
+                    </>
+                  ) : (
+                    "Reconnect"
+                  )}
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Disconnect Confirmation Dialog */}
+      <Dialog open={disconnectDialogOpen} onOpenChange={setDisconnectDialogOpen}>
+        <DialogHeader>
+          <DialogTitle>Disconnect WhatsApp?</DialogTitle>
+          <DialogDescription className="text-left pt-2 text-sm text-muted-foreground">
+            WhatsApp disconnect karne par patients ko automatic reminders aur messages jana band ho jayenge jab tak aap ise dobara connect nahi karte.
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogFooter className="pt-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setDisconnectDialogOpen(false)}
+            disabled={disconnecting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={handleDisconnect}
+            disabled={disconnecting}
+          >
+            {disconnecting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                Disconnecting...
+              </>
+            ) : (
+              "Disconnect"
+            )}
+          </Button>
+        </DialogFooter>
+      </Dialog>
 
       {/* WhatsApp Controls & Test Message Card */}
       <Card>
@@ -274,17 +672,23 @@ export function WhatsAppTab() {
         </CardHeader>
         <CardContent className="space-y-6">
           <form onSubmit={handleSaveSettings} className="space-y-4">
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="c-wa-enabled"
-                checked={whatsappEnabled}
-                onChange={(e) => setWhatsappEnabled(e.target.checked)}
-                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-              />
-              <Label htmlFor="c-wa-enabled" className="cursor-pointer font-medium text-sm">
-                Enable Automated WhatsApp Recall Sending
-              </Label>
+            <div className="space-y-1">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="c-wa-enabled"
+                  checked={whatsappEnabled}
+                  onChange={(e) => setWhatsappEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                />
+                <Label htmlFor="c-wa-enabled" className="cursor-pointer font-medium text-sm">
+                  Enable Automated WhatsApp Recall Sending
+                </Label>
+              </div>
+              {/* 6. One-line note */}
+              <p className="text-xs text-muted-foreground pl-7">
+                Automatic reminders tab ON karna jab WhatsApp template approve ho jaye.
+              </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 text-xs text-muted-foreground border-t border-border pt-4">

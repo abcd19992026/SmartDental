@@ -2,6 +2,7 @@ import { authorizeOwnerOrSuperAdmin } from "../_shared/auth.ts";
 import { corsHeadersForRequest } from "../_shared/cors.ts";
 import { json } from "../_shared/response.ts";
 import { buildTemplateMessage, callGraphApi } from "../_shared/whatsapp-graph-api.ts";
+import { describeCredentialFailure, noteGraphAuthFailure, resolveWhatsappCredentials } from "../_shared/whatsapp-connection.ts";
 import { incrementMessagesSent } from "../_shared/clinic-usage.ts";
 import { getIstNow, formatDateIST } from "../_shared/ist-time.ts";
 import { validateSendTestMessageRequest, type SendTestMessageRequest } from "./validate.ts";
@@ -72,12 +73,6 @@ Deno.serve(async (req) => {
     clinicId = clinicRow.id;
   }
 
-  const accessToken = Deno.env.get("META_ACCESS_TOKEN");
-  if (!accessToken) {
-    console.error("META_ACCESS_TOKEN is not configured");
-    return json({ error: "Server misconfigured" }, 500, cors);
-  }
-
   const { data: clinic, error: clinicLoadError } = await serviceClient
     .from("clinics")
     .select("id, name, phone, waba_phone_number_id, monthly_message_quota")
@@ -88,6 +83,14 @@ Deno.serve(async (req) => {
   }
   if (!clinic.waba_phone_number_id) {
     return json({ error: "This clinic has no WABA phone number configured" }, 400, cors);
+  }
+
+  // Own token + number for a clinic with a connected WhatsApp account, the shared META_ACCESS_TOKEN
+  // otherwise (see resolveWhatsappCredentials). Resolved after the clinic row is loaded.
+  const creds = await resolveWhatsappCredentials(serviceClient, clinic.id, clinic.waba_phone_number_id);
+  if (!creds.ok) {
+    const failure = describeCredentialFailure(creds);
+    return json(failure.body, failure.status, cors);
   }
 
   const { data: template, error: templateError } = await serviceClient
@@ -177,7 +180,7 @@ Deno.serve(async (req) => {
     return json({ error: "Failed to record the test send attempt" }, 500, cors);
   }
 
-  const result = await callGraphApi(clinic.waba_phone_number_id, accessToken, message);
+  const result = await callGraphApi(creds.phoneNumberId, creds.accessToken, message);
   const nowIso = new Date().toISOString();
 
   if (result.ok) {
@@ -199,6 +202,8 @@ Deno.serve(async (req) => {
     .from("message_log")
     .update({ status: "failed", error_code: result.errorCode, error_message: result.errorMessage })
     .eq("id", logRow.id);
+
+  await noteGraphAuthFailure(serviceClient, clinicId, creds.source, result.errorCode);
 
   // Meta's exact error is returned unmodified -- the caller needs the real error to diagnose a
   // WABA/template config problem, not a generic "send failed" message.

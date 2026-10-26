@@ -2,6 +2,12 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 import { addDays, formatDateIST, formatTimeIST12h } from "../_shared/ist-time.ts";
 import { buildTemplateMessage, callGraphApi, type WhatsappTemplate } from "../_shared/whatsapp-graph-api.ts";
 import { incrementMessagesSent } from "../_shared/clinic-usage.ts";
+import {
+  logSendSkippedOnce,
+  noteGraphAuthFailure,
+  resolveWhatsappCredentials,
+  type WaCredentialSource,
+} from "../_shared/whatsapp-connection.ts";
 import { determineStageToSend, type LadderStage } from "./ladder.ts";
 
 /** Small gap between consecutive Graph API calls so a clinic with many due recalls doesn't fire
@@ -22,8 +28,12 @@ export interface ClinicForSend {
   id: string;
   name: string;
   phone: string | null;
-  /** Non-null here -- callers check this before ever reaching sendOneRecallMessage. */
+  /** Non-null here -- callers check this before ever reaching sendOneRecallMessage. For a clinic
+   * with its own WhatsApp connection this is the connection's phone_number_id. */
   waba_phone_number_id: string;
+  /** Whose token this send uses. "clinic" = the clinic's own connection (a Meta auth error 190
+   * then flips it to needs_reconnect); "global" = the shared META_ACCESS_TOKEN, as before. */
+  wa_source?: WaCredentialSource;
 }
 
 export interface RecallRow {
@@ -295,6 +305,8 @@ export async function sendOneRecallMessage(
     .update({ status: "failed", error_code: result.errorCode, error_message: result.errorMessage })
     .eq("id", logRow.id);
 
+  await noteGraphAuthFailure(serviceClient, clinic.id, clinic.wa_source, result.errorCode);
+
   // A failed send must NOT mark its stage as sent -- release the claim (guarded so we only revert
   // what we ourselves set) so a later cron tick can retry it, as long as we're still inside this
   // stage's own day/window per determineStageToSend. No claim exists at all for a manual send.
@@ -333,15 +345,29 @@ export async function processClinic(
   dateStr: string,
   istHour: number,
   clinicSendHour: number,
-  accessToken: string,
 ): Promise<ClinicRunResult> {
   const base: ClinicRunResult = { clinic_id: clinic.id, clinic_name: clinic.name, sent: 0, failed: 0 };
 
-  if (!clinic.waba_phone_number_id) {
-    console.log(`Skipping clinic ${clinic.id} (${clinic.name}): no waba_phone_number_id configured`);
-    return { ...base, skipped_reason: "no_phone_number_id" };
+  // Each clinic is called with ITS OWN token and number when it has a connected WhatsApp
+  // connection, otherwise with the shared META_ACCESS_TOKEN exactly as before. A connection that is
+  // needs_reconnect / disconnected / error is skipped (and audited once a day) -- never sent with
+  // the shared token, which would go out from the wrong WhatsApp account.
+  const creds = await resolveWhatsappCredentials(serviceClient, clinic.id, clinic.waba_phone_number_id);
+  if (!creds.ok) {
+    console.log(`Skipping clinic ${clinic.id} (${clinic.name}): ${creds.reason}`);
+    if (creds.status !== null) {
+      await logSendSkippedOnce(serviceClient, clinic.id, creds.reason, creds.status);
+    }
+    return { ...base, skipped_reason: creds.reason };
   }
-  const clinicForSend: ClinicForSend = { id: clinic.id, name: clinic.name, phone: clinic.phone, waba_phone_number_id: clinic.waba_phone_number_id };
+  const accessToken = creds.accessToken;
+  const clinicForSend: ClinicForSend = {
+    id: clinic.id,
+    name: clinic.name,
+    phone: clinic.phone,
+    waba_phone_number_id: creds.phoneNumberId,
+    wa_source: creds.source,
+  };
 
   const { data: template, error: templateError } = await serviceClient
     .from("whatsapp_templates")
@@ -449,6 +475,13 @@ export async function processClinic(
       continue;
     } else {
       base.failed++;
+      // The clinic's own token is dead (error 190): every further send this run would fail the same
+      // way. noteGraphAuthFailure already flipped the connection to needs_reconnect.
+      if (clinicForSend.wa_source === "clinic" && result.errorCode === "190") {
+        console.log(`Clinic ${clinic.id} (${clinic.name}): token rejected by Meta, stopping this run`);
+        base.skipped_reason = "token_rejected";
+        break;
+      }
     }
 
     await sleep(SEND_DELAY_MS);

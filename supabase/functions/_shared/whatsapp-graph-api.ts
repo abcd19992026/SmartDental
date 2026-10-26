@@ -1,4 +1,9 @@
-const GRAPH_API_VERSION = "v21.0";
+export const GRAPH_API_VERSION = "v26.0";
+
+/** Graph API error code 190 = the access token is expired/invalid/revoked. */
+export function isGraphAuthError(errorCode: string | null): boolean {
+  return errorCode === "190";
+}
 
 export interface WhatsappTemplate {
   meta_template_name: string;
