@@ -225,6 +225,37 @@ function shortString(value: unknown, max = 60): string | null {
   return typeof value === "string" ? value.slice(0, max) : null;
 }
 
+/** Masks anything that could be a secret before it is printed: values of code/token/pin-like JSON
+ * keys and URL params, long token-looking strings (20+ chars with a digit or mixed case; plain
+ * UPPER_CASE names like WA_EMBEDDED_SIGNUP stay readable) and any run of 6+ digits (ids, phone numbers). */
+function maskSensitive(text: string): string {
+  return text
+    .replace(/("(?:code|access_token|token|signed_request|id_token|pin|client_secret|secret)"\s*:\s*)"[^"]*"/gi, '$1"***"')
+    .replace(/\b((?:code|access_token|token|signed_request|pin|client_secret)=)[^&\s"']+/gi, "$1***")
+    .replace(/[A-Za-z0-9_\-+/=.]{20,}/g, (tok) => {
+      if (/^[A-Z_]+$/.test(tok)) return tok;
+      const hasDigit = /\d/.test(tok);
+      const mixedCase = /[a-z]/.test(tok) && /[A-Z]/.test(tok);
+      return hasDigit || mixedCase ? "***" : tok;
+    })
+    .replace(/\d{6,}/g, "***");
+}
+
+/** TEMP test switch: open the app with ?wa_mode=standard to launch Embedded Signup WITHOUT featureType
+ * (no coexistence). The choice is remembered for the browser tab (sessionStorage) because the app's
+ * router may drop the query string; ?wa_mode=off clears it. Default (no switch) is unchanged. */
+function resolveWaMode(): "standard" | "default" {
+  try {
+    const fromUrl = new URLSearchParams(location.search).get("wa_mode");
+    if (fromUrl === "standard") sessionStorage.setItem("wa_mode", "standard");
+    else if (fromUrl) sessionStorage.removeItem("wa_mode");
+    return sessionStorage.getItem("wa_mode") === "standard" ? "standard" : "default";
+  } catch {
+    return new URLSearchParams(location.search).get("wa_mode") === "standard" ? "standard" : "default";
+  }
+}
+resolveWaMode(); // remember the switch from the page-load URL, before any router rewrite
+
 /** One line per window `message` event, BEFORE the origin filter, so a dropped event is visible too. */
 function diagMessage(event: MessageEvent) {
   if (!WA_DIAG) return;
@@ -244,6 +275,26 @@ function diagMessage(event: MessageEvent) {
       info.current_step = shortString(payload.current_step, 40);
       info.error_code = typeof payload.error_code === "number" || typeof payload.error_code === "string" ? String(payload.error_code).slice(0, 20) : null;
     }
+  }
+  if (typeof event.data === "string") {
+    const raw = event.data;
+    let parsed: unknown;
+    let isJson = false;
+    try {
+      parsed = JSON.parse(raw);
+      isJson = true;
+    } catch {
+      isJson = false;
+    }
+    info.stringLength = raw.length;
+    info.isJsonString = isJson;
+    info.jsonKind = isJson ? (Array.isArray(parsed) ? "array" : typeof parsed) : null;
+    info.jsonTopLevelKeys = isJson && parsed && typeof parsed === "object" ? Object.keys(parsed as object).slice(0, 15) : null;
+    // What the real handler decides: it JSON.parses a string and needs type === "WA_EMBEDDED_SIGNUP".
+    info.handlerWouldTreatAsSignupEvent = isFacebookOrigin(event.origin) && !!data && data.type === "WA_EMBEDDED_SIGNUP";
+    info.contentMasked300 = maskSensitive(raw.slice(0, 2000)).slice(0, 300);
+  } else if (event.data && typeof event.data === "object") {
+    info.objectKeys = Object.keys(event.data as object).slice(0, 15);
   }
   diag("message event", info);
 }
@@ -405,17 +456,25 @@ export function startWhatsAppSignup(): Promise<WhatsAppSignupResult> {
       finish({ ok: false, error: "cancelled", message: "WhatsApp signup was cancelled." });
     }
 
-    diag("calling FB.login now (same tick as the click)"); // TEMP-DIAG
+    // TEMP-DIAG: ?wa_mode=standard drops featureType (no coexistence); default is unchanged.
+    const waMode = resolveWaMode();
+    const extras: Record<string, unknown> =
+      waMode === "standard"
+        ? { setup: {}, sessionInfoVersion: "3" }
+        : { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" };
+    diag("calling FB.login now (same tick as the click)", {
+      waMode,
+      response_type: "code",
+      override_default_response_type: true,
+      hasConfigId: true,
+      extras,
+    }); // TEMP-DIAG
     try {
       fb.login(loginCallback, {
         config_id: configId,
         response_type: "code",
         override_default_response_type: true,
-        extras: {
-          setup: {},
-          featureType: "whatsapp_business_app_onboarding",
-          sessionInfoVersion: "3",
-        },
+        extras,
       });
     } catch (err) {
       diag("FB.login THREW", { error: err instanceof Error ? err.message.slice(0, 120) : "unknown" }); // TEMP-DIAG
