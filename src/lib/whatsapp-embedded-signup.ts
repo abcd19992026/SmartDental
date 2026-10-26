@@ -84,6 +84,7 @@ const sdkListeners = new Set<() => void>();
 
 function setSdkStatus(next: FacebookSdkStatus) {
   if (sdkStatus === next) return;
+  diag(`SDK status ${sdkStatus} -> ${next}`); // TEMP-DIAG
   sdkStatus = next;
   sdkListeners.forEach((listener) => listener());
 }
@@ -207,9 +208,51 @@ function parseMessageData(raw: unknown): Record<string, unknown> | null {
   return raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
 }
 
+// TEMP-DIAG ------------------------------------------------------------------------------------
+// Temporary console diagnostics for the "Signup time out" problem. Prints ONLY: timings, booleans,
+// the message origin, data.type / data.event, and key NAMES. Never the login code, a token, a PIN or
+// any waba_id / phone_number_id / business_id value. Remove every TEMP-DIAG block once diagnosed.
+const WA_DIAG = true;
+const diagT0 = { value: 0 };
+
+function diag(label: string, info?: Record<string, unknown>) {
+  if (!WA_DIAG) return;
+  const since = diagT0.value ? `+${Math.round(performance.now() - diagT0.value)}ms` : "      ";
+  console.log(`[WA-DIAG] ${since} ${label}${info ? " " + JSON.stringify(info) : ""}`);
+}
+
+function shortString(value: unknown, max = 60): string | null {
+  return typeof value === "string" ? value.slice(0, max) : null;
+}
+
+/** One line per window `message` event, BEFORE the origin filter, so a dropped event is visible too. */
+function diagMessage(event: MessageEvent) {
+  if (!WA_DIAG) return;
+  const data = parseMessageData(event.data);
+  const info: Record<string, unknown> = {
+    origin: shortString(event.origin, 80),
+    passesOriginCheck: isFacebookOrigin(event.origin),
+    dataKind: typeof event.data,
+    type: data ? shortString(data.type) : null,
+    event: data ? shortString(data.event) : null,
+  };
+  if (data && data.type === "WA_EMBEDDED_SIGNUP") {
+    const payload = data.data && typeof data.data === "object" ? (data.data as Record<string, unknown>) : {};
+    info.dataKeys = Object.keys(payload);
+    // Non-sensitive enums that say WHY a flow stopped (not ids, not the code).
+    if (data.event === "CANCEL" || data.event === "ERROR") {
+      info.current_step = shortString(payload.current_step, 40);
+      info.error_code = typeof payload.error_code === "number" || typeof payload.error_code === "string" ? String(payload.error_code).slice(0, 20) : null;
+    }
+  }
+  diag("message event", info);
+}
+// END TEMP-DIAG --------------------------------------------------------------------------------
+
 let inFlight = false;
 
 function immediateFailure(message: string): Promise<WhatsAppSignupResult> {
+  diag("immediate failure (nothing was opened)", { message }); // TEMP-DIAG
   return Promise.resolve({ ok: false, error: "failed", message });
 }
 
@@ -226,6 +269,17 @@ function immediateFailure(message: string): Promise<WhatsAppSignupResult> {
  * WhatsApp Business app on the same number (coexistence) or register a fresh number.
  */
 export function startWhatsAppSignup(): Promise<WhatsAppSignupResult> {
+  diagT0.value = performance.now(); // TEMP-DIAG
+  diag("click: startWhatsAppSignup() called", {
+    pageOrigin: location.origin,
+    isHttps: location.protocol === "https:",
+    sdkStatus,
+    hasFB: !!window.FB,
+    inFlight,
+    hasAppId: !!APP_ID,
+    hasConfigId: !!CONFIG_ID,
+    userAgent: navigator.userAgent.slice(0, 120),
+  }); // TEMP-DIAG
   const configId = CONFIG_ID;
   if (!APP_ID || !configId) {
     return immediateFailure("WhatsApp signup is not configured (VITE_META_APP_ID / VITE_WA_ES_CONFIG_ID missing).");
@@ -252,6 +306,7 @@ export function startWhatsAppSignup(): Promise<WhatsAppSignupResult> {
     const finish = (result: WhatsAppSignupResult) => {
       if (settled) return;
       settled = true;
+      diag("finish -> resolving", { ok: result.ok, error: result.ok ? null : result.error, message: result.ok ? null : result.message, haveCode: !!code, haveSession: !!session }); // TEMP-DIAG
       window.clearTimeout(overallTimer);
       window.clearTimeout(secondHalfTimer);
       window.removeEventListener("message", onMessage);
@@ -275,14 +330,16 @@ export function startWhatsAppSignup(): Promise<WhatsAppSignupResult> {
       }
       // One half is in: the other must follow fast.
       if ((code || session) && !secondHalfTimer) {
-        secondHalfTimer = window.setTimeout(
-          () => finish({ ok: false, error: "timeout", message: "WhatsApp signup did not finish in time. Please try again." }),
-          SECOND_HALF_TIMEOUT_MS,
-        );
+        diag("one half arrived, waiting for the other", { haveCode: !!code, haveSession: !!session, waitMs: SECOND_HALF_TIMEOUT_MS }); // TEMP-DIAG
+        secondHalfTimer = window.setTimeout(() => {
+          diag("TIMEOUT fired: second-half (20 s)", { haveCode: !!code, haveSession: !!session }); // TEMP-DIAG
+          finish({ ok: false, error: "timeout", message: "WhatsApp signup did not finish in time. Please try again." });
+        }, SECOND_HALF_TIMEOUT_MS);
       }
     };
 
     function onMessage(event: MessageEvent) {
+      diagMessage(event); // TEMP-DIAG
       if (!isFacebookOrigin(event.origin)) return;
       const data = parseMessageData(event.data);
       if (!data || data.type !== "WA_EMBEDDED_SIGNUP") return;
@@ -322,13 +379,21 @@ export function startWhatsAppSignup(): Promise<WhatsAppSignupResult> {
     }
 
     window.addEventListener("message", onMessage);
-    overallTimer = window.setTimeout(
-      () => finish({ ok: false, error: "timeout", message: "WhatsApp signup took too long. Please try again." }),
-      SIGNUP_TIMEOUT_MS,
-    );
+    overallTimer = window.setTimeout(() => {
+      diag("TIMEOUT fired: overall (10 min)", { haveCode: !!code, haveSession: !!session }); // TEMP-DIAG
+      finish({ ok: false, error: "timeout", message: "WhatsApp signup took too long. Please try again." });
+    }, SIGNUP_TIMEOUT_MS);
 
     // Plain (non-async) callback -- FB.login throws on an async one.
     function loginCallback(response: FacebookLoginResponse) {
+      diag("FB.login CALLBACK fired", {
+        status: shortString(response.status, 40),
+        hasAuthResponse: !!response.authResponse,
+        hasCode: !!response.authResponse?.code,
+        responseKeys: Object.keys(response ?? {}),
+        authResponseKeys: Object.keys(response.authResponse ?? {}),
+        haveSessionAlready: !!session,
+      }); // TEMP-DIAG
       const receivedCode = response.authResponse?.code;
       if (receivedCode) {
         code = receivedCode;
@@ -340,6 +405,7 @@ export function startWhatsAppSignup(): Promise<WhatsAppSignupResult> {
       finish({ ok: false, error: "cancelled", message: "WhatsApp signup was cancelled." });
     }
 
+    diag("calling FB.login now (same tick as the click)"); // TEMP-DIAG
     try {
       fb.login(loginCallback, {
         config_id: configId,
@@ -351,7 +417,8 @@ export function startWhatsAppSignup(): Promise<WhatsAppSignupResult> {
           sessionInfoVersion: "3",
         },
       });
-    } catch {
+    } catch (err) {
+      diag("FB.login THREW", { error: err instanceof Error ? err.message.slice(0, 120) : "unknown" }); // TEMP-DIAG
       finish({ ok: false, error: "failed", message: "Could not open the WhatsApp signup window." });
     }
   });
