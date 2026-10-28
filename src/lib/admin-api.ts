@@ -100,6 +100,86 @@ export async function setUserActive(userId: string, isActive: boolean): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// admin-set-clinic-whatsapp (super_admin only)
+//
+// Attach / detach a WhatsApp number that the platform owner added to the platform's WABA by hand
+// in Meta WhatsApp Manager. The number is checked against Meta first; nothing is saved if Meta
+// does not know it. One number can belong to only one clinic (error_code PHONE_NUMBER_IN_USE).
+// ---------------------------------------------------------------------------
+
+/** What Meta says about the number. Show display_phone_number + verified_name so the admin can
+ * eyeball that it is the right number before relying on it. */
+export interface WhatsappNumberInfo {
+  display_phone_number: string | null;
+  verified_name: string | null;
+  quality_rating: string | null;
+  code_verification_status: string | null;
+}
+
+export interface VerifyWhatsappNumberOutput extends WhatsappNumberInfo {
+  verified: true;
+  saved: false;
+}
+
+export interface AttachClinicWhatsappInput {
+  clinic_id: string;
+  /** Digits only (the id Meta shows for the number, not the phone number itself). */
+  waba_phone_number_id: string;
+  /** Digits only. Optional. */
+  waba_business_id?: string;
+  /** Turns automatic sending on for the clinic. */
+  enable: boolean;
+}
+
+export interface AttachClinicWhatsappOutput extends WhatsappNumberInfo {
+  clinic_id: string;
+  saved: true;
+  waba_phone_number_id: string;
+  waba_business_id: string | null;
+  whatsapp_enabled: boolean;
+  previous_waba_phone_number_id: string | null;
+  /** false = the clinic still needs an approved default template before it can really send. */
+  has_approved_default_template: boolean;
+}
+
+export interface DetachClinicWhatsappOutput {
+  clinic_id: string;
+  detached: true;
+  /** false = it was already detached, nothing was written. */
+  changed: boolean;
+  previous_waba_phone_number_id?: string | null;
+}
+
+/** Only asks Meta; saves nothing. */
+export async function verifyWhatsappNumber(wabaPhoneNumberId: string): Promise<ApiResult<VerifyWhatsappNumberOutput>> {
+  const { data, error } = await supabase.functions.invoke<VerifyWhatsappNumberOutput>("admin-set-clinic-whatsapp", {
+    body: { verify_only: true, waba_phone_number_id: wabaPhoneNumberId },
+  });
+  if (error) return toFunctionError(error);
+  if (!data) return { ok: false, error: "Empty response from server" };
+  return { ok: true, data };
+}
+
+export async function attachClinicWhatsapp(input: AttachClinicWhatsappInput): Promise<ApiResult<AttachClinicWhatsappOutput>> {
+  const { data, error } = await supabase.functions.invoke<AttachClinicWhatsappOutput>("admin-set-clinic-whatsapp", {
+    body: input,
+  });
+  if (error) return toFunctionError(error);
+  if (!data) return { ok: false, error: "Empty response from server" };
+  return { ok: true, data };
+}
+
+/** Clears the number and turns sending off, so a wrong number can be undone. */
+export async function detachClinicWhatsapp(clinicId: string): Promise<ApiResult<DetachClinicWhatsappOutput>> {
+  const { data, error } = await supabase.functions.invoke<DetachClinicWhatsappOutput>("admin-set-clinic-whatsapp", {
+    body: { detach: true, clinic_id: clinicId },
+  });
+  if (error) return toFunctionError(error);
+  if (!data) return { ok: false, error: "Empty response from server" };
+  return { ok: true, data };
+}
+
+// ---------------------------------------------------------------------------
 // get_platform_overview (RPC, callable directly by an authenticated super_admin -- the
 // function itself checks is_super_admin() and raises if the caller isn't one)
 // ---------------------------------------------------------------------------
