@@ -42,6 +42,14 @@ const ERROR_EVENTS = new Set(["DISABLED_UPDATE"]);
 // event must never move message_log.status backwards.
 const STATUS_RANK: Record<string, number> = { queued: 0, sent: 1, delivered: 2, read: 3, failed: 4 };
 
+/** For logs only: a patient's mobile number must never be printed in full. Keeps the last 4 digits
+ * ("919876543210" -> "********3210"); anything of 4 characters or fewer is fully masked. */
+export function maskPhone(value: string | undefined | null): string {
+  if (!value) return "(none)";
+  if (value.length <= 4) return "*".repeat(value.length);
+  return "*".repeat(value.length - 4) + value.slice(-4);
+}
+
 async function resolveClinicIdForPhoneNumber(
   serviceClient: SupabaseClient,
   phoneNumberId: string,
@@ -106,7 +114,7 @@ async function handleStatusUpdate(serviceClient: SupabaseClient, clinicId: strin
 
 async function handleInboundMessage(serviceClient: SupabaseClient, clinicId: string, message: MetaMessage): Promise<void> {
   const fromMobile = message.from;
-  console.log(`Webhook: inbound message event -- from=${fromMobile}, clinic=${clinicId}, hasText=${!!message.text?.body}`);
+  console.log(`Webhook: inbound message event -- from=${maskPhone(fromMobile)}, clinic=${clinicId}, hasText=${!!message.text?.body}`);
   if (!fromMobile) {
     console.log("Webhook: inbound message skipped -- no 'from' field");
     return;
@@ -115,7 +123,7 @@ async function handleInboundMessage(serviceClient: SupabaseClient, clinicId: str
   // Patients are stored as bare 10-digit mobiles; Meta sends the number with the 91 country
   // code prefix.
   const mobile10 = fromMobile.startsWith("91") && fromMobile.length === 12 ? fromMobile.slice(2) : fromMobile;
-  console.log(`Webhook: normalized mobile ${fromMobile} -> ${mobile10}`);
+  console.log(`Webhook: normalized mobile ${maskPhone(fromMobile)} -> ${maskPhone(mobile10)}`);
 
   // Clinic-scoped lookup only -- a mobile number that exists in another clinic must never match
   // here. If no patient matches within THIS clinic, the event is logged and dropped, not
@@ -131,7 +139,7 @@ async function handleInboundMessage(serviceClient: SupabaseClient, clinicId: str
     console.log(`Webhook: patient lookup errored: ${patientError.message}`);
   }
   if (!patient) {
-    console.log(`Webhook: inbound message from ${fromMobile} (normalized ${mobile10}) matches no patient in clinic ${clinicId}, ignoring`);
+    console.log(`Webhook: inbound message from ${maskPhone(fromMobile)} matches no patient in clinic ${clinicId}, ignoring`);
     return;
   }
   console.log(`Webhook: matched patient ${patient.id}`);

@@ -1,5 +1,5 @@
 // Run:  deno test --no-check --allow-env supabase/functions/whatsapp-webhook/handlers_test.ts
-import { processWebhookPayload, RECALL_REPLY_WINDOW_DAYS } from "./handlers.ts";
+import { maskPhone, processWebhookPayload, RECALL_REPLY_WINDOW_DAYS } from "./handlers.ts";
 import { type Any, calls, check, fakeClient, type FakeOp, firstArg, has } from "../_shared/fake-supabase.ts";
 
 Deno.env.set("META_APP_ID", "1729613974958031");
@@ -264,4 +264,46 @@ Deno.test("reply with no text body inside the window -> 'Patient replied (no tex
   await processWebhookPayload(client, { entry: [{ id: "W1", changes: [{ field: "messages", value: { metadata: { phone_number_id: "P1" }, messages: [{ from: "919999999999", timestamp: nowSec() }] } }] }] });
   const upd = log.find((o) => o.table === "recalls" && o.ops.some(([n]) => n === "update"))!;
   check((firstArg(upd, "update") as Any).notes === "Patient replied (no text content)", "no-text reply note");
+});
+
+// ---------------------------------------------------------------------------------------------
+// Log hygiene: a patient's mobile number is never printed in full
+// ---------------------------------------------------------------------------------------------
+
+Deno.test("maskPhone keeps only the last 4 digits", () => {
+  check(maskPhone("919999991234") === "********1234", "12-digit Meta number");
+  check(maskPhone("9999991234") === "******1234", "10-digit mobile");
+  check(maskPhone("1234") === "****", "4 characters or fewer: fully masked");
+  check(maskPhone("") === "(none)" && maskPhone(undefined) === "(none)" && maskPhone(null) === "(none)", "missing value");
+});
+
+async function captureLogs(run: () => Promise<void>): Promise<string> {
+  const original = console.log;
+  const lines: string[] = [];
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  try {
+    await run();
+  } finally {
+    console.log = original;
+  }
+  return lines.join("\n");
+}
+
+Deno.test("no log line contains the full patient mobile (matched and unmatched patient)", async () => {
+  for (const patientFound of [true, false]) {
+    const { client } = fakeClient((op) => {
+      if (op.table === "clinics") return { data: { id: "clinic1" }, error: null };
+      if (op.table === "patients") return { data: patientFound ? { id: "p1" } : null, error: null };
+      if (op.table === "message_log") return { data: [{ id: "m1" }], error: null };
+      if (op.table === "recalls" && op.ops.some(([n]) => n === "maybeSingle")) return { data: { id: "r1", status: "sent" }, error: null };
+      return { data: null, error: null };
+    });
+    const out = await captureLogs(() => processWebhookPayload(client, inboundPayload(nowSec(), "private words")));
+    check(out.includes("Webhook:"), "logs were captured");
+    check(!out.includes("919999999999") && !out.includes("9999999999"), `full mobile not printed (patientFound=${patientFound})`);
+    check(out.includes("********9999"), "masked form is printed");
+    check(!out.includes("private words"), "message text not printed");
+  }
 });
