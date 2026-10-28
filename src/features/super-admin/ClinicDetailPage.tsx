@@ -23,6 +23,7 @@ import { formatDateIST, todayIST } from "@/lib/dates";
 import type { Database } from "@/types/database.types";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/auth/useAuth";
+import { WhatsAppNumberCard } from "./WhatsAppNumberCard";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1111,6 +1112,12 @@ export function ClinicDetailPage() {
 
         {/* 5. WhatsApp Tab */}
         <TabsContent value="whatsapp" className="flex flex-col gap-6">
+          <WhatsAppNumberCard
+            clinic={clinic}
+            hasApprovedDefaultTemplate={templates.some((t) => t.is_default && t.approval_status === "approved")}
+            onRefresh={loadClinicData}
+          />
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-medium">WhatsApp Configuration</CardTitle>
