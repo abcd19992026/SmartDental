@@ -949,9 +949,9 @@ export function TodayPage() {
               <TabsTrigger value="in_clinic" className="flex items-center gap-1.5 px-3.5 text-xs">
                 <UserCheck className="h-3.5 w-3.5 text-primary" />
                 In Clinic
-                {daySheet.length > 0 && (
+                {activeDaySheet.length > 0 && (
                   <Badge variant="outline" className="ml-1 text-[10px] py-0 px-1.5 font-normal">
-                    {daySheet.length}
+                    {activeDaySheet.length}
                   </Badge>
                 )}
               </TabsTrigger>
