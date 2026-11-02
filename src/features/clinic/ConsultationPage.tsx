@@ -30,6 +30,7 @@ import {
   fetchMedicines,
   isAlreadySavedError,
   updateAppointmentStatus,
+  setAppointmentVisitId,
   DEFAULT_MEDICAL_HISTORY,
   type MedicalHistory,
   type MedicineRow,
@@ -397,6 +398,10 @@ export function ConsultationPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savedVisitId, setSavedVisitId] = useState<string | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  // True once the in-clinic appointment behind this consultation has been closed (marked "done"
+  // and linked to the visit), so the queue entry disappears as soon as the visit is saved and the
+  // later "leave" step does not repeat the update.
+  const appointmentClosedRef = useRef(false);
   // The visit this consultation is currently acting on -- known upfront from the URL in
   // existing-visit mode, or set once createVisitWithRecall succeeds in new-visit mode. Used to
   // scope AddPaymentModal's "Record & Print" lookup to this visit's own prescription (if any),
@@ -627,6 +632,17 @@ export function ConsultationPage() {
     return { ok: true, prescriptionId: rxRes.data.id };
   }
 
+  // When this consultation was opened from the in-clinic queue (appointmentId present), links the
+  // appointment to the freshly saved visit and marks it "done" right away -- so the patient leaves
+  // Today's Patient Queue the moment the visit/prescription is saved, not only when the doctor
+  // later navigates away. Failures here never block the save; goToPatientProfile retries once.
+  async function closeAppointmentForVisit(forVisitId: string) {
+    if (!appointmentId || appointmentClosedRef.current) return;
+    const linkRes = await setAppointmentVisitId(appointmentId, forVisitId);
+    const doneRes = await updateAppointmentStatus(appointmentId, "done");
+    if (linkRes.ok && doneRes.ok) appointmentClosedRef.current = true;
+  }
+
   async function performSave(): Promise<{ ok: boolean; prescriptionId: string | null }> {
     setErrorMsg(null);
     setSubmitting(true);
@@ -731,6 +747,7 @@ export function ConsultationPage() {
 
     const newVisitId = visitRes.data.visit_id;
     setCurrentVisitId(newVisitId);
+    await closeAppointmentForVisit(newVisitId);
 
     if (!hasRxContent) {
       toastSuccess("Visit and recall recorded successfully.");
@@ -746,7 +763,7 @@ export function ConsultationPage() {
   // appointment transitions out of "in_chair", so every way of leaving (Save, Save & Print,
   // Save & Payment, Back, Cancel) picks it up automatically without duplicating the call.
   async function goToPatientProfile() {
-    if (appointmentId) {
+    if (appointmentId && !appointmentClosedRef.current) {
       const res = await updateAppointmentStatus(appointmentId, "done");
       if (!res.ok) {
         toast({

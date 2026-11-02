@@ -677,13 +677,18 @@ export function TodayPage() {
   const bookedThisMonthCount = recallsThisMonth.filter((r) => r.status === "booked" || r.status === "completed").length;
 
   // Day Sheet counts
-  const waitingCount = daySheet.filter((d) => d.status === "waiting").length;
-  const inChairCount = daySheet.filter((d) => d.status === "in_chair").length;
-  const doneCount = daySheet.filter((d) => d.status === "done").length;
+  const waitingCount = daySheet.filter((d) => d.status === "waiting" && d.visit_id === null).length;
+  const inChairCount = daySheet.filter((d) => d.status === "in_chair" && d.visit_id === null).length;
+  const doneCount = daySheet.filter(
+    (d) => d.status === "done" || ((d.status === "waiting" || d.status === "in_chair") && d.visit_id !== null),
+  ).length;
   const paymentDueCount = daySheet.filter((d) => d.payment_due).length;
 
-  // Queue table displays only active in-clinic patients (waiting or in chair)
-  const activeDaySheet = daySheet.filter((d) => d.status === "waiting" || d.status === "in_chair");
+  // Queue table displays only active in-clinic patients (waiting or in chair). An appointment that
+  // is already linked to a saved visit (visit_id set) has been seen, so it never stays in the queue.
+  const activeDaySheet = daySheet.filter(
+    (d) => (d.status === "waiting" || d.status === "in_chair") && d.visit_id === null,
+  );
 
   const isWalkInPatientIdentified = isNewWalkInPatient
     ? Boolean(newWalkInName.trim()) && newWalkInMobile.replace(/\D/g, "").length === 10
