@@ -121,6 +121,17 @@ Deno.serve(async (req) => {
     });
     if (seedMedicinesError) throw new Error(seedMedicinesError.message);
 
+    // Non-fatal, unlike the two seeds above: pre-creates the shared WhatsApp template rows
+    // (recall_n1 as default, prescription_copy, payment_update) so a new clinic can send right
+    // away -- see seed_default_whatsapp_templates. A failure here must never take down clinic
+    // creation itself; the rows can be created at any time afterwards.
+    const { error: seedTemplatesError } = await serviceClient.rpc("seed_default_whatsapp_templates", {
+      p_clinic_id: clinicId,
+    });
+    if (seedTemplatesError) {
+      console.error(`Non-fatal: failed to seed default WhatsApp templates for clinic ${clinicId}`, seedTemplatesError);
+    }
+
     const { error: completeError } = await serviceClient
       .from("clinics")
       .update({ onboarding_completed: true })
