@@ -23,7 +23,7 @@ export default defineConfig({
         name: 'Smart Dentist - Dental Clinic Management',
         short_name: 'SmartDentist',
         description: 'Dental Clinic Management System',
-        theme_color: '#863bff',
+        theme_color: '#000000',
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'any',
